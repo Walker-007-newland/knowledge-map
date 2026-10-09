@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中考生物·历史知识图谱</title>
+<link rel="stylesheet" href="css/style.css?v=202610082055">
+<style>
+  body { overflow: auto; align-items: center; justify-content: center; padding: 24px 16px; }
+  h1 { margin: 0 0 6px; font-size: 26px; }
+  .cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+  .card { display: block; width: 260px; padding: 20px 22px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line);
+    color: var(--text); text-decoration: none; box-shadow: var(--shadow); }
+  .card:hover { border-color: var(--accent); }
+  .card h2 { margin: 0 0 4px; font-size: 22px; }
+  .card p { margin: 4px 0; color: var(--muted); font-size: 14px; }
+  .card .p { color: var(--st-mastered); font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>中考生物·历史知识图谱</h1>
+  <p class="muted">福建中考 · 新版人教版生物 · 新版统编版历史</p>
+  <div class="cards">
+    <a class="card" href="biology.html"><h2>🌱 生物</h2><p>七年级上 → 八年级下</p><p class="p" data-key="fjzk-biology"></p></a>
+    <a class="card" href="history.html"><h2>📜 历史</h2><p>七年级上 → 九年级下</p><p class="p" data-key="fjzk-history"></p></a>
+  </div>
+<script>
+  document.querySelectorAll('[data-key]').forEach(function (el) {
+    try {
+      var p = JSON.parse(localStorage.getItem(el.dataset.key + '-progress-v1') || '{}') || {};
+      var done = Object.keys(p).filter(function (k) { return p[k] && p[k].last >= 80; }).length;
+      el.textContent = done ? '已掌握 ' + done + ' 个知识点' : '还没开始';
+    } catch (e) { el.textContent = ''; }
+  });
+</script>
+</body>
+</html>

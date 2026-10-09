@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>内容自检</title>
+<style>body{font:14px/1.6 "Microsoft YaHei",sans-serif;padding:16px;background:#fff;color:#222}pre{white-space:pre-wrap}</style></head>
+<body><p>用法：check.html?s=physics 或 ?s=chemistry</p><pre id="out">检查中…</pre>
+<script>
+// 按学科页面里的 <script> 顺序加载数据，检查字段、题目格式、前置关系、演示是否注册。
+(async function () {
+  const subject = new URLSearchParams(location.search).get('s') || 'physics';
+  const out = [];
+  window.addEventListener('error', e => out.push('✗ 脚本出错 ' + e.filename + ':' + e.lineno + ' ' + e.message));
+  const html = await (await fetch('../' + subject + '.html', { cache: 'no-store' })).text();
+  const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1].split('?')[0]).filter(s => s !== 'js/app.js');
+  for (const src of scripts) await new Promise(res => { const t = document.createElement('script'); t.src = '../' + src + '?' + Date.now(); t.onload = t.onerror = res; document.body.appendChild(t); });
+  const KG = window.KG;
+  const errs = [];
+  const warn = (id, msg) => errs.push(`${id}: ${msg}`);
+  const ids = new Set();
+  const terms = KG.config.terms.map(t => t.id);
+  const mods = new Set(KG.modules.map(m => m.id));
+  const byId = {};
+  KG.nodes.forEach(n => { byId[n.id] = n; });
+
+  KG.nodes.forEach(n => {
+    if (ids.has(n.id)) warn(n.id, 'id 重复');
+    ids.add(n.id);
+    ['title', 'short', 'module', 'term', 'freq', 'tip'].forEach(k => { if (n[k] == null) warn(n.id, '缺少 ' + k); });
+    if (!terms.includes(n.term)) warn(n.id, '学期不存在 ' + n.term);
+    if (!mods.has(n.module)) warn(n.id, '模块不存在 ' + n.module);
+    if ((n.short || '').length > 8) warn(n.id, 'short 太长');
+    if (/<sub>/.test(n.short || '')) warn(n.id, 'short 里不能用 <sub>');
+    (n.prereqs || []).forEach(p => {
+      if (!byId[p]) warn(n.id, '前置不存在 ' + p);
+      else if (terms.indexOf(byId[p].term) > terms.indexOf(n.term)) warn(n.id, '前置学期更晚 ' + p);
+    });
+    const ex = n.examples || [], ts = n.tests || [];
+    if (ex.length < 2) warn(n.id, `例题只有 ${ex.length} 道`);
+    if (ts.length < 8) warn(n.id, `测试只有 ${ts.length} 道`);
+    [...ex.map((q, i) => ['例' + (i + 1), q]), ...ts.map((q, i) => ['测' + (i + 1), q])].forEach(([tag, q]) => {
+      const w = m => warn(n.id, `${tag} ${m}`);
+      if (!q.q) w('缺题干');
+      if (!q.explain) w('缺解析');
+      if (q.passage && !(n.passages || {})[q.passage]) w('材料不存在 ' + q.passage);
+      if (q.type === 'choice') {
+        if (!Array.isArray(q.options) || q.options.length < 2) w('选项不对');
+        else {
+          if (!(Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length)) w('answer 下标越界');
+          if (new Set(q.options).size !== q.options.length) w('选项重复');
+          if (q.options.some(o => /以上(都|均|说法|选项|皆)|都对|都不对|^[ABCD][和、][ABCD]/.test(o))) w('选项含“以上/A和B”');
+        }
+        if (/(选|故|答案为?|答案是)\s*[ABCD](?![a-zA-Z])/.test(q.explain || '')) w('解析里写了选项字母');
+      } else if (q.type === 'num') {
+        if (typeof q.answer !== 'number' || !isFinite(q.answer)) w('num 的 answer 必须是数字');
+      } else if (q.type === 'fill') {
+        if (!Array.isArray(q.answer) || !q.answer.length) w('fill 的 answer 必须是非空数组');
+      } else w('未知题型 ' + q.type);
+    });
+    const allHtml = JSON.stringify(n);
+    [...allHtml.matchAll(/data-sim=\\"([^\\"]+)\\"/g)].forEach(m => { if (!(window.SIMS || {})[m[1]]) warn(n.id, '演示未注册 ' + m[1]); });
+    if (/\bundefined\b|\bNaN\b/.test(allHtml)) warn(n.id, '内容里出现 undefined/NaN（可能是 FIG 调用写错）');
+  });
+
+  out.push(`${subject}: ${KG.nodes.length} 个知识点，${KG.nodes.reduce((s, n) => s + (n.tests || []).length, 0)} 道测试题`);
+  out.push(...(errs.length ? errs.map(e => '✗ ' + e) : ['✓ 检查通过']));
+  document.getElementById('out').textContent = out.join('\n');
+})();
+</script></body></html>

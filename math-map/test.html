@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>内容自检</title>
+<style>
+body { font-family: "Microsoft YaHei", sans-serif; margin: 16px; font-size: 14px; }
+table { border-collapse: collapse; } td, th { border: 1px solid #ccc; padding: 4px 8px; vertical-align: top; }
+.bad { color: #c00; } .ok { color: #080; }
+#stage { position: absolute; left: -9999px; top: 0; width: 480px; }
+</style>
+</head>
+<body>
+<h1>内容自检</h1>
+<p id="sum">运行中……</p>
+<table id="out"><tr><th>知识点</th><th>结果</th></tr></table>
+<div id="stage"></div>
+<script>
+  window.__errs = [];
+  window.addEventListener('error', (e) => window.__errs.push((e.filename || '').split('/').pop() + ':' + e.lineno + ' ' + e.message));
+</script>
+<script src="js/nodes.js"></script>
+<script src="js/lessons.js"></script>
+<script src="js/anims.js"></script>
+<script>
+  // 逐个加载各组文件，记录哪些文件不存在或有语法错误
+  const GROUPS = ['pnum1', 'pnum2', 'pgeo1', 'pgeo2', 'pstat', 'jnum1', 'jnum2', 'jgeo1', 'jgeo2', 'jmix', 'jext'];
+  const files = GROUPS.flatMap((g) => [`js/lessons-${g}.js`, `js/anims-${g}.js`]);
+  const loadState = {};
+  function load(i) {
+    if (i >= files.length) return run();
+    const s = document.createElement('script');
+    s.src = files[i] + '?t=' + Date.now();
+    s.onload = () => { loadState[files[i]] = 'ok'; load(i + 1); };
+    s.onerror = () => { loadState[files[i]] = '缺失'; load(i + 1); };
+    document.body.appendChild(s);
+  }
+  load(0);
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function run() {
+    const out = document.getElementById('out'), stage = document.getElementById('stage');
+    const L = window.LESSONS, A = window.ANIMS;
+    const nodeIds = new Set(window.MAP.nodes.map((n) => n[0]));
+    let bad = 0, done = 0;
+    const row = (k, html, isBad) => { const tr = out.insertRow(); tr.insertCell().textContent = k; const td = tr.insertCell(); td.innerHTML = html; td.className = isBad ? 'bad' : 'ok'; if (isBad) bad++; };
+    for (const f of files) if (loadState[f] !== 'ok') row(f, '文件' + loadState[f], true);
+    if (window.__errs.length) row('加载错误', window.__errs.join('<br>'), true);
+    for (const k of Object.keys(L)) if (!nodeIds.has(k)) row(k, '不是 nodes.js 里的知识点 id', true);
+    const names = new Set();
+    for (const [id] of window.MAP.nodes) {
+      const les = L[id], p = [];
+      if (!les) { row(id, '没有内容', true); continue; }
+      for (const f of ['goal', 'fj', 'sections', 'pitfalls', 'examples', 'quiz']) if (!les[f]) p.push('缺少 ' + f);
+      const anims = (les.sections || []).filter((s) => s.anim).map((s) => s.anim);
+      if (!anims.length) p.push('没有动画');
+      (les.examples || []).forEach((e, i) => { if (!e.q || !Array.isArray(e.steps) || !e.ans) p.push(`例${i + 1} 格式不对`); });
+      if ((les.quiz || []).length < 5) p.push('测试题少于 5 道');
+      (les.quiz || []).forEach((q, i) => {
+        if (q.type === 'choice') { if (!Array.isArray(q.opts) || !(q.ans >= 0 && q.ans < q.opts.length)) p.push(`第${i + 1}题 选项/答案下标不对`); }
+        else if (q.type === 'fill') { if (!Array.isArray(q.ans) || !q.ans.length) p.push(`第${i + 1}题 填空答案不是数组`); else if (q.ans.some((a) => /[√πa-wyzA-Z]/.test(a))) p.push(`第${i + 1}题 填空答案含不可输入的符号：${q.ans}`); }
+        else p.push(`第${i + 1}题 type 不对`);
+        if (!q.why) p.push(`第${i + 1}题 没有解析`);
+      });
+      for (const name of anims) {
+        if (!A[name]) { p.push('动画不存在：' + name); continue; }
+        if (names.has(name) && !['fracPie', 'fracWall'].includes(name)) { /* 允许复用 */ }
+        names.add(name);
+        const box = document.createElement('div');
+        box.className = 'anim';
+        stage.appendChild(box);
+        const before = window.__errs.length;
+        try {
+          A[name](box);
+          if (!box.querySelector('svg, canvas')) p.push(name + '：没有画面');
+          // 点一遍所有按钮、拨一遍滑块
+          for (const r of box.querySelectorAll('input[type=range]')) { r.value = r.max; r.dispatchEvent(new Event('input')); r.value = r.min; r.dispatchEvent(new Event('input')); }
+          for (const b of box.querySelectorAll('button')) { b.click(); await sleep(30); }
+          await sleep(400);
+          for (const b of box.querySelectorAll('button')) { b.click(); await sleep(30); }
+          await sleep(600);
+        } catch (err) { p.push(name + ' 出错：' + err.message); }
+        if (window.__errs.length > before) p.push(name + ' 运行时出错：' + window.__errs.slice(before).join('；'));
+        box.remove();
+      }
+      row(id, p.length ? p.join('<br>') : `通过（动画 ${anims.join('、')}；例题 ${les.examples.length}；测试 ${les.quiz.length}）`, p.length > 0);
+      done++;
+    }
+    document.getElementById('sum').textContent = `检查了 ${done} 个知识点，${bad} 项有问题。`;
+    document.title = bad ? `自检：${bad} 项问题` : '自检：全部通过';
+    window.__done = { bad, done };
+  }
+</script>
+</body>
+</html>

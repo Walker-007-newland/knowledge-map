@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知识图谱</title>
+<link rel="stylesheet" href="css/style.css?v=202610082055">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1 id="appTitle"></h1>
+    <span class="sub" id="appSub"></span><a class="subject-link" href="history.html">切换到历史 →</a>
+  </div>
+  <div class="progress-wrap" title="已掌握的知识点">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span id="progressText">0 / 0</span>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="btnNext">下一步学什么</button>
+    <button class="btn" id="btnBackup">备份进度</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input type="search" id="search" placeholder="搜索知识点…" autocomplete="off">
+  <div class="chips" id="moduleChips"></div>
+  <div class="legend">
+    <span><i class="dot st-new"></i>未学</span>
+    <span><i class="dot st-learning"></i>学习中</span>
+    <span><i class="dot st-weak"></i>需加强</span>
+    <span><i class="dot st-mastered"></i>已掌握</span>
+    <span class="star">★ 考频</span>
+  </div>
+  <div class="zoom">
+    <button class="btn icon" id="zoomOut" aria-label="缩小">−</button>
+    <button class="btn icon" id="zoomFit" aria-label="适应窗口">⤢</button>
+    <button class="btn icon" id="zoomIn" aria-label="放大">+</button>
+  </div>
+</div>
+
+<main id="main">
+  <div class="graph-wrap" id="graphWrap"><svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <aside class="panel" id="panel" aria-hidden="true"></aside>
+</main>
+
+<div class="popover" id="popNext" hidden></div>
+<div class="popover" id="popBackup" hidden>
+  <h3>备份进度</h3>
+  <p>进度只保存在这台电脑的浏览器里。换电脑时，先在原电脑导出，再到新电脑导入。</p>
+  <div class="row">
+    <button class="btn primary" id="btnExport">导出进度文件</button>
+    <label class="btn">导入进度文件<input type="file" id="fileImport" accept=".json,application/json" hidden></label>
+  </div>
+  <p class="muted" id="backupMsg"></p>
+</div>
+
+<script src="js/figs.js"></script>
+<script src="js/sims.js"></script>
+<script src="biology/modules.js"></script>
+<script src="biology/samples.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

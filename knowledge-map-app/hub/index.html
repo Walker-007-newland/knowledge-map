@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知识图谱</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 16px 32px; }
+  h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: 2px; }
+  .muted { margin: 0; color: var(--muted); font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;
+    width: 100%; max-width: 980px; margin-top: 28px; }
+  .card { display: flex; align-items: center; gap: 16px; padding: 20px 22px; border-radius: 16px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--text); text-decoration: none;
+    box-shadow: var(--shadow); -webkit-tap-highlight-color: transparent; transition: transform .12s, border-color .12s; }
+  .card:active { transform: scale(.97); }
+  .card:hover { border-color: var(--accent); }
+  .ico { flex: none; width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; font-size: 30px; }
+  .card h2 { margin: 0 0 4px; font-size: 22px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .group { grid-column: 1 / -1; margin: 10px 0 -4px; color: var(--muted); font-size: 14px; letter-spacing: 1px; }
+  footer { margin-top: auto; padding-top: 28px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>知识图谱</h1>
+  <p class="muted">福建中考 · 从小学一路走到初三</p>
+  <div class="grid">
+    <div class="group">主科</div>
+    <a class="card" href="math-map/index.html"><span class="ico" style="background:#e3edfc">📐</span><div><h2>数学</h2><p>三年级 → 九年级</p></div></a>
+    <a class="card" href="chinese-map/index.html"><span class="ico" style="background:#fbe9e4">📖</span><div><h2>语文</h2><p>四年级 → 初三</p></div></a>
+    <a class="card" href="english-map/index.html"><span class="ico" style="background:#e6f4ea">🔤</span><div><h2>英语</h2><p>四年级 → 初三</p></div></a>
+    <div class="group">理科</div>
+    <a class="card" href="science-map/physics.html"><span class="ico" style="background:#fff3d6">⚡</span><div><h2>物理</h2><p>八年级上 → 九年级</p></div></a>
+    <a class="card" href="science-map/chemistry.html"><span class="ico" style="background:#efe6fb">⚗️</span><div><h2>化学</h2><p>九年级上 → 九年级下</p></div></a>
+    <div class="group">生物 · 历史</div>
+    <a class="card" href="bio-history-map/biology.html"><span class="ico" style="background:#e3f6ec">🌱</span><div><h2>生物</h2><p>七年级上 → 八年级下</p></div></a>
+    <a class="card" href="bio-history-map/history.html"><span class="ico" style="background:#f6ecdf">📜</span><div><h2>历史</h2><p>七年级上 → 九年级下</p></div></a>
+  </div>
+  <footer>版本 __VERSION__</footer>
+</body>
+</html>

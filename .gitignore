@@ -1,0 +1,8 @@
+# 构建产物和签名密钥（密钥绝不能上传）
+knowledge-map-app/out/
+knowledge-map-app/signing/
+# 本机杂项
+.claude/
+*.7z
+*.tar.gz
+/sims-c3-6.js
