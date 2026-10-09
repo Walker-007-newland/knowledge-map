@@ -40,6 +40,13 @@ foreach ($m in $maps) {
 $hub = [IO.File]::ReadAllText("$here\hub\index.html", [Text.Encoding]::UTF8).Replace('__VERSION__', $versionName)
 [IO.File]::WriteAllText("$work\assets\www\index.html", $hub, (New-Object Text.UTF8Encoding $false))
 Copy-Item "$here\hub\km-shim.js" "$work\assets\www\km-shim.js"
+# 宠物狗页面（three.js + 狗模型），模型转换脚本不打包
+$petSrc = "$here\hub\pet"
+Get-ChildItem $petSrc -Recurse -File | Where-Object { $_.Extension -ne '.py' } | ForEach-Object {
+  $dst = Join-Path "$work\assets\www\pet" $_.FullName.Substring($petSrc.Length + 1)
+  New-Item -ItemType Directory -Force (Split-Path $dst) | Out-Null
+  Copy-Item $_.FullName $dst
+}
 
 # 每个页面：<head> 里最先加载 km-shim.js（下载、朗读补丁）；去掉 ?v= 缓存参数，避免 file:// 下找不到文件
 $utf8 = New-Object Text.UTF8Encoding $false
@@ -108,7 +115,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/math-map/index.html', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   $arsc = $zip.GetEntry('resources.arsc')

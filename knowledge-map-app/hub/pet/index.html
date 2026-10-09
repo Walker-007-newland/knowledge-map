@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>我的小狗</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --warm: #e8893b; --good: #3f9d5d; --bad: #d4553f;
+    --stage-top: #e9f1f7; --stage-bot: #f3eee2; --ground: #cfe0b5;
+    --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --warm: #f0a35e; --good: #5fbf7d; --bad: #e57560;
+      --stage-top: #1d2530; --stage-bot: #22211d; --ground: #34442f;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { display: flex; overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  #stage { position: relative; flex: 1; min-width: 0; background: linear-gradient(var(--stage-top), var(--stage-bot)); touch-action: none; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  .topbar { position: absolute; left: 16px; right: 16px; top: 14px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
+  .topbar > * { pointer-events: auto; }
+  .back { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border-radius: 999px; background: var(--surface);
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; box-shadow: var(--shadow); }
+  .bones { margin-left: auto; padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    font-size: 16px; font-weight: 600; box-shadow: var(--shadow); }
+  .bubble { position: absolute; transform: translate(-50%, -100%); padding: 8px 12px; border-radius: 14px; background: var(--surface);
+    border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 15px; white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity .25s; }
+  .bubble.show { opacity: 1; }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; margin-left: -6px;
+    background: var(--surface); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+  .fx { position: absolute; font-size: 26px; pointer-events: none; animation: rise 1.3s ease-out forwards; }
+  @keyframes rise { from { transform: translate(-50%, 0) scale(.6); opacity: 0; } 15% { opacity: 1; transform: translate(-50%, -10px) scale(1); }
+    to { transform: translate(-50%, -90px) scale(1.1); opacity: 0; } }
+  .loading[hidden] { display: none; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 15px; pointer-events: none; }
+  .credit { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: var(--muted); opacity: .7; }
+
+  #panel { width: 380px; flex: none; display: flex; flex-direction: column; gap: 14px; padding: 18px 16px; overflow-y: auto;
+    background: var(--surface); border-left: 1px solid var(--line); }
+  .name { display: flex; align-items: baseline; gap: 8px; }
+  .name h1 { margin: 0; font-size: 24px; }
+  .tag { padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .rename { margin-left: auto; border: none; background: none; color: var(--accent); font-size: 14px; padding: 4px; }
+  .claim { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #fff4e3; border: 1px solid #f1d2a2; color: #6b4310; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .claim { background: #3a2f20; border-color: #6b5230; color: #f4d8ac; } }
+  .claim b { font-size: 16px; }
+  .claim button { margin-left: auto; flex: none; border: none; border-radius: 999px; padding: 8px 14px; background: var(--warm); color: #fff; font-weight: 600; }
+  .bar { display: grid; grid-template-columns: 56px 1fr 44px; align-items: center; gap: 8px; font-size: 14px; }
+  .bar .track { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 999px; transition: width .5s; }
+  .bar span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hint { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+  .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .actions button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px;
+    border: 1px solid var(--line); background: var(--bg); font-size: 14px; }
+  .actions button span { font-size: 26px; line-height: 1.2; }
+  .actions button:active, .item:active { transform: scale(.96); }
+  .actions button:disabled { opacity: .45; }
+  .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: none; background: none; padding: 8px 10px; font-size: 15px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .slot { margin: 4px 0 6px; font-size: 13px; color: var(--muted); }
+  .items { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 6px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--bg); text-align: left; }
+  .item .ic { font-size: 24px; }
+  .item b { display: block; font-size: 14px; font-weight: 600; }
+  .item small { font-size: 12px; color: var(--muted); }
+  .item.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .item.locked { opacity: .5; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stats div { padding: 8px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--muted); }
+  .stats b { display: block; font-size: 18px; color: var(--text); }
+  .stages { display: flex; gap: 6px; margin-top: 10px; }
+  .stages div { flex: 1; padding: 8px 4px; border-radius: 12px; border: 1px solid var(--line); text-align: center; font-size: 13px; color: var(--muted); }
+  .stages div.on { border-color: var(--warm); color: var(--text); font-weight: 600; }
+  .rules { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 10px 0 0; padding-left: 18px; }
+
+  /* 领养 */
+  #adopt { display: none; flex-direction: column; gap: 14px; }
+  .adopting #adopt { display: flex; }
+  .adopting #main { display: none; }
+  .breeds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .breeds button { padding: 14px 10px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); text-align: center; }
+  .breeds button b { display: block; font-size: 18px; }
+  .breeds button small { color: var(--muted); }
+  .breeds button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  input[type=text] { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); }
+  .primary { border: none; border-radius: 14px; padding: 12px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 600; }
+  #main { display: flex; flex-direction: column; gap: 14px; }
+
+  .toast { position: fixed; left: 50%; top: 18px; transform: translate(-50%, -80px); padding: 10px 18px; border-radius: 999px;
+    background: var(--text); color: var(--bg); font-size: 15px; transition: transform .3s; z-index: 9; pointer-events: none; }
+  .toast.show { transform: translate(-50%, 0); }
+
+  @media (max-width: 760px) {
+    body { flex-direction: column; overflow: auto; height: auto; min-height: 100%; }
+    #stage { flex: none; height: 56vh; }
+    #panel { width: 100%; border-left: none; border-top: 1px solid var(--line); overflow: visible; }
+  }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div class="loading" id="loading">小狗正在赶来…</div>
+    <div class="topbar">
+      <a class="back" href="../index.html">‹ 返回</a>
+      <div class="bones" id="bones" hidden>🦴 0</div>
+    </div>
+    <div class="bubble" id="bubble"></div>
+    <div class="credit">狗狗模型：Quaternius（CC0）</div>
+  </div>
+
+  <div id="panel">
+    <div id="adopt">
+      <h1 style="margin:0;font-size:24px">领养一只小狗</h1>
+      <p class="hint" style="margin:0">在各科图谱里掌握知识点，就能领到骨头喂它、给它买装扮，它会跟着你一起长大。</p>
+      <div class="breeds" id="breeds"></div>
+      <label class="hint" for="petName" style="margin:0">给它起个名字</label>
+      <input type="text" id="petName" maxlength="8" placeholder="最多 8 个字">
+      <button class="primary" id="btnAdopt">领养它</button>
+    </div>
+
+    <div id="main">
+      <div class="name"><h1 id="petTitle"></h1><span class="tag" id="petStage"></span><button class="rename" id="btnRename">改名</button></div>
+      <div class="claim" id="claim" hidden><div><b id="claimText"></b><br><small>每个知识点 3 根骨头</small></div><button id="btnClaim">领取</button></div>
+      <div class="bar"><span>饱食度</span><div class="track"><div class="fill" id="barFood"></div></div><span id="valFood"></span></div>
+      <div class="bar"><span>心情</span><div class="track"><div class="fill" id="barMood" style="background:#e0679b"></div></div><span id="valMood"></span></div>
+      <div class="bar"><span id="lvLabel">Lv.1</span><div class="track"><div class="fill" id="barLv" style="background:var(--accent)"></div></div><span id="valLv"></span></div>
+      <p class="hint" id="lvHint"></p>
+      <div class="actions">
+        <button id="btnFeed"><span>🦴</span>喂食</button>
+        <button id="btnPet"><span>🤚</span>摸摸</button>
+        <button id="btnBall"><span>🎾</span>扔球</button>
+      </div>
+      <div class="tabs"><button class="on" data-tab="shop">装扮</button><button data-tab="grow">成长记录</button></div>
+      <div id="tabShop"></div>
+      <div id="tabGrow" hidden></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/GLTFLoader.js"></script>
+<script src="pet-core.js"></script>
+<script src="pet.js"></script>
+</body>
+</html>
