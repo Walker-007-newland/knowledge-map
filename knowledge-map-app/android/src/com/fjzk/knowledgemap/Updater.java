@@ -32,11 +32,15 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 在线更新：查 GitHub 最新 Release，版本号比当前新就提示，下载 knowledge-map.apk 后交给系统安装器覆盖安装。
+ * 在线更新：查 GitHub 最新 Release（连不上就读 jsDelivr 镜像），版本号比当前新就提示；
+ * 依次从 jsDelivr 镜像、GitHub 下载 knowledge-map.apk，再交给系统安装器覆盖安装。
  * 只有这里会联网，图谱内容本身是离线的。版本号格式 yyyy.MM.dd.HHmm，按字符串比较即可。
  */
 class Updater {
-    static final String LATEST_API = "https://api.github.com/repos/Walker-007-newland/knowledge-map/releases/latest";
+    static final String REPO = "Walker-007-newland/knowledge-map";
+    static final String LATEST_API = "https://api.github.com/repos/" + REPO + "/releases/latest";
+    // jsDelivr 镜像（publish.ps1 把 APK 推到 apk 分支并打 tag apk-v<版本>），国内一般能访问
+    static final String[] CDNS = { "cdn.jsdelivr.net", "fastly.jsdelivr.net" };
     static final String APK_NAME = "knowledge-map.apk";
     static final String ACTION_STATUS = "com.fjzk.knowledgemap.INSTALL_STATUS";
     static final int REQ_INSTALL_PERM = 2;
@@ -86,36 +90,59 @@ class Updater {
         if (manual) toast("正在检查更新…");
         new Thread(new Runnable() {
             public void run() {
+                String latest = null, notes = "";
+                long size = 0;
+                // 先问 GitHub 接口，连不上再读 jsDelivr 镜像上的 version.json
                 try {
                     JSONObject rel = new JSONObject(httpGet(LATEST_API));
-                    String latest = rel.getString("tag_name").replaceFirst("^v", "");
-                    String url = null;
-                    long size = 0;
+                    latest = rel.getString("tag_name").replaceFirst("^v", "");
+                    notes = rel.optString("body", "");
                     JSONArray assets = rel.getJSONArray("assets");
                     for (int k = 0; k < assets.length(); k++) {
                         JSONObject a = assets.getJSONObject(k);
-                        if (APK_NAME.equals(a.getString("name"))) { url = a.getString("browser_download_url"); size = a.optLong("size"); }
+                        if (APK_NAME.equals(a.getString("name"))) size = a.optLong("size");
                     }
-                    final String cur = currentVersion();
-                    if (url == null || latest.compareTo(cur) <= 0) {
-                        busy = false;
-                        if (manual) toast("已经是最新版本（" + cur + "）");
-                        return;
-                    }
-                    final String fLatest = latest, fUrl = url, notes = rel.optString("body", "");
-                    final long fSize = size;
-                    act.runOnUiThread(new Runnable() {
-                        public void run() { offer(cur, fLatest, notes, fUrl, fSize); }
-                    });
                 } catch (Exception e) {
+                    for (String cdn : CDNS) {
+                        try {
+                            JSONObject v = new JSONObject(httpGet("https://" + cdn + "/gh/" + REPO + "@apk/version.json"));
+                            latest = v.getString("version");
+                            notes = v.optString("notes", "");
+                            size = v.optLong("size");
+                            break;
+                        } catch (Exception ignored) { }
+                    }
+                }
+                final String cur = currentVersion();
+                if (latest == null) {
                     busy = false;
                     if (manual) toast("检查更新失败，请确认已联网");
+                    return;
                 }
+                if (latest.compareTo(cur) <= 0) {
+                    busy = false;
+                    if (manual) toast("已经是最新版本（" + cur + "）");
+                    return;
+                }
+                final String fLatest = latest, fNotes = notes;
+                final long fSize = size;
+                act.runOnUiThread(new Runnable() {
+                    public void run() { offer(cur, fLatest, fNotes, fSize); }
+                });
             }
         }).start();
     }
 
-    void offer(String cur, String latest, String notes, final String url, final long size) {
+    /** 下载来源，按顺序尝试：国内能访问的 jsDelivr 镜像在前，GitHub 直连兜底 */
+    static String[] sources(String version) {
+        String[] list = new String[CDNS.length + 1];
+        for (int k = 0; k < CDNS.length; k++)
+            list[k] = "https://" + CDNS[k] + "/gh/" + REPO + "@apk-v" + version + "/" + APK_NAME;
+        list[CDNS.length] = "https://github.com/" + REPO + "/releases/download/v" + version + "/" + APK_NAME;
+        return list;
+    }
+
+    void offer(String cur, final String latest, String notes, final long size) {
         if (act.isFinishing()) { busy = false; return; }
         String msg = "当前版本：" + cur + "\n最新版本：" + latest
             + (size > 0 ? String.format("（%.1f MB）", size / 1048576.0) : "")
@@ -125,7 +152,7 @@ class Updater {
             .setTitle("发现新版本")
             .setMessage(msg)
             .setPositiveButton("立即更新", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface d, int w) { download(url, size); }
+                public void onClick(DialogInterface d, int w) { download(latest, size); }
             })
             .setNegativeButton("以后再说", new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface d, int w) { busy = false; }
@@ -136,7 +163,7 @@ class Updater {
             .show();
     }
 
-    void download(final String url, final long expected) {
+    void download(final String version, final long expected) {
         cancelled = false;
         int pad = (int) (20 * act.getResources().getDisplayMetrics().density);
         LinearLayout box = new LinearLayout(act);
@@ -158,46 +185,78 @@ class Updater {
             .show();
 
         final File apk = new File(act.getCacheDir(), "update.apk");
+        final String[] urls = sources(version);
         new Thread(new Runnable() {
             public void run() {
-                String err = null;
-                try {
-                    HttpURLConnection c = open(url);
-                    long total = c.getContentLength() > 0 ? c.getContentLength() : expected;
-                    InputStream in = c.getInputStream();
-                    OutputStream out = new FileOutputStream(apk);
+                boolean ok = false;
+                for (int k = 0; k < urls.length && !ok && !cancelled; k++) {
+                    final String src = "线路 " + (k + 1) + "/" + urls.length;
+                    act.runOnUiThread(new Runnable() {
+                        public void run() { bar.setProgress(0); label.setText(src + "：正在连接…"); }
+                    });
                     try {
-                        byte[] buf = new byte[64 * 1024];
-                        long done = 0;
-                        int n, lastPct = -1;
-                        while ((n = in.read(buf)) > 0) {
-                            if (cancelled) throw new IOException("cancelled");
-                            out.write(buf, 0, n);
-                            done += n;
-                            final int pct = total > 0 ? (int) (done * 100 / total) : 0;
-                            if (pct != lastPct) {
-                                lastPct = pct;
-                                final String text = String.format("%.1f / %.1f MB", done / 1048576.0, total / 1048576.0);
-                                act.runOnUiThread(new Runnable() {
-                                    public void run() { bar.setProgress(pct); label.setText(text); }
-                                });
-                            }
-                        }
-                    } finally { out.close(); in.close(); c.disconnect(); }
-                } catch (Exception e) {
-                    err = cancelled ? "已取消下载" : "下载失败，请检查网络后重试";
+                        fetch(urls[k], apk, expected, src, bar, label);
+                        ok = true;
+                    } catch (Exception e) {
+                        apk.delete();
+                    }
                 }
-                final String fErr = err;
+                final boolean fOk = ok;
                 act.runOnUiThread(new Runnable() {
                     public void run() {
                         try { dlg.dismiss(); } catch (Exception ignored) { }
                         busy = false;
-                        if (fErr != null) { apk.delete(); toast(fErr); }
-                        else install(apk);
+                        if (fOk) install(apk);
+                        else if (cancelled) toast("已取消下载");
+                        else failed(urls[0], version, expected);
                     }
                 });
             }
         }).start();
+    }
+
+    /** 下载一个来源；大小不对（比如被重定向到错误页）也算失败 */
+    void fetch(String url, File apk, long expected, final String src, final ProgressBar bar, final TextView label) throws IOException {
+        HttpURLConnection c = open(url);
+        long total = c.getContentLength() > 0 ? c.getContentLength() : expected;
+        InputStream in = c.getInputStream();
+        OutputStream out = new FileOutputStream(apk);
+        long done = 0;
+        try {
+            byte[] buf = new byte[64 * 1024];
+            int n, lastPct = -1;
+            while ((n = in.read(buf)) > 0) {
+                if (cancelled) throw new IOException("cancelled");
+                out.write(buf, 0, n);
+                done += n;
+                final int pct = total > 0 ? (int) (done * 100 / total) : 0;
+                if (pct != lastPct) {
+                    lastPct = pct;
+                    final String text = src + String.format("：%.1f / %.1f MB", done / 1048576.0, total / 1048576.0);
+                    act.runOnUiThread(new Runnable() {
+                        public void run() { bar.setProgress(pct); label.setText(text); }
+                    });
+                }
+            }
+        } finally { out.close(); in.close(); c.disconnect(); }
+        if (expected > 0 && done != expected) throw new IOException("size mismatch " + done);
+    }
+
+    void failed(final String browserUrl, final String version, final long expected) {
+        if (act.isFinishing()) return;
+        new AlertDialog.Builder(act)
+            .setTitle("下载失败")
+            .setMessage("所有下载线路都连不上。可以稍后重试，或者用浏览器下载后手动安装（直接覆盖安装，进度会保留）。")
+            .setPositiveButton("重试", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface d, int w) { busy = true; download(version, expected); }
+            })
+            .setNeutralButton("用浏览器下载", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface d, int w) {
+                    try { act.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(browserUrl))); } catch (Exception ignored) { }
+                }
+            })
+            .setNegativeButton("取消", null)
+            .show();
     }
 
     void install(File apk) {
@@ -249,8 +308,8 @@ class Updater {
 
     static HttpURLConnection open(String url) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(15000);
-        c.setReadTimeout(30000);
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(20000);
         c.setInstanceFollowRedirects(true);
         c.setRequestProperty("User-Agent", "knowledge-map-app");
         c.setRequestProperty("Accept", "application/vnd.github+json, application/octet-stream");

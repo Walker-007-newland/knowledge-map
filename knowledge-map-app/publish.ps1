@@ -47,6 +47,29 @@ if (-not $apk) { throw '没有找到 APK，请先运行 build.ps1' }
 $ver = $apk.BaseName.Substring('知识图谱-'.Length)
 $commit = (git -C $teach rev-parse HEAD).Trim()
 if (-not $Notes) { $Notes = (git -C $teach log -1 --format=%s).Trim() }
+
+# 国内镜像：GitHub 的安装包放在 *.githubusercontent.com，国内经常连不上。
+# 把 APK 和 version.json 推到单独的 apk 分支并打 tag apk-v<版本>，jsDelivr 就能分发：
+#   https://cdn.jsdelivr.net/gh/<仓库>@apk-v<版本>/knowledge-map.apk
+# 要在建 Release 之前推，保证 App 查到新版本时镜像已经可用
+$mirror = "$here\out\apk-branch"
+if (Test-Path $mirror) { Remove-Item $mirror -Recurse -Force }
+New-Item -ItemType Directory $mirror | Out-Null
+Copy-Item $apk.FullName "$mirror\knowledge-map.apk"
+$info = @{ version = $ver; notes = $Notes; size = $apk.Length } | ConvertTo-Json
+[IO.File]::WriteAllText("$mirror\version.json", $info, (New-Object Text.UTF8Encoding $false))
+git -C $mirror init -q -b apk
+git -C $mirror add -A
+git -C $mirror commit -q -m "APK $ver" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C $mirror tag "apk-v$ver"
+git -C $mirror -c "http.extraheader=Authorization: Basic $basic" push --force $remote apk "refs/tags/apk-v$ver"
+if ($LASTEXITCODE) { throw '推送 apk 镜像分支失败' }
+Remove-Item $mirror -Recurse -Force
+# 刷新 jsDelivr 上 @apk 分支的缓存（version.json 是 App 检查更新的备用来源；@apk 下的 APK 是给浏览器下载用的固定地址），失败不要紧
+foreach ($f in 'version.json', 'knowledge-map.apk') {
+  try { Invoke-RestMethod "https://purge.jsdelivr.net/gh/$repo@apk/$f" -UseBasicParsing | Out-Null } catch { }
+}
+
 $rel = Api POST "https://api.github.com/repos/$repo/releases" @{
   tag_name = "v$ver"; target_commitish = $commit; name = "知识图谱 $ver"
   body = $Notes
@@ -58,3 +81,4 @@ Invoke-RestMethod -Method POST -Uri "$upload`?name=knowledge-map.apk" -Headers $
 Write-Host ""
 Write-Host "发布完成：$($rel.html_url)"
 Write-Host "固定下载地址：https://github.com/$repo/releases/latest/download/knowledge-map.apk"
+Write-Host "国内镜像地址：https://cdn.jsdelivr.net/gh/$repo@apk/knowledge-map.apk"
