@@ -9,11 +9,12 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -22,48 +23,22 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Locale;
 
 /**
- * 全屏 WebView 外壳。网页放在 assets/www 里，通过虚拟域名 https://appassets.androidplatform.net/ 提供，
- * 这样所有科目共用一个源，localStorage 进度在升级安装后也能保留。
+ * 全屏 WebView 外壳。网页打包在 assets/www 里，直接从 file:///android_asset/ 读取，完全离线，不需要网络权限。
+ * 下载备份、朗读这些 WebView 不支持的功能由 km-shim.js 转给这里的 KMBridge。
  */
 public class MainActivity extends Activity {
-    static final String HOST = "appassets.androidplatform.net";
-    static final String HOME = "https://" + HOST + "/index.html";
+    static final String HOME = "file:///android_asset/www/index.html";
     static final int REQ_FILE = 1;
-
-    // 网页的“备份进度”是用 blob 链接下载的，WebView 不支持，这里拦下来交给原生保存
-    static final String SHIM = "(function(){if(window.__kmShim)return;window.__kmShim=1;"
-        + "var blobs={},cou=URL.createObjectURL;"
-        + "URL.createObjectURL=function(b){var u=cou.call(URL,b);if(b instanceof Blob)blobs[u]=b;return u;};"
-        + "var click=HTMLAnchorElement.prototype.click;"
-        + "HTMLAnchorElement.prototype.click=function(){var b=this.download&&blobs[this.href];"
-        + "if(b){var n=this.download;b.text().then(function(t){KMBridge.saveFile(n,t);});return;}"
-        + "return click.apply(this,arguments);};})();";
-
-    static final Map<String, String> MIME = new HashMap<>();
-    static {
-        MIME.put("html", "text/html");
-        MIME.put("js", "application/javascript");
-        MIME.put("css", "text/css");
-        MIME.put("json", "application/json");
-        MIME.put("svg", "image/svg+xml");
-        MIME.put("png", "image/png");
-        MIME.put("jpg", "image/jpeg");
-        MIME.put("jpeg", "image/jpeg");
-        MIME.put("gif", "image/gif");
-        MIME.put("webp", "image/webp");
-        MIME.put("woff2", "font/woff2");
-        MIME.put("mp3", "audio/mpeg");
-    }
 
     WebView web;
     ValueCallback<Uri[]> fileCallback;
+    TextToSpeech tts;
+    boolean ttsReady;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -75,7 +50,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setAllowFileAccess(false);
+        s.setAllowFileAccess(true);
         s.setAllowContentAccess(false);
         s.setTextZoom(100);
         s.setMediaPlaybackRequiresUserGesture(false);
@@ -88,6 +63,34 @@ public class MainActivity extends Activity {
 
         if (state != null) web.restoreState(state);
         if (web.getUrl() == null) web.loadUrl(HOME);
+
+        tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
+            public void onInit(int status) { ttsReady = status == TextToSpeech.SUCCESS; }
+        });
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            public void onStart(String id) { }
+            public void onDone(String id) { ttsDone(id, true); }
+            public void onError(String id) { ttsDone(id, false); }
+        });
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (tts != null) tts.stop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (tts != null) tts.shutdown();
+        web.destroy();
+        super.onDestroy();
+    }
+
+    void ttsDone(final String id, final boolean ok) {
+        runOnUiThread(new Runnable() {
+            public void run() { web.evaluateJavascript("window.__kmTtsDone&&__kmTtsDone('" + id.replaceAll("[^0-9]", "") + "'," + ok + ")", null); }
+        });
     }
 
     @Override
@@ -114,35 +117,12 @@ public class MainActivity extends Activity {
 
     class Client extends WebViewClient {
         @Override
-        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
-            Uri u = req.getUrl();
-            if (!HOST.equals(u.getHost())) return null;
-            String path = u.getPath();
-            if (path == null || path.isEmpty() || path.endsWith("/")) path = (path == null ? "/" : path) + "index.html";
-            String ext = path.substring(path.lastIndexOf('.') + 1).toLowerCase();
-            String mime = MIME.containsKey(ext) ? MIME.get(ext) : "application/octet-stream";
-            Map<String, String> headers = new HashMap<>();
-            headers.put("Cache-Control", "no-cache");
-            try {
-                InputStream in = getAssets().open("www" + path);
-                return new WebResourceResponse(mime, "utf-8", 200, "OK", headers, in);
-            } catch (IOException e) {
-                return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", headers, null);
-            }
-        }
-
-        @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
-            if (HOST.equals(u.getHost())) return false;
+            if ("file".equals(u.getScheme())) return false;
             // 外部链接交给系统浏览器
             try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (ActivityNotFoundException ignored) { }
             return true;
-        }
-
-        @Override
-        public void onPageFinished(WebView view, String url) {
-            view.evaluateJavascript(SHIM, null);
         }
     }
 
@@ -167,6 +147,20 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        @JavascriptInterface
+        public void speak(String id, String text, String lang, float rate, float pitch) {
+            if (!ttsReady) { ttsDone(id, false); return; }
+            if (lang != null && !lang.isEmpty()) tts.setLanguage(Locale.forLanguageTag(lang));
+            tts.setSpeechRate(rate);
+            tts.setPitch(pitch);
+            tts.speak(text, TextToSpeech.QUEUE_ADD, null, id);
+        }
+
+        @JavascriptInterface
+        public void stopSpeak() {
+            if (tts != null) tts.stop();
+        }
+
         @JavascriptInterface
         public void saveFile(final String name, final String text) {
             String where;

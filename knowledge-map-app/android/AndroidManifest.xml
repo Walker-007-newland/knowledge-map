@@ -2,6 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.fjzk.knowledgemap">
 
+    <!-- 不申请网络权限：所有内容都在 APK 里。这里只声明要用系统的语音朗读引擎（Android 11+ 需要） -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"

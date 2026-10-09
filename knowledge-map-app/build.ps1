@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force "$work\assets\www", "$work\classes", "$work\
 # 1. 复制网页：各图谱目录 + 总入口，排除开发用文件
 $maps = 'math-map', 'chinese-map', 'english-map', 'science-map', 'bio-history-map'
 $skipDirs = @('docs', '.claude')
-$skipFiles = @('*.md', '*.gz', '*.7z', '*.sh', '*.py', 'test.html', 'check.html', 'coverage.js')
+$skipFiles = @('*.md', '*.gz', '*.7z', '*.sh', '*.py', 'test.html', 'check.html', 'page.html', 'coverage.js')
 foreach ($m in $maps) {
   $src = Join-Path $teach $m
   Get-ChildItem $src -Recurse -File | Where-Object {
@@ -39,6 +39,20 @@ foreach ($m in $maps) {
 }
 $hub = [IO.File]::ReadAllText("$here\hub\index.html", [Text.Encoding]::UTF8).Replace('__VERSION__', $versionName)
 [IO.File]::WriteAllText("$work\assets\www\index.html", $hub, (New-Object Text.UTF8Encoding $false))
+Copy-Item "$here\hub\km-shim.js" "$work\assets\www\km-shim.js"
+
+# 每个页面：<head> 里最先加载 km-shim.js（下载、朗读补丁）；去掉 ?v= 缓存参数，避免 file:// 下找不到文件
+$utf8 = New-Object Text.UTF8Encoding $false
+Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
+  $depth = $_.DirectoryName.Substring("$work\assets\www".Length).Split('\', [StringSplitOptions]::RemoveEmptyEntries).Count
+  $shim = ('../' * $depth) + 'km-shim.js'
+  $html = [IO.File]::ReadAllText($_.FullName, $utf8)
+  $html = [regex]::Replace($html, '((?:src|href)="[^"?#]+)\?v=[^"]*"', '$1"')
+  $tag = "<script src=`"$shim`"></script>"
+  $html = if ($html -match '<head>') { ([regex]'<head>').Replace($html, "<head>`n$tag", 1) } else { "$tag`n$html" }
+  if ($html -notmatch [regex]::Escape($shim)) { throw "没能在 $($_.FullName) 注入 km-shim.js" }
+  [IO.File]::WriteAllText($_.FullName, $html, $utf8)
+}
 
 # 2. 资源编译 + 链接
 & "$bt\aapt2.exe" compile --dir "$here\android\res" -o "$work\res.zip"
