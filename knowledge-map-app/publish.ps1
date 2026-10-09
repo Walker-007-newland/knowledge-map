@@ -1,6 +1,8 @@
 ﻿# 发布到 GitHub：推送源码 + 新建 Release 并上传 APK
 # 先运行 build.ps1 打包；token 放在 signing\github-token.txt（已被 .gitignore 排除）
 # 固定下载地址：https://github.com/<用户名>/knowledge-map/releases/latest/download/knowledge-map.apk
+# 用法：publish.ps1 [-Notes "这次更新了什么"]，不写就用最近一次提交的标题；平板 App 的更新提示里会显示它
+param([string]$Notes)
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $here = $PSScriptRoot
@@ -44,9 +46,10 @@ $apk = Get-ChildItem "$here\out" -Filter '知识图谱-*.apk' | Sort-Object Last
 if (-not $apk) { throw '没有找到 APK，请先运行 build.ps1' }
 $ver = $apk.BaseName.Substring('知识图谱-'.Length)
 $commit = (git -C $teach rev-parse HEAD).Trim()
+if (-not $Notes) { $Notes = (git -C $teach log -1 --format=%s).Trim() }
 $rel = Api POST "https://api.github.com/repos/$repo/releases" @{
   tag_name = "v$ver"; target_commitish = $commit; name = "知识图谱 $ver"
-  body = "平板下载安装 knowledge-map.apk。新版本直接覆盖安装，学习进度会保留。"
+  body = $Notes
 }
 $upload = $rel.upload_url -replace '\{.*\}$', ''
 Invoke-RestMethod -Method POST -Uri "$upload`?name=knowledge-map.apk" -Headers $h -InFile $apk.FullName `

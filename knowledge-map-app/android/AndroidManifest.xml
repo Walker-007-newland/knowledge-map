@@ -2,7 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.fjzk.knowledgemap">
 
-    <!-- 不申请网络权限：所有内容都在 APK 里。这里只声明要用系统的语音朗读引擎（Android 11+ 需要） -->
+    <!-- 图谱内容都在 APK 里离线使用；联网只用于检查和下载更新 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- 要用系统的语音朗读引擎（Android 11+ 需要声明） -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />

@@ -28,8 +28,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 /**
- * 全屏 WebView 外壳。网页打包在 assets/www 里，直接从 file:///android_asset/ 读取，完全离线，不需要网络权限。
- * 下载备份、朗读这些 WebView 不支持的功能由 km-shim.js 转给这里的 KMBridge。
+ * 全屏 WebView 外壳。网页打包在 assets/www 里，直接从 file:///android_asset/ 读取，完全离线。
+ * 下载备份、朗读这些 WebView 不支持的功能由 km-shim.js 转给这里的 KMBridge；联网只用于检查更新（见 Updater）。
  */
 public class MainActivity extends Activity {
     static final String HOME = "file:///android_asset/www/index.html";
@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     ValueCallback<Uri[]> fileCallback;
     TextToSpeech tts;
     boolean ttsReady;
+    Updater updater;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -72,6 +73,12 @@ public class MainActivity extends Activity {
             public void onDone(String id) { ttsDone(id, true); }
             public void onError(String id) { ttsDone(id, false); }
         });
+
+        // 启动时静默检查一次更新，有新版本才弹窗
+        updater = new Updater(this);
+        if (state == null) web.postDelayed(new Runnable() {
+            public void run() { updater.check(false); }
+        }, 2000);
     }
 
     @Override
@@ -83,6 +90,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (tts != null) tts.shutdown();
+        updater.destroy();
         web.destroy();
         super.onDestroy();
     }
@@ -112,6 +120,7 @@ public class MainActivity extends Activity {
             fileCallback = null;
             return;
         }
+        if (updater.onActivityResult(req)) return;
         super.onActivityResult(req, result, data);
     }
 
@@ -147,6 +156,16 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        @JavascriptInterface
+        public String appVersion() { return updater.currentVersion(); }
+
+        @JavascriptInterface
+        public void checkUpdate() {
+            runOnUiThread(new Runnable() {
+                public void run() { updater.check(true); }
+            });
+        }
+
         @JavascriptInterface
         public void speak(String id, String text, String lang, float rate, float pitch) {
             if (!ttsReady) { ttsDone(id, false); return; }

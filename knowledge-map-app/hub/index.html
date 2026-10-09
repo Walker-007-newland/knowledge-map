@@ -32,7 +32,9 @@
   .card h2 { margin: 0 0 4px; font-size: 22px; }
   .card p { margin: 0; color: var(--muted); font-size: 14px; }
   .group { grid-column: 1 / -1; margin: 10px 0 -4px; color: var(--muted); font-size: 14px; letter-spacing: 1px; }
-  footer { margin-top: auto; padding-top: 28px; color: var(--muted); font-size: 12px; }
+  footer { margin-top: auto; padding-top: 28px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 12px; }
+  footer button { font: inherit; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; }
+  footer button:active { background: var(--line); }
 </style>
 </head>
 <body>
@@ -50,6 +52,14 @@
     <a class="card" href="bio-history-map/biology.html"><span class="ico" style="background:#e3f6ec">🌱</span><div><h2>生物</h2><p>七年级上 → 八年级下</p></div></a>
     <a class="card" href="bio-history-map/history.html"><span class="ico" style="background:#f6ecdf">📜</span><div><h2>历史</h2><p>七年级上 → 九年级下</p></div></a>
   </div>
-  <footer>版本 __VERSION__</footer>
+  <footer><span>版本 __VERSION__</span><button id="btnUpdate" hidden>检查更新</button></footer>
+<script>
+  // 只有在平板 App 里才有更新按钮
+  if (window.KMBridge && KMBridge.checkUpdate) {
+    var b = document.getElementById('btnUpdate');
+    b.hidden = false;
+    b.onclick = function () { KMBridge.checkUpdate(); };
+  }
+</script>
 </body>
 </html>
