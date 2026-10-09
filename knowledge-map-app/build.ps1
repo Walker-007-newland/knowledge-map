@@ -58,7 +58,7 @@ Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
 & "$bt\aapt2.exe" compile --dir "$here\android\res" -o "$work\res.zip"
 if ($LASTEXITCODE) { throw 'aapt2 compile 失败' }
 & "$bt\aapt2.exe" link -o "$work\base.apk" -I $androidJar --manifest "$here\android\AndroidManifest.xml" `
-  -A "$work\assets" --java "$work\gen" --min-sdk-version 24 --target-sdk-version 34 `
+  --java "$work\gen" --min-sdk-version 24 --target-sdk-version 34 `
   --version-code $versionCode --version-name $versionName "$work\res.zip"
 if ($LASTEXITCODE) { throw 'aapt2 link 失败' }
 
@@ -70,11 +70,17 @@ $classes = @(Get-ChildItem "$work\classes" -Recurse -Filter *.class | ForEach-Ob
 & "$bt\d8.bat" --release --min-api 24 --lib $androidJar --output "$work\dex" @classes
 if ($LASTEXITCODE) { throw 'd8 失败' }
 
-# 4. 把 classes.dex 放进 apk，对齐，签名
-Push-Location "$work\dex"
-& "$bt\aapt.exe" add "$work\base.apk" classes.dex | Out-Null
-Pop-Location
-if ($LASTEXITCODE) { throw 'aapt add 失败' }
+# 4. 把 classes.dex 和网页放进 apk，对齐，签名
+# 不用 aapt2 -A / aapt add：它们在 Windows 上会把路径存成 assets/www\xxx（反斜杠），安卓上找不到文件
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$zip = [IO.Compression.ZipFile]::Open("$work\base.apk", 'Update')
+try {
+  [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, "$work\dex\classes.dex", 'classes.dex', 'Optimal')
+  Get-ChildItem "$work\assets" -Recurse -File | ForEach-Object {
+    $name = 'assets/' + $_.FullName.Substring("$work\assets".Length + 1).Replace('\', '/')
+    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $name, 'Optimal')
+  }
+} finally { $zip.Dispose() }
 & "$bt\zipalign.exe" -f -p 4 "$work\base.apk" "$work\aligned.apk"
 if ($LASTEXITCODE) { throw 'zipalign 失败' }
 
@@ -95,6 +101,19 @@ $apk = "$out\知识图谱-$versionName.apk"
 & "$bt\apksigner.bat" sign --ks $ks --ks-pass "pass:$pw" --ks-key-alias km --out $apk "$work\aligned.apk"
 if ($LASTEXITCODE) { throw 'apksigner 失败' }
 Copy-Item $apk "$out\knowledge-map.apk" -Force
+
+# 自检：直接查 zip 原始目录里的文件名（Python 等工具读取时会自动纠正斜杠，不能用来查），确认首页在、路径里没有反斜杠
+$zip = [IO.Compression.ZipFile]::OpenRead($apk)
+try {
+  $names = @($zip.Entries | ForEach-Object { $_.FullName })
+  $bad = @($names | Where-Object { $_.Contains('\') })
+  if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/math-map/index.html', 'classes.dex', 'resources.arsc') {
+    if ($names -notcontains $must) { throw "APK 里缺少 $must" }
+  }
+  $arsc = $zip.GetEntry('resources.arsc')
+  if ($arsc.CompressedLength -ne $arsc.Length) { throw 'resources.arsc 被压缩了，Android 11+ 会拒绝安装' }
+} finally { $zip.Dispose() }
 
 Remove-Item $work -Recurse -Force
 $size = [math]::Round((Get-Item $apk).Length / 1MB, 1)
