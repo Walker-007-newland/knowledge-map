@@ -120,7 +120,6 @@ public class MainActivity extends Activity {
             fileCallback = null;
             return;
         }
-        if (updater.onActivityResult(req)) return;
         super.onActivityResult(req, result, data);
     }
 

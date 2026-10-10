@@ -20,6 +20,12 @@
         android:theme="@style/AppTheme"
         android:allowBackup="true"
         android:hardwareAccelerated="true">
+        <!-- 把下载好的更新包交给系统安装器 -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="com.fjzk.knowledgemap.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

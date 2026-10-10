@@ -11,7 +11,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageInstaller;
 import android.net.Uri;
 import android.os.Build;
-import android.provider.Settings;
+import android.util.Log;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -43,17 +43,17 @@ class Updater {
     static final String[] CDNS = { "cdn.jsdelivr.net", "fastly.jsdelivr.net" };
     static final String APK_NAME = "knowledge-map.apk";
     static final String ACTION_STATUS = "com.fjzk.knowledgemap.INSTALL_STATUS";
-    static final int REQ_INSTALL_PERM = 2;
+    static final String TAG = "KMUpdate";
 
     final Activity act;
     boolean busy;
     volatile boolean cancelled;
-    File pendingApk;
 
     final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
             int status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
+            Log.i(TAG, "session status " + status + " " + i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE));
             if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
                 Intent confirm = i.getParcelableExtra(Intent.EXTRA_INTENT);
                 if (confirm != null) {
@@ -198,6 +198,7 @@ class Updater {
                         fetch(urls[k], apk, expected, src, bar, label);
                         ok = true;
                     } catch (Exception e) {
+                        Log.w(TAG, "download failed: " + urls[k], e);
                         apk.delete();
                     }
                 }
@@ -260,22 +261,22 @@ class Updater {
     }
 
     void install(File apk) {
-        // Android 8 起需要用户允许本应用“安装未知应用”，第一次更新时引导去设置里打开
-        if (Build.VERSION.SDK_INT >= 26 && !act.getPackageManager().canRequestPackageInstalls()) {
-            pendingApk = apk;
-            new AlertDialog.Builder(act)
-                .setTitle("需要允许安装")
-                .setMessage("请在接下来的设置页面里打开“允许来自此来源的应用”，然后返回继续更新。")
-                .setPositiveButton("去设置", new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface d, int w) {
-                        act.startActivityForResult(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                            Uri.parse("package:" + act.getPackageName())), REQ_INSTALL_PERM);
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .show();
+        // 直接把安装包交给系统安装器。没有“安装未知应用”权限时，系统安装器会自己弹出开关，打开后接着安装。
+        // 不再自己跳设置页等返回结果：平板（如小米 HyperOS）会在单独窗口打开设置页，结果立刻返回“取消”，更新就断了
+        Intent view = new Intent(Intent.ACTION_VIEW)
+            .setDataAndType(ApkProvider.URI, ApkProvider.MIME)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            act.startActivity(view);
             return;
+        } catch (Exception e) {
+            Log.w(TAG, "ACTION_VIEW install failed, falling back to PackageInstaller", e);
         }
+        installBySession(apk);
+    }
+
+    /** 备用：没有能打开 APK 的安装器时，用 PackageInstaller 会话安装 */
+    void installBySession(File apk) {
         try {
             PackageInstaller pi = act.getPackageManager().getPackageInstaller();
             int sid = pi.createSession(new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL));
@@ -293,17 +294,9 @@ class Updater {
             s.commit(PendingIntent.getBroadcast(act, sid, i, flags).getIntentSender());
             s.close();
         } catch (Exception e) {
+            Log.w(TAG, "session install failed", e);
             toast("安装失败：" + e.getMessage());
         }
-    }
-
-    /** 从“允许安装未知应用”设置页返回 */
-    boolean onActivityResult(int req) {
-        if (req != REQ_INSTALL_PERM) return false;
-        if (pendingApk != null && act.getPackageManager().canRequestPackageInstalls()) install(pendingApk);
-        else toast("没有获得安装权限，更新已取消");
-        pendingApk = null;
-        return true;
     }
 
     static HttpURLConnection open(String url) throws IOException {
