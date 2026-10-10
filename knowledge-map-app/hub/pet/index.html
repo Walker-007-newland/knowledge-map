@@ -62,6 +62,12 @@
   .bar .fill { height: 100%; border-radius: 999px; transition: width .5s; }
   .bar span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   .hint { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+  .study { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: var(--bg);
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; }
+  .study > span { font-size: 24px; }
+  .study b { display: block; font-size: 15px; }
+  .study small { font-size: 13px; color: var(--muted); }
+  .study i { margin-left: auto; font-style: normal; font-size: 22px; color: var(--muted); }
   .actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .actions button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px;
     border: 1px solid var(--line); background: var(--bg); font-size: 14px; }
@@ -118,6 +124,7 @@
     <div class="loading" id="loading">小狗正在赶来…</div>
     <div class="topbar">
       <a class="back" href="../index.html">‹ 返回</a>
+      <a class="back" href="study.html">📊 学习统计</a>
       <div class="bones" id="bones" hidden>🦴 0</div>
     </div>
     <div class="bubble" id="bubble"></div>
@@ -141,6 +148,7 @@
       <div class="bar"><span>心情</span><div class="track"><div class="fill" id="barMood" style="background:#e0679b"></div></div><span id="valMood"></span></div>
       <div class="bar"><span id="lvLabel">Lv.1</span><div class="track"><div class="fill" id="barLv" style="background:var(--accent)"></div></div><span id="valLv"></span></div>
       <p class="hint" id="lvHint"></p>
+      <a class="study" href="study.html"><span>📚</span><div><b id="studyToday"></b><small id="studySub"></small></div><i>›</i></a>
       <div class="actions">
         <button id="btnFeed"><span>🦴</span>喂食</button>
         <button id="btnPet"><span>🤚</span>摸摸</button>
@@ -155,6 +163,9 @@
 
 <script src="lib/three.min.js"></script>
 <script src="lib/GLTFLoader.js"></script>
+<script src="lib/RoomEnvironment.js"></script>
+<script src="refine.js"></script>
+<script src="../km-study.js"></script>
 <script src="pet-core.js"></script>
 <script src="pet.js"></script>
 </body>

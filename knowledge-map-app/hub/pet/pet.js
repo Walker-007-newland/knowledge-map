@@ -20,8 +20,16 @@
   const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 50);
   const LOOK = new THREE.Vector3(0, 0.42, 0);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x9a8a6a, 0.85));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+  // 电影感色调 + 室内环境光照（给眼睛、鼻子柔和的反光）
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+
+  scene.add(new THREE.HemisphereLight(0xfff6e8, 0x8a7a5a, 0.55));
+  const rim = new THREE.DirectionalLight(0xdfe9ff, 0.7);   // 背后的轮廓光，勾出毛边
+  rim.position.set(-2.2, 2.5, -3);
+  scene.add(rim);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 1.1);
   sun.position.set(1.8, 4, 2.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
@@ -43,7 +51,7 @@
     t.encoding = THREE.sRGBEncoding;
     return t;
   })();
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(2.6, 48), new THREE.MeshBasicMaterial({ map: groundTex, transparent: true, depthWrite: false }));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(2.6, 48), new THREE.MeshBasicMaterial({ map: groundTex, transparent: true, depthWrite: false, toneMapped: false }));
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
   const shadowCatcher = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48), new THREE.ShadowMaterial({ opacity: 0.22 }));
@@ -78,13 +86,34 @@
   let curAction = null, busy = false, current = '';
   const cache = {};
 
+  // 材质：毛发哑光，鼻子微亮，眼睛像玻璃一样有高光
+  const FUR_LAYERS = 12;
+  const COAT = { shiba: ['#c56a2c', '#f4ecdf'], husky: ['#55585e', '#eef0f2'] };   // 主色、浅色（原色经过色调映射会发白）
+  function tuneMaterials(mats, breed) {
+    mats.forEach((m, i) => {
+      if (i === 0 || i === 2) { m.roughness = 0.9; m.metalness = 0; m.color.setStyle(COAT[breed][i ? 1 : 0]); }
+      else if (i === 1) { m.roughness = 0.35; m.metalness = 0; }
+      else { m.roughness = 0.08; m.metalness = 0; m.envMapIntensity = 1.6; }
+    });
+  }
+
   function loadBreed(breed, cb) {
     if (cache[breed]) return cb(cache[breed]);
     // 模型是 base64 编码的 GLB，解码成二进制交给 GLTFLoader，不经过任何网络请求
     const go = () => {
       const bin = atob(window.PET_MODELS[breed]), buf = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      new THREE.GLTFLoader().parse(buf.buffer, '', g => { cache[breed] = g; cb(g); },
+      new THREE.GLTFLoader().parse(buf.buffer, '', g => {
+        if (!/[?&]raw\b/.test(location.search)) {   // 加 ?raw 可以看原始低多边形模型
+          const skin = KMRefine.refine(g.scene, 2);
+          if (skin) {
+            tuneMaterials(skin.material, breed);
+            g.userData.fur = KMRefine.addFur(skin, { layers: FUR_LAYERS, length: 0.05, freq: 60, mats: [0, 2] });
+          }
+        }
+        cache[breed] = g;
+        cb(g);
+      },
         e => { $('loading').textContent = '模型加载失败：' + (e && e.message || e); });
     };
     if (window.PET_MODELS && window.PET_MODELS[breed]) return go();
@@ -120,6 +149,7 @@
       busy = false;
       idle(true);
       applyEquip();
+      applyPerf();
       cb && cb();
     });
   }
@@ -514,6 +544,27 @@
   /* ---------------- 循环 ---------------- */
   const clock = new THREE.Clock();
   const tmp = new THREE.Vector3();
+  // 自动降画质：平板跑不动时，先降分辨率，再减一半毛发层，最后关掉毛发（加 ?hq 不降）
+  let perfT = -1, perfN = 0, perfLevel = 0, perfDone = /[?&]hq\b/.test(location.search);
+  function applyPerf() {
+    const fur = (cache[current] && cache[current].userData.fur) || [];
+    fur.forEach((sh, i) => { sh.visible = perfLevel < 2 || (perfLevel === 2 && i % 2 === 1); });
+  }
+  function perfTick(dt) {
+    if (perfDone || !model) return;
+    perfT += dt;
+    if (perfT < 0) return;           // 前 1 秒在编译着色器，不计入
+    perfN++;
+    if (perfT < 2) return;
+    const avg = perfT / perfN;
+    perfT = 0; perfN = 0;
+    if (avg < 1 / 28) { perfDone = true; return; }
+    perfLevel++;
+    if (perfLevel === 1) { renderer.setPixelRatio(1); resize(); }
+    applyPerf();
+    if (perfLevel >= 3) perfDone = true;
+  }
+
   function loop() {
     requestAnimationFrame(loop);
     const dt = Math.min(clock.getDelta(), 0.1);
@@ -532,6 +583,7 @@
       ball.position.set(tmp.x + Math.sin(pet.rotation.y) * 0.24 * s, tmp.y - 0.08 * s, tmp.z + Math.cos(pet.rotation.y) * 0.24 * s);
     }
     idleTick(dt);
+    perfTick(dt);
     if (bubbleEl.classList.contains('show')) {
       const p = headScreen();
       bubbleEl.style.left = p.x + 'px';
@@ -577,6 +629,9 @@
     $('claimText').textContent = '新掌握了 ' + pend + ' 个知识点！';
     $('btnClaim').textContent = '领取 ' + pend * P.BONES_PER_NODE + ' 🦴';
     $('btnFeed').disabled = st.bones < P.FEED_COST;
+    const S = window.KMStudy, sst = S.load(), min = Math.round(S.secondsOn(sst, S.dayKey()) / 60), days = S.streak(sst);
+    $('studyToday').textContent = '今天学习 ' + min + ' 分钟' + (min >= 30 ? ' ✓' : '');
+    $('studySub').textContent = (days ? '已连续学习 ' + days + ' 天 · ' : '') + (min >= 30 ? '今天的目标完成啦' : '学满 30 分钟它会更开心') + ' · 查看统计';
     renderShop(L);
     renderGrow(L);
     if (!shownLevel) shownLevel = L;

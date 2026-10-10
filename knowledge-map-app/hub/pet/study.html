@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学习统计</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb; --grid: #ece7dc;
+    --accent: #2f6fde; --accent-soft: #dbe6fa; --warm: #e8893b;
+    --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d; --grid: #2c2d32;
+      --accent: #6b9bf0; --accent-soft: #263552; --warm: #f0a35e;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { padding: 16px 16px 32px; -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .top h1 { margin: 0; font-size: 24px; }
+  .back { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; background: var(--surface);
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; box-shadow: var(--shadow); }
+  .top .goal { margin-left: auto; font-size: 14px; color: var(--muted); }
+
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .tile { padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .tile small { display: block; font-size: 13px; color: var(--muted); }
+  .tile b { display: block; margin-top: 4px; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .tile b em { font-style: normal; font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+  .tile .meter { height: 6px; margin-top: 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+  .tile .meter i { display: block; height: 100%; background: var(--warm); border-radius: 999px; }
+
+  .cols { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; align-items: start; }
+  .card { padding: 16px 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .card h2 { margin: 0; font-size: 17px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .seg { margin-left: auto; display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); }
+  .seg button { border: none; background: none; padding: 5px 12px; border-radius: 999px; font-size: 14px; color: var(--muted); }
+  .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+  /* 柱状图 */
+  .chart { position: relative; height: 220px; margin-left: 40px; }
+  .gl { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); }
+  .gl span { position: absolute; right: 100%; margin-right: 8px; transform: translateY(-50%); font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .gl.goal { border-top: 1.5px dashed var(--warm); }
+  .gl.goal span { color: var(--warm); }
+  .bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 2px; }
+  .bars button { flex: 1; height: 100%; min-width: 0; padding: 0; border: none; background: none; display: flex; align-items: flex-end; position: relative; }
+  .bars button i { display: block; width: 100%; max-width: 36px; margin: 0 auto; border-radius: 4px 4px 0 0; background: var(--accent); min-height: 0; }
+  .bars button:hover i, .bars button.on i { background: color-mix(in srgb, var(--accent) 75%, var(--text)); }
+  .bars button.on::before { content: ""; position: absolute; inset: 0 1px; border-radius: 6px; background: var(--accent-soft); opacity: .5; }
+  .bars button i { position: relative; }
+  .xl { display: flex; gap: 2px; margin: 6px 0 0 40px; }
+  .xl span { flex: 1; min-width: 0; text-align: center; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: visible; }
+  .xl span.today { color: var(--text); font-weight: 600; }
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; }
+
+  /* 某一天的明细 */
+  .day { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .day h3 { margin: 0 0 10px; font-size: 15px; }
+  .day h3 span { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-weight: 400; color: var(--muted); font-size: 13px; padding: 4px 0; }
+  td { padding: 6px 0; border-top: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th:not(:first-child), td:not(:first-child) { text-align: right; }
+  .none { color: var(--muted); font-size: 14px; margin: 0; }
+
+  /* 各科进度 */
+  .subj { display: grid; grid-template-columns: 44px 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--grid); }
+  .subj:first-of-type { border-top: none; }
+  .subj b { font-size: 15px; }
+  .subj .track { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+  .subj .track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+  .subj .num { font-size: 14px; font-variant-numeric: tabular-nums; text-align: right; }
+  .subj small { grid-column: 2 / 4; font-size: 12px; color: var(--muted); }
+  .note { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+  @media (max-width: 860px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .tiles .tile:first-child { grid-column: 1 / -1; }
+    .cols { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 420px) {
+    .top .goal { display: none; }
+    .chart { margin-left: 34px; }
+    .xl { margin-left: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="back" href="index.html">‹ 返回小狗</a>
+    <h1>学习统计</h1>
+    <span class="goal">每天目标 30 分钟</span>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="cols">
+    <div class="card">
+      <div class="head">
+        <h2>每天学习时长</h2>
+        <div class="seg" id="range"><button data-n="7" class="on">7 天</button><button data-n="14">14 天</button><button data-n="30">30 天</button></div>
+      </div>
+      <div class="chart" id="chart"></div>
+      <div class="xl" id="xl"></div>
+      <div class="day" id="day"></div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h2>各科进度</h2></div>
+      <div id="subjects"></div>
+      <p class="note">只统计在各科图谱里的时间：页面在前台、且 3 分钟内有操作才计时。测试正确率达到 80%（或诊断通过）算掌握。</p>
+    </div>
+  </div>
+</div>
+
+<script src="../km-study.js"></script>
+<script>
+(function () {
+  const S = window.KMStudy, GOAL = 30;
+  const st = S.load();
+  if (S.scan(st)) S.save(st);
+  const today = S.dayKey();
+  const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const $ = id => document.getElementById(id);
+
+  const mins = sec => Math.round(sec / 60);
+  function dur(sec) {
+    const m = mins(sec);
+    if (m < 1) return '不到 1 分钟';
+    if (m < 60) return m + ' 分钟';
+    return Math.floor(m / 60) + ' 小时' + (m % 60 ? ' ' + m % 60 + ' 分' : '');
+  }
+  function lastDays(n) {
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - i);
+      out.push({ key: S.dayKey(d.getTime()), date: d });
+    }
+    return out;
+  }
+  // 每天新掌握的知识点：{ 日期: { 进度键: 个数 } }
+  const learned = {};
+  Object.keys(st.first).forEach(k => Object.values(st.first[k]).forEach(day => {
+    const d = learned[day] = learned[day] || {};
+    d[k] = (d[k] || 0) + 1;
+  }));
+  const learnedOn = day => Object.values(learned[day] || {}).reduce((a, b) => a + b, 0);
+
+  /* ---------------- 顶部数字 ---------------- */
+  function tiles() {
+    const t = S.secondsOn(st, today);
+    const week = lastDays(7).reduce((a, d) => a + S.secondsOn(st, d.key), 0);
+    const all = Object.keys(st.days).reduce((a, k) => a + S.secondsOn(st, k), 0);
+    const mastered = S.SOURCES.reduce((a, s) => a + S.masteredCount(s.key), 0);
+    const pct = Math.min(100, mins(t) / GOAL * 100);
+    const tile = (label, value, unit, extra) => '<div class="tile"><small>' + label + '</small><b>' + value + (unit ? '<em>' + unit + '</em>' : '') + '</b>' + (extra || '') + '</div>';
+    const split = sec => { const m = mins(sec); return m < 60 ? [m, '分钟'] : [(m / 60).toFixed(1), '小时']; };
+    $('tiles').innerHTML =
+      tile('今天学习', mins(t), '/ ' + GOAL + ' 分钟', '<div class="meter"><i style="width:' + pct + '%"></i></div>') +
+      tile('近 7 天', ...split(week)) +
+      tile('连续学习', S.streak(st), '天') +
+      tile('累计学习', ...split(all)) +
+      tile('已掌握知识点', mastered, '个', learnedOn(today) ? '<small style="margin-top:6px">今天新掌握 ' + learnedOn(today) + ' 个</small>' : '');
+  }
+
+  /* ---------------- 柱状图 ---------------- */
+  let range = 7, sel = today;
+  function chart() {
+    const days = lastDays(range);
+    const vals = days.map(d => mins(S.secondsOn(st, d.key)));
+    const top = Math.max(60, Math.ceil(Math.max(...vals) / 30) * 30);
+    let h = '';
+    const lines = top <= 120 ? [top / 2, top] : [Math.round(top / 3 / 10) * 10, Math.round(top * 2 / 3 / 10) * 10, top];
+    lines.forEach(v => { h += '<div class="gl" style="bottom:' + (v / top * 100) + '%"><span>' + v + '</span></div>'; });
+    h += '<div class="gl" style="bottom:0"><span>0</span></div>';
+    h += '<div class="gl goal" style="bottom:' + (GOAL / top * 100) + '%"><span>目标</span></div>';
+    h += '<div class="bars">' + days.map((d, i) => {
+      const label = d.date.getMonth() + 1 + '月' + d.date.getDate() + '日：' + vals[i] + ' 分钟';
+      return '<button data-day="' + d.key + '" title="' + label + '" aria-label="' + label + '"' + (d.key === sel ? ' class="on"' : '') + '>' +
+        '<i style="height:' + (vals[i] / top * 100) + '%"></i></button>';
+    }).join('') + '</div>';
+    if (!vals.some(v => v)) h += '<div class="empty">这段时间还没有学习记录<br>去各科图谱里学一会儿吧</div>';
+    $('chart').innerHTML = h;
+    $('xl').innerHTML = days.map((d, i) => {
+      const show = range === 7 || i === days.length - 1 || (range === 14 ? i % 2 === 1 : (days.length - 1 - i) % 7 === 0);
+      const txt = !show ? '' : range === 7 ? (d.key === today ? '今天' : WEEK[d.date.getDay()]) : (d.date.getMonth() + 1) + '/' + d.date.getDate();
+      return '<span' + (d.key === today ? ' class="today"' : '') + '>' + txt + '</span>';
+    }).join('');
+    $('chart').querySelectorAll('.bars button').forEach(b => {
+      b.onclick = () => { sel = b.dataset.day; chart(); detail(); };
+    });
+  }
+
+  /* ---------------- 选中那天的明细 ---------------- */
+  function detail() {
+    const d = new Date(sel + 'T12:00:00');
+    const title = (sel === today ? '今天' : (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + WEEK[d.getDay()]);
+    const t = st.days[sel] || {}, l = learned[sel] || {};
+    const rows = S.SOURCES.filter(s => t[s.key] >= 30 || l[s.key]);
+    let h = '<h3>' + title + '<span>学习 ' + dur(S.secondsOn(st, sel)) + (learnedOn(sel) ? ' · 新掌握 ' + learnedOn(sel) + ' 个知识点' : '') + '</span></h3>';
+    if (!rows.length) h += '<p class="none">这一天没有学习记录。</p>';
+    else h += '<table><thead><tr><th>科目</th><th>学习时长</th><th>新掌握</th></tr></thead><tbody>' +
+      rows.map(s => '<tr><td>' + s.name + '</td><td>' + (t[s.key] ? dur(t[s.key]) : '—') + '</td><td>' + (l[s.key] ? l[s.key] + ' 个' : '—') + '</td></tr>').join('') +
+      '</tbody></table>';
+    $('day').innerHTML = h;
+  }
+
+  /* ---------------- 各科进度 ---------------- */
+  function subjects() {
+    const week = lastDays(7).map(d => d.key);
+    $('subjects').innerHTML = S.SOURCES.map(s => {
+      const n = S.masteredCount(s.key), total = st.totals[s.key];
+      const wsec = week.reduce((a, k) => a + ((st.days[k] || {})[s.key] || 0), 0);
+      const wnew = week.reduce((a, k) => a + ((learned[k] || {})[s.key] || 0), 0);
+      const pct = total ? Math.min(100, n / total * 100) : 0;
+      const sub = [];
+      if (wsec >= 60) sub.push('近 7 天学了 ' + dur(wsec));
+      if (wnew) sub.push('新掌握 ' + wnew + ' 个');
+      if (!n && !wsec) sub.push('还没开始');
+      return '<div class="subj"><b>' + s.name + '</b><div class="track"><i style="width:' + pct + '%"></i></div>' +
+        '<span class="num">' + n + (total ? ' / ' + total : '') + '</span>' + (sub.length ? '<small>' + sub.join(' · ') + '</small>' : '') + '</div>';
+    }).join('');
+  }
+
+  $('range').querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      range = +b.dataset.n;
+      $('range').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      if (!lastDays(range).some(d => d.key === sel)) sel = today;
+      chart(); detail();
+    };
+  });
+  tiles(); chart(); detail(); subjects();
+})();
+</script>
+</body>
+</html>

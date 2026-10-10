@@ -65,6 +65,7 @@
     <a class="card" href="bio-history-map/history.html"><span class="ico" style="background:#f6ecdf">📜</span><div><h2>历史</h2><p>七年级上 → 九年级下</p></div></a>
   </div>
   <footer><span>版本 __VERSION__</span><button id="btnUpdate" hidden>检查更新</button></footer>
+<script src="km-study.js"></script>
 <script src="pet/pet-core.js"></script>
 <script>
   // 小狗卡片：名字、等级、饱食度、待领骨头
@@ -76,7 +77,7 @@
     var color = f < P.HUNGRY ? '#d4553f' : '#e8893b';
     var card = document.getElementById('petCard');
     card.innerHTML = '<span class="ico">' + (f < P.HUNGRY ? '🥺' : '🐕') + '</span><div><h2></h2><p>饱食度<span class="meter"><i style="width:' + f + '%;background:' + color + '"></i></span>　🦴 ' + st.bones +
-      (f < P.HUNGRY ? '　<b style="color:' + color + '">饿了</b>' : '') + '</p></div>' + (n ? '<span class="badge">+' + n * P.BONES_PER_NODE + ' 🦴 待领取</span>' : '');
+      (f < P.HUNGRY ? '　<b style="color:' + color + '">饿了</b>' : '') + '　📚 今天学习 ' + Math.round(KMStudy.secondsOn(KMStudy.load(), KMStudy.dayKey()) / 60) + ' 分钟</p></div>' + (n ? '<span class="badge">+' + n * P.BONES_PER_NODE + ' 🦴 待领取</span>' : '');
     card.querySelector('h2').textContent = st.name + ' · Lv.' + L + ' ' + P.stage(L).name;
   }
   renderPet();

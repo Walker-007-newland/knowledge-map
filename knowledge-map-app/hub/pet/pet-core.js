@@ -1,17 +1,8 @@
 // 宠物狗的数据与规则：总入口卡片和宠物页共用
 // 不改各图谱的代码，只读它们存在 localStorage 里的进度，按“已掌握”的知识点发骨头
 (function () {
-  // 各图谱的进度键和“已掌握”的判定，要和各自 app.js 里的 status() 保持一致
-  const passed = p => p.last != null ? p.last >= 80 : p.diag === 'pass';
-  const SOURCES = [
-    { key: 'mathmap-progress-v1', name: '数学', ok: p => p.best >= 0.8 },
-    { key: 'fjzk-zh-progress-v1', name: '语文', ok: passed },
-    { key: 'fjzk-en-progress-v1', name: '英语', ok: passed },
-    { key: 'fjzk-physics-progress-v1', name: '物理', ok: passed },
-    { key: 'fjzk-chemistry-progress-v1', name: '化学', ok: passed },
-    { key: 'fjzk-biology-progress-v1', name: '生物', ok: passed },
-    { key: 'fjzk-history-progress-v1', name: '历史', ok: passed }
-  ];
+  // 各图谱的进度键和“已掌握”的判定统一放在 km-study.js（要先加载它）
+  const SOURCES = window.KMStudy.SOURCES;
   const STORE = 'km-pet-v1';
   const BONES_PER_NODE = 3;     // 每掌握一个知识点得 3 根骨头
   const FEED_COST = 1;          // 喂一次 1 根骨头
@@ -155,10 +146,11 @@
     save(st);
   }
 
-  // 心情 0~100：吃饱、最近学习、今天摸过都会让它开心
+  // 心情 0~100：吃饱、最近学习（今天学满 30 分钟最开心）、今天摸过都会让它开心
   function mood(st) {
     const daysSinceStudy = st.lastStudy ? (Date.now() - st.lastStudy) / 86400000 : 99;
-    const study = daysSinceStudy < 1 ? 30 : daysSinceStudy < 3 ? 15 : 0;
+    const S = window.KMStudy, todayMin = S.secondsOn(S.load(), S.dayKey()) / 60;
+    const study = todayMin >= 30 ? 30 : todayMin >= 10 || daysSinceStudy < 1 ? 20 : daysSinceStudy < 3 ? 10 : 0;
     const pets = st.petDay === today() ? Math.min(st.petCount, 5) * 4 : 0;
     return Math.round(Math.min(100, st.fullness * 0.5 + study + pets));
   }
