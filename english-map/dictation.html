@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>单词听写</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dictation.css">
+</head>
+<body class="dict">
+<header class="topbar">
+  <button class="btn" id="btnBack">← 返回</button>
+  <div class="brand">
+    <h1 id="title">单词听写</h1>
+    <span class="sub" id="subtitle">拍下课本单词表，自动识别后随机听写</span>
+  </div>
+</header>
+
+<main>
+  <!-- 词单列表 -->
+  <section class="view" id="vList">
+    <div class="row-actions">
+      <button class="btn primary big" id="btnNewPhoto">📷 拍照新建词单</button>
+      <button class="btn big" id="btnNewManual">✍️ 手动输入</button>
+    </div>
+    <div id="lists"></div>
+    <p class="empty" id="listsEmpty">还没有词单。拍一张课本单词表的照片开始吧。</p>
+  </section>
+
+  <!-- 识别和确认 -->
+  <section class="view" id="vEdit" hidden>
+    <div class="card">
+      <label class="field">词单名称<input id="listName" placeholder="比如：七上 Unit 3" maxlength="40"></label>
+      <div class="row-actions">
+        <button class="btn" id="btnTakePhoto">📷 拍照添加</button>
+        <button class="btn" id="btnPickPhoto">🖼️ 从相册选</button>
+        <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+        <input type="file" id="filePick" accept="image/*" multiple hidden>
+      </div>
+      <div class="ocr-status" id="ocrStatus" hidden>
+        <div class="ocr-text" id="ocrText">正在识别…</div>
+        <div class="bar"><i id="ocrBar"></i></div>
+      </div>
+      <p class="hint">检查一遍识别结果：<b>黄色</b>的是没把握的，请核对；去掉勾选或点 ✕ 删除不要的词；中文释义可以不填。</p>
+    </div>
+    <div class="card">
+      <div class="word-head"><span id="wordCount">0 个词</span>
+        <button class="btn small" id="btnCheckAll">全选</button>
+        <button class="btn small" id="btnCheckNone">全不选</button>
+      </div>
+      <div id="wordRows"></div>
+      <button class="btn add-row" id="btnAddRow">＋ 添加一个词</button>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnEditCancel">取消</button>
+      <button class="btn primary big" id="btnEditSave">保存词单</button>
+    </div>
+  </section>
+
+  <!-- 听写设置 -->
+  <section class="view" id="vSetup" hidden>
+    <div class="card">
+      <h2 id="setupName"></h2>
+      <div class="dopt"><span class="dopt-label">听写范围</span><div class="seg" data-opt="scope">
+        <button data-v="all">全部 <i id="nAll"></i></button>
+        <button data-v="wrong">只听错词 <i id="nWrong"></i></button>
+        <button data-v="some">随机抽</button>
+      </div><label class="some-n" id="someWrap">抽 <input type="number" id="someN" min="1" value="10"> 个</label></div>
+      <div class="dopt"><span class="dopt-label">作答方式</span><div class="seg" data-opt="mode">
+        <button data-v="paper">纸上写</button><button data-v="type">键盘输入</button>
+      </div></div>
+      <div class="dopt"><span class="dopt-label">朗读内容</span><div class="seg" data-opt="read">
+        <button data-v="en">读英文</button><button data-v="enzh">英文 + 中文</button><button data-v="zh">读中文写英文</button>
+      </div></div>
+      <div class="dopt"><span class="dopt-label">每个词读</span><div class="seg" data-opt="reps">
+        <button data-v="1">1 遍</button><button data-v="2">2 遍</button><button data-v="3">3 遍</button>
+      </div></div>
+      <div class="dopt paper-only"><span class="dopt-label">书写时间</span><div class="seg" data-opt="pace">
+        <button data-v="fast">快</button><button data-v="normal">中</button><button data-v="slow">慢</button>
+      </div></div>
+      <div class="dopt"><span class="dopt-label">顺序</span><div class="seg" data-opt="order">
+        <button data-v="random">随机</button><button data-v="list">按词单</button>
+      </div></div>
+      <p class="hint" id="setupHint"></p>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnSetupBack">返回</button>
+      <button class="btn primary big" id="btnStart">开始听写</button>
+    </div>
+  </section>
+
+  <!-- 听写中 -->
+  <section class="view" id="vRun" hidden>
+    <div class="run-card">
+      <div class="run-no"><span id="runIdx">1</span><small> / <span id="runTotal">10</span></small></div>
+      <div class="run-zh" id="runZh"></div>
+      <div class="run-state" id="runState">请听…</div>
+      <div class="bar run-bar"><i id="runBar"></i></div>
+      <input id="runInput" class="run-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="听到后在这里输入，按回车" hidden>
+    </div>
+    <div class="run-ctrl">
+      <button class="btn big" id="btnPrev">⏮ 上一个</button>
+      <button class="btn big" id="btnRepeat">🔁 再读一遍</button>
+      <button class="btn big" id="btnPause">⏸ 暂停</button>
+      <button class="btn big primary" id="btnNext">下一个 ⏭</button>
+    </div>
+    <div class="row-actions center"><button class="btn" id="btnStop">结束听写</button></div>
+  </section>
+
+  <!-- 批改 -->
+  <section class="view" id="vCheck" hidden>
+    <div class="card">
+      <p class="hint" id="checkHint"></p>
+      <div id="checkRows"></div>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn primary big" id="btnCheckDone">批改完成</button>
+    </div>
+  </section>
+
+  <!-- 结果 -->
+  <section class="view" id="vResult" hidden>
+    <div class="card result">
+      <div class="score" id="resScore"></div>
+      <div class="score-sub" id="resSub"></div>
+      <div id="resWrong"></div>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnResList">返回词单</button>
+      <button class="btn" id="btnResAgain">全部再听一遍</button>
+      <button class="btn primary big" id="btnResWrong">错词再听写</button>
+    </div>
+  </section>
+</main>
+
+<script src="vendor/tesseract/tesseract.min.js"></script>
+<script src="js/dictation.js"></script>
+</body>
+</html>

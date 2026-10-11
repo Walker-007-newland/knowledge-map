@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force "$work\assets\www", "$work\classes", "$work\
 # 1. 复制网页：各图谱目录 + 总入口，排除开发用文件
 $maps = 'math-map', 'chinese-map', 'english-map', 'science-map', 'bio-history-map'
 $skipDirs = @('docs', '.claude')
-$skipFiles = @('*.md', '*.gz', '*.7z', '*.sh', '*.py', 'test.html', 'check.html', 'page.html', 'coverage.js')
+$skipFiles = @('*.md', '*.tar.gz', '*.7z', '*.sh', '*.py', 'test.html', 'check.html', 'page.html', 'coverage.js')
 foreach ($m in $maps) {
   $src = Join-Path $teach $m
   Get-ChildItem $src -Recurse -File | Where-Object {

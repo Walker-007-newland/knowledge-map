@@ -2,6 +2,7 @@ package com.fjzk.knowledgemap;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
@@ -15,6 +16,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -23,20 +25,35 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 全屏 WebView 外壳。网页打包在 assets/www 里，直接从 file:///android_asset/ 读取，完全离线。
  * 下载备份、朗读这些 WebView 不支持的功能由 km-shim.js 转给这里的 KMBridge；联网只用于检查更新（见 Updater）。
+ * 例外：英语单词听写页要用 Web Worker 和 fetch 加载离线识别引擎，file:// 下不行，
+ * 所以同一批文件也通过虚拟地址 https://appassets.androidplatform.net/ 提供（不联网，见 serveAsset）。
  */
 public class MainActivity extends Activity {
     static final String HOME = "file:///android_asset/www/index.html";
     static final int REQ_FILE = 1;
+    static final String ASSET_HOST = "appassets.androidplatform.net";
+    static final Map<String, String> MIME = new HashMap<>();
+    static {
+        MIME.put("html", "text/html"); MIME.put("js", "application/javascript"); MIME.put("css", "text/css");
+        MIME.put("json", "application/json"); MIME.put("svg", "image/svg+xml"); MIME.put("png", "image/png");
+        MIME.put("jpg", "image/jpeg"); MIME.put("wasm", "application/wasm"); MIME.put("gz", "application/gzip");
+    }
 
     WebView web;
     ValueCallback<Uri[]> fileCallback;
+    Uri photoUri;          // 拍照时相机写入的位置
     TextToSpeech tts;
     boolean ttsReady;
     Updater updater;
@@ -52,7 +69,7 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
-        s.setAllowContentAccess(false);
+        s.setAllowContentAccess(true);   // 选图片、导入进度文件时读 content:// 文件
         s.setTextZoom(100);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setBuiltInZoomControls(true);
@@ -116,18 +133,55 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int result, Intent data) {
         if (req == REQ_FILE && fileCallback != null) {
-            fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
+            fileCallback.onReceiveValue(chosenFiles(result, data));
             fileCallback = null;
+            photoUri = null;
             return;
         }
         super.onActivityResult(req, result, data);
     }
 
+    /** 选图/拍照/选文件的结果：相册可多选（ClipData），相机没有返回数据时用 photoUri */
+    Uri[] chosenFiles(int result, Intent data) {
+        if (result != RESULT_OK) return null;
+        List<Uri> list = new ArrayList<>();
+        if (data != null) {
+            ClipData clip = data.getClipData();
+            if (clip != null) for (int k = 0; k < clip.getItemCount(); k++) list.add(clip.getItemAt(k).getUri());
+            else if (data.getData() != null) list.add(data.getData());
+        }
+        if (list.isEmpty() && photoUri != null && ApkProvider.fileFor(this, photoUri).length() > 0) list.add(photoUri);
+        return list.isEmpty() ? null : list.toArray(new Uri[0]);
+    }
+
+    /** 虚拟 https 地址 → assets/www 里的文件 */
+    WebResourceResponse serveAsset(Uri u) {
+        String path = u.getPath();
+        if (path == null || path.isEmpty() || path.endsWith("/")) path = (path == null ? "/" : path) + "index.html";
+        if (path.contains("..")) return null;
+        String ext = path.substring(path.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+        String mime = MIME.containsKey(ext) ? MIME.get(ext) : "application/octet-stream";
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Cache-Control", "no-cache");
+        try {
+            InputStream in = getAssets().open("www" + path);
+            return new WebResourceResponse(mime, "utf-8", 200, "OK", headers, in);
+        } catch (IOException e) {
+            return new WebResourceResponse("text/plain", "utf-8", 404, "Not Found", headers, null);
+        }
+    }
+
     class Client extends WebViewClient {
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+            return ASSET_HOST.equals(req.getUrl().getHost()) ? serveAsset(req.getUrl()) : null;
+        }
+
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
-            if ("file".equals(u.getScheme())) return false;
+            if ("file".equals(u.getScheme()) || ASSET_HOST.equals(u.getHost())) return false;
             // 外部链接交给系统浏览器
             try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (ActivityNotFoundException ignored) { }
             return true;
@@ -135,16 +189,30 @@ public class MainActivity extends Activity {
     }
 
     class Chrome extends WebChromeClient {
-        // “导入进度文件”用的文件选择框
+        // 文件选择框：“导入进度文件”选文件；单词听写拍照（capture）或从相册选图（可多选）
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
             if (fileCallback != null) fileCallback.onReceiveValue(null);
             fileCallback = cb;
-            Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-            i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("*/*");
+            photoUri = null;
+            boolean image = false;
+            for (String t : params.getAcceptTypes()) if (t != null && t.startsWith("image")) image = true;
+            Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType(image ? "image/*" : "*/*");
+            if (params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            Intent launch;
+            if (image && params.isCaptureEnabled()) {
+                photoUri = ApkProvider.newPhoto(MainActivity.this);
+                launch = new Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                    .putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+                    .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                launch.setClipData(ClipData.newRawUri("photo", photoUri));   // 有的相机要靠 ClipData 才拿得到写权限
+            } else {
+                launch = Intent.createChooser(pick, image ? "选择图片" : "选择进度文件");
+            }
             try {
-                startActivityForResult(Intent.createChooser(i, "选择进度文件"), REQ_FILE);
+                startActivityForResult(launch, REQ_FILE);
             } catch (ActivityNotFoundException e) {
                 fileCallback = null;
                 cb.onReceiveValue(null);
@@ -155,6 +223,22 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        /** 听写时保持屏幕常亮 */
+        @JavascriptInterface
+        public void keepScreenOn(final boolean on) {
+            runOnUiThread(new Runnable() {
+                public void run() { web.setKeepScreenOn(on); }
+            });
+        }
+
+        /** 网页里的“返回”：https 页面不能自己跳回 file:// 页面，交给 WebView 后退 */
+        @JavascriptInterface
+        public void goBack() {
+            runOnUiThread(new Runnable() {
+                public void run() { if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME); }
+            });
+        }
+
         @JavascriptInterface
         public String appVersion() { return updater.currentVersion(); }
 
