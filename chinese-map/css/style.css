@@ -130,11 +130,15 @@ svg.focus .edge.rel { stroke: var(--accent); stroke-width: 2.4; }
   display: flex; flex-direction: column; flex-shrink: 0;
 }
 .graph-wrap { min-width: 0; }
-.panel.open { width: 66.667vw; }   /* 内容面板占屏幕 2/3 */
-@media (max-width: 960px) {
-  .panel { position: absolute; inset: 0; width: 100% !important; border-left: 0; transform: translateX(100%); transition: transform .25s; }
-  .panel.open { transform: none; }
+/* 内容面板全屏显示（盖住顶栏和地图），从右侧滑入；弹窗和提示框层级更高，仍在它上面 */
+.panel {
+  position: fixed; inset: 0; z-index: 15; width: 100%; border-left: 0;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  transform: translateX(100%); visibility: hidden; transition: transform .25s, visibility 0s .25s;
 }
+.panel.open { transform: none; visibility: visible; transition: transform .25s; }
+/* 大屏上内容最宽约 1060px 居中，背景和分隔线仍铺满 */
+.panel .p-head, .panel .p-body { padding-left: max(20px, calc((100% - 1060px) / 2)); padding-right: max(20px, calc((100% - 1060px) / 2)); }
 .p-head { padding: 16px 20px 0; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .p-head-top { display: flex; align-items: flex-start; gap: 8px; }
 .p-head h2 { margin: 4px 0 6px; font-size: 22px; line-height: 1.3; flex: 1; }
