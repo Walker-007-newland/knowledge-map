@@ -4,7 +4,7 @@
 
 ## 下载安装（平板）
 
-到 [Releases](../../releases/latest) 下载 `knowledge-map.apk`（国内访问慢可用镜像：https://cdn.jsdelivr.net/gh/Walker-007-newland/knowledge-map@apk/knowledge-map.apk ），用平板浏览器打开安装（首次需允许“安装未知来源应用”）。新版本直接覆盖安装，学习进度会保留。装好后 App 会自动提示更新。
+到 [Releases](../../releases/latest) 下载 `knowledge-map.apk`（国内访问慢可用镜像：https://cdn.jsdelivr.net/gh/Walker-007-newland/knowledge-map@apk-v<版本号>/knowledge-map.apk ，版本号见 Releases，比如 2026.10.11.1130），用平板浏览器打开安装（首次需允许“安装未知来源应用”）。新版本直接覆盖安装，学习进度会保留。装好后 App 会自动提示更新。
 
 ## 目录
 

@@ -81,4 +81,5 @@ Invoke-RestMethod -Method POST -Uri "$upload`?name=knowledge-map.apk" -Headers $
 Write-Host ""
 Write-Host "发布完成：$($rel.html_url)"
 Write-Host "固定下载地址：https://github.com/$repo/releases/latest/download/knowledge-map.apk"
-Write-Host "国内镜像地址：https://cdn.jsdelivr.net/gh/$repo@apk/knowledge-map.apk"
+# 给人手动下载用带版本号的地址：@apk 分支地址会被浏览器缓存 7 天、国内节点也可能没刷新，容易拿到旧版
+Write-Host "国内镜像地址（本版）：https://cdn.jsdelivr.net/gh/$repo@apk-v$ver/knowledge-map.apk"
