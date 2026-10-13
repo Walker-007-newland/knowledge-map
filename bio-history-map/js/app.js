@@ -355,7 +355,7 @@
             <div class="tags">
               <span class="tag">${TERM_NAME[n.term]}${n.chapter ? ' · ' + esc(n.chapter) : ''}</span>
               <span class="tag" style="color:${mod.color}">${mod.name}</span>
-              <span class="tag stars" title="中考考频">${'★'.repeat(n.freq || 1)}${'☆'.repeat(3 - (n.freq || 1))}</span>
+              <span class="tag stars" title="${CFG.freqName || '中考考频'}">${'★'.repeat(n.freq || 1)}${'☆'.repeat(3 - (n.freq || 1))}</span>
               <span class="tag status st-${st}">${STATUS_NAME[st]}${p.best != null ? ' · 最好 ' + p.best + '%' : ''}</span>
             </div>
             <h2>${esc(n.title)}</h2>
@@ -383,7 +383,7 @@
   }
 
   function renderLearn(n, body) {
-    body.innerHTML = (n.tip ? `<div class="tipbox">📌 <b>中考提示</b>：${n.tip}</div>` : '') +
+    body.innerHTML = (n.tip ? `<div class="tipbox">📌 <b>${CFG.tipName || '中考提示'}</b>：${n.tip}</div>` : '') +
       (n.learn || []).map(s => `<div class="sec"><h3>${s.h}</h3>${s.html}</div>`).join('') +
       `<div class="quiz-foot" style="margin-top:24px"><button class="btn" data-tab-go="examples">看例题 →</button><button class="btn primary" data-tab-go="test">直接测试 →</button></div>`;
     mountSims(body);

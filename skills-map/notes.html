@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学做笔记</title>
+<!-- 其它技能复用生物·历史图谱的界面和逻辑（同一套 KG 数据格式），只换内容 -->
+<link rel="stylesheet" href="../bio-history-map/css/style.css?v=202610132000">
+<style>
+  /* 视频卡片：点击播放 B 站教程 */
+  .video { display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 10px 14px; border-radius: var(--radius);
+    border: 1px solid var(--line); background: var(--surface-2); color: inherit; text-decoration: none; }
+  .video:hover { border-color: var(--accent); }
+  .video .play { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+    background: #fb7299; color: #fff; font-size: 16px; }
+  .video b { display: block; font-weight: 600; line-height: 1.4; }
+  .video small { color: var(--muted); font-size: 13px; }
+  .video-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; margin: 4px 0 12px; border-radius: var(--radius); overflow: hidden; background: #000; }
+  .video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .video-note { color: var(--muted); font-size: 13px; margin: 2px 0 8px; }
+  /* 康奈尔笔记、思维导图示意图 */
+  .fig { margin: 10px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; color: var(--text); }
+  .fig figcaption { color: var(--muted); font-size: 13px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1 id="appTitle"></h1>
+    <span class="sub" id="appSub"></span>
+  </div>
+  <div class="progress-wrap" title="已掌握的知识点">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span id="progressText">0 / 0</span>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="btnNext">下一步学什么</button>
+    <button class="btn" id="btnBackup">备份进度</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input type="search" id="search" placeholder="搜索…" autocomplete="off">
+  <div class="chips" id="moduleChips"></div>
+  <div class="legend">
+    <span><i class="dot st-new"></i>未学</span>
+    <span><i class="dot st-learning"></i>学习中</span>
+    <span><i class="dot st-weak"></i>需加强</span>
+    <span><i class="dot st-mastered"></i>已掌握</span>
+    <span class="star">★ 重要度</span>
+  </div>
+  <div class="zoom">
+    <button class="btn icon" id="zoomOut" aria-label="缩小">−</button>
+    <button class="btn icon" id="zoomFit" aria-label="适应窗口">⤢</button>
+    <button class="btn icon" id="zoomIn" aria-label="放大">+</button>
+  </div>
+</div>
+
+<main id="main">
+  <div class="graph-wrap" id="graphWrap"><svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <aside class="panel" id="panel" aria-hidden="true"></aside>
+</main>
+
+<div class="popover" id="popNext" hidden></div>
+<div class="popover" id="popBackup" hidden>
+  <h3>备份进度</h3>
+  <p>进度只保存在这台电脑的浏览器里。换电脑时，先在原电脑导出，再到新电脑导入。</p>
+  <div class="row">
+    <button class="btn primary" id="btnExport">导出进度文件</button>
+    <label class="btn">导入进度文件<input type="file" id="fileImport" accept=".json,application/json" hidden></label>
+  </div>
+  <p class="muted" id="backupMsg"></p>
+</div>
+
+<script src="notes/modules.js"></script>
+<script src="notes/lessons.js"></script>
+<script src="../bio-history-map/js/app.js"></script>
+<script>
+  // 视频：平板 App 里交给系统打开（B 站 App 或浏览器直接播放）；普通浏览器里点一下就在讲解下面嵌入播放器，再点收起
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a.video');
+    if (!a || window.KMBridge) return;
+    var bv = (a.getAttribute('href').match(/BV\w+/) || [])[0];
+    if (!bv) return;
+    e.preventDefault();
+    var next = a.nextElementSibling;
+    if (next && next.classList.contains('video-frame')) { next.remove(); return; }
+    var box = document.createElement('div');
+    box.className = 'video-frame';
+    box.innerHTML = '<iframe allowfullscreen allow="autoplay; fullscreen" src="https://player.bilibili.com/player.html?bvid=' + bv + '&autoplay=1&high_quality=1"></iframe>';
+    a.after(box);
+  });
+</script>
+</body>
+</html>

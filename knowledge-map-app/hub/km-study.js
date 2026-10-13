@@ -12,7 +12,8 @@
     { key: 'fjzk-physics-progress-v1', name: '物理', path: '/science-map/physics', ok: passed },
     { key: 'fjzk-chemistry-progress-v1', name: '化学', path: '/science-map/chemistry', ok: passed },
     { key: 'fjzk-biology-progress-v1', name: '生物', path: '/bio-history-map/biology', ok: passed },
-    { key: 'fjzk-history-progress-v1', name: '历史', path: '/bio-history-map/history', ok: passed }
+    { key: 'fjzk-history-progress-v1', name: '历史', path: '/bio-history-map/history', ok: passed },
+    { key: 'fjzk-notes-progress-v1', name: '笔记', path: '/skills-map/notes', ok: passed }
   ];
   const STORE = 'km-study-v1';
   const IDLE = 3 * 60 * 1000;   // 超过 3 分钟没操作就当作没在学
