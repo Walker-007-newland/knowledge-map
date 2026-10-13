@@ -42,6 +42,7 @@ import java.util.Map;
  */
 public class MainActivity extends Activity {
     static final String HOME = "file:///android_asset/www/index.html";
+    static final String EXTRA_OPEN = "open";   // 桌面小部件点进来时要打开的页面（相对 www 的路径）
     static final int REQ_FILE = 1;
     static final String ASSET_HOST = "appassets.androidplatform.net";
     static final Map<String, String> MIME = new HashMap<>();
@@ -57,6 +58,7 @@ public class MainActivity extends Activity {
     TextToSpeech tts;
     boolean ttsReady;
     Updater updater;
+    String pendingOpen;    // 总入口加载完后要接着打开的页面
 
     @Override
     protected void onCreate(Bundle state) {
@@ -80,7 +82,7 @@ public class MainActivity extends Activity {
         web.setWebChromeClient(new Chrome());
 
         if (state != null) web.restoreState(state);
-        if (web.getUrl() == null) web.loadUrl(HOME);
+        if (!openFromIntent(getIntent()) && web.getUrl() == null) web.loadUrl(HOME);
 
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             public void onInit(int status) { ttsReady = status == TextToSpeech.SUCCESS; }
@@ -96,6 +98,25 @@ public class MainActivity extends Activity {
         if (state == null) web.postDelayed(new Runnable() {
             public void run() { updater.check(false); }
         }, 2000);
+    }
+
+    /** 从桌面小部件点进来：直接打开指定页面（如宠物页）；返回键还能回到总入口 */
+    boolean openFromIntent(Intent i) {
+        String page = i == null ? null : i.getStringExtra(EXTRA_OPEN);
+        if (page == null || !page.matches("[a-z0-9\\-/]+\\.html")) return false;
+        i.removeExtra(EXTRA_OPEN);
+        String url = "file:///android_asset/www/" + page;
+        if (url.equals(web.getUrl())) return true;
+        if (web.getUrl() == null) { pendingOpen = url; web.loadUrl(HOME); }   // 先开总入口，加载完再进去（见 onPageFinished）
+        else web.loadUrl(url);
+        return true;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openFromIntent(intent);
     }
 
     @Override
@@ -174,6 +195,14 @@ public class MainActivity extends Activity {
 
     class Client extends WebViewClient {
         @Override
+        public void onPageFinished(WebView view, String url) {
+            if (pendingOpen == null) return;
+            String u = pendingOpen;
+            pendingOpen = null;
+            view.loadUrl(u);
+        }
+
+        @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
             return ASSET_HOST.equals(req.getUrl().getHost()) ? serveAsset(req.getUrl()) : null;
         }
@@ -223,6 +252,20 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        /** 桌面小狗：网页推来小狗概况（JSON，空字符串表示还没领养） */
+        @JavascriptInterface
+        public void updatePet(String json) { PetWidget.saveState(MainActivity.this, json == null ? "" : json); }
+
+        /** 桌面小狗：宠物页拍的小狗照片（PNG 的 base64） */
+        @JavascriptInterface
+        public void savePetImage(String base64) { if (base64 != null) PetWidget.saveImage(MainActivity.this, base64); }
+
+        /** 桌面小狗：请系统弹出“添加到桌面”；桌面不支持时返回 false，网页会改为提示手动添加 */
+        @JavascriptInterface
+        public boolean pinWidget() {
+            try { return PetWidget.pin(MainActivity.this); } catch (Exception e) { return false; }
+        }
+
         /** 听写时保持屏幕常亮 */
         @JavascriptInterface
         public void keepScreenOn(final boolean on) {

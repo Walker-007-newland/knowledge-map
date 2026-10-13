@@ -26,6 +26,18 @@
             android:authorities="com.fjzk.knowledgemap.apk"
             android:exported="false"
             android:grantUriPermissions="true" />
+        <!-- 桌面小部件：小狗。放到桌面后重启也会自动恢复，点一下打开宠物页 -->
+        <receiver
+            android:name=".PetWidget"
+            android:label="小狗"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_pet_info" />
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true"

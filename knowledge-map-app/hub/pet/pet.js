@@ -357,6 +357,7 @@
       b.add(obj);
       accObjs.push(obj);
     });
+    requestSnap();      // 换了装扮（或刚加载好）就给桌面小部件重拍一张
   }
 
   /* ---------------- 道具：骨头、球 ---------------- */
@@ -565,8 +566,36 @@
     if (perfLevel >= 3) perfDone = true;
   }
 
+  // 桌面小部件用的小狗照片：等它站好（没在做动作）时，用固定的四分之三侧面机位拍一张透明背景的方图交给 App
+  let snapAt = 0;
+  const snapCam = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
+  function requestSnap(delay) {
+    if (window.KMBridge && KMBridge.savePetImage) snapAt = performance.now() + (delay || 1500);
+  }
+  function takeSnap() {
+    const W = renderer.domElement.width, H = renderer.domElement.height, aspect = W / H;
+    if (!W || !H) { requestSnap(3000); return; }     // 页面正在离开或还没排版好，过会儿再拍
+    // 对准身体中段（脚下原点再往头那边挪一点，头是往前伸的）
+    const s = grow.scale.x, yaw = pet.rotation.y;
+    const c = new THREE.Vector3(pet.position.x + Math.sin(yaw) * 0.2 * s, 0.52 * s, pet.position.z + Math.cos(yaw) * 0.2 * s);
+    const a = yaw - 0.75, d = (2.45 * s + 0.2) / Math.min(1, aspect);   // 竖屏时方图只占画面中间一段，要退远些
+    snapCam.position.set(c.x + Math.sin(a) * d, c.y + 0.5 * s, c.z + Math.cos(a) * d);
+    snapCam.lookAt(c);
+    snapCam.aspect = aspect;
+    snapCam.updateProjectionMatrix();
+    const vis = [ground.visible, shadowCatcher.visible, ball.visible];
+    ground.visible = shadowCatcher.visible = ball.visible = false;
+    renderer.render(scene, snapCam);
+    const side = Math.min(W, H), out = document.createElement('canvas');
+    out.width = out.height = 320;
+    out.getContext('2d').drawImage(renderer.domElement, (W - side) / 2, (H - side) / 2, side, side, 0, 0, 320, 320);
+    [ground.visible, shadowCatcher.visible, ball.visible] = vis;
+    try { KMBridge.savePetImage(out.toDataURL('image/png').split(',')[1]); } catch (e) { /* 忽略 */ }
+  }
+
   function loop() {
     requestAnimationFrame(loop);
+    if (snapAt && performance.now() > snapAt && !busy && model) { snapAt = 0; takeSnap(); }   // 拍完马上照常渲染，画面不会闪
     const dt = Math.min(clock.getDelta(), 0.1);
     for (let i = tweens.length - 1; i >= 0; i--) {
       const t = tweens[i];
@@ -603,6 +632,7 @@
     if (!animate) { grow.scale.setScalar(s); return; }
     const a = grow.scale.x;
     tween(1.2, k => grow.scale.setScalar(a + (s - a) * ease(k)));
+    requestSnap(2500);
   }
 
   function refresh() {
@@ -712,6 +742,16 @@
     }
     refresh();
   };
+
+  // 桌面小部件：只在平板 App 里有；系统支持就弹出“添加到桌面”，不支持就教怎么手动加
+  if (window.KMBridge && KMBridge.pinWidget) {
+    $('btnPin').hidden = false;
+    $('btnPin').onclick = () => {
+      requestSnap(0);
+      if (KMBridge.pinWidget()) toast('在弹出的窗口里点“添加”，小狗就会出现在桌面上');
+      else toast('长按桌面空白处 → 小部件 → 知识图谱，把小狗拖到桌面');
+    };
+  }
 
   $('btnRename').onclick = () => {
     const n = prompt('给小狗改个名字（最多 8 个字）', st.name);

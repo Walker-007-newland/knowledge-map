@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">知识图谱</string>
+    <string name="widget_desc">桌面上的小狗：看看它饿不饿，点一下就去喂它</string>
 </resources>

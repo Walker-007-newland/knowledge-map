@@ -1,6 +1,7 @@
 // 宠物狗的数据与规则：总入口卡片和宠物页共用
 // 不改各图谱的代码，只读它们存在 localStorage 里的进度，按“已掌握”的知识点发骨头
 (function () {
+  if (window.KMPet || !window.KMStudy) return;   // 打包时会注入到每个页面，宠物页自己也引用了一次
   // 各图谱的进度键和“已掌握”的判定统一放在 km-study.js（要先加载它）
   const SOURCES = window.KMStudy.SOURCES;
   const STORE = 'km-pet-v1';
@@ -60,6 +61,25 @@
   }
   function save(st) {
     try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) { /* 存不了就只在本次有效 */ }
+    syncWidget(st);
+  }
+
+  // 把小狗的概况交给安卓桌面小部件（只在 App 里有 KMBridge.updatePet）。
+  // 小部件自己按 tick 和每小时掉多少算当前饱食度，所以不用一直推
+  function syncWidget(st) {
+    const B = window.KMBridge;
+    if (!B || !B.updatePet) return;
+    st = st || load();
+    // 读不到小狗就不推：可能是还没领养，也可能是 https 虚拟地址上的页面（单词听写），那里的 localStorage 是另一份
+    if (!st) return;
+    try {
+      const L = level(st.xp), S = window.KMStudy;
+      B.updatePet(JSON.stringify({
+        name: st.name, breed: BREEDS[st.breed].name, level: L, stage: stage(L).name,
+        fullness: st.fullness, tick: st.tick || Date.now(), decay: DECAY_PER_HOUR, hungry: HUNGRY,
+        bones: st.bones, todayMin: Math.floor(S.secondsOn(S.load(), S.dayKey()) / 60), streak: S.streak(S.load())
+      }));
+    } catch (e) { /* 小部件更新失败不影响网页 */ }
   }
 
   function adopt(breed, name) {
@@ -180,6 +200,6 @@
 
   window.KMPet = {
     BREEDS, ITEMS, SLOTS, STAGES, HUNGRY, FEED_COST, BONES_PER_NODE,
-    load, save, adopt, tick, pending, claim, level, levelInfo, stage, feed, petOnce, mood, buy, toggleEquip, bySubject
+    load, save, adopt, tick, pending, claim, level, levelInfo, stage, feed, petOnce, mood, buy, toggleEquip, bySubject, syncWidget
   };
 })();
