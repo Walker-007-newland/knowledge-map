@@ -12,6 +12,11 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -20,6 +25,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import java.io.File;
@@ -53,6 +59,9 @@ public class MainActivity extends Activity {
     }
 
     WebView web;
+    FrameLayout root;
+    View fullView;                                  // 视频全屏时 WebView 交出来的播放器画面
+    WebChromeClient.CustomViewCallback fullCallback;
     ValueCallback<Uri[]> fileCallback;
     Uri photoUri;          // 拍照时相机写入的位置
     TextToSpeech tts;
@@ -64,7 +73,11 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         web = new WebView(this);
-        setContentView(web);
+        root = new FrameLayout(this);
+        root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+        // 内嵌的 B 站播放器（iframe）要用自己的 cookie 才能正常播放
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -147,7 +160,8 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (web.canGoBack()) web.goBack();
+        if (fullView != null) exitFullscreen();
+        else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
 
@@ -211,13 +225,54 @@ public class MainActivity extends Activity {
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
             if ("file".equals(u.getScheme()) || ASSET_HOST.equals(u.getHost())) return false;
+            // 网页里内嵌的视频播放器（iframe）在 App 里加载，不跳出去
+            if (!req.isForMainFrame()) return false;
             // 外部链接交给系统浏览器
             try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (ActivityNotFoundException ignored) { }
             return true;
         }
     }
 
+    /** 退出视频全屏：拿掉播放器画面，恢复状态栏 */
+    void exitFullscreen() {
+        if (fullView == null) return;
+        root.removeView(fullView);
+        fullView = null;
+        if (fullCallback != null) fullCallback.onCustomViewHidden();
+        fullCallback = null;
+        showSystemBars(true);
+    }
+
+    void showSystemBars(boolean show) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = getWindow().getInsetsController();
+            if (c == null) return;
+            if (show) c.show(WindowInsets.Type.systemBars());
+            else {
+                c.hide(WindowInsets.Type.systemBars());
+                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(show ? 0 :
+                View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        }
+    }
+
     class Chrome extends WebChromeClient {
+        // 视频点“全屏”：把播放器画面盖在整个屏幕上；返回键或再点一次退出
+        @Override
+        public void onShowCustomView(View view, CustomViewCallback cb) {
+            if (fullView != null) { cb.onCustomViewHidden(); return; }
+            fullView = view;
+            fullCallback = cb;
+            view.setBackgroundColor(0xFF000000);
+            root.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            showSystemBars(false);
+        }
+
+        @Override
+        public void onHideCustomView() { fullCallback = null; exitFullscreen(); }   // 网页自己退出的全屏，不用再通知它
+
         // 文件选择框：“导入进度文件”选文件；单词听写拍照（capture）或从相册选图（可多选）
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {

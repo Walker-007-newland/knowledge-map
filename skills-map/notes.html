@@ -77,18 +77,20 @@
 <script src="notes/lessons.js"></script>
 <script src="../bio-history-map/js/app.js"></script>
 <script>
-  // 视频：平板 App 里交给系统打开（B 站 App 或浏览器直接播放）；普通浏览器里点一下就在讲解下面嵌入播放器，再点收起
+  // 视频：点卡片就在讲解下面嵌入 B 站播放器（平板 App 里也一样，不跳出去），再点收起
+  // 播放器下面留一个“到 B 站打开”的链接，万一内嵌播放不了还能用 B 站 App 或浏览器看
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a.video');
-    if (!a || window.KMBridge) return;
+    if (!a) return;
     var bv = (a.getAttribute('href').match(/BV\w+/) || [])[0];
     if (!bv) return;
     e.preventDefault();
     var next = a.nextElementSibling;
-    if (next && next.classList.contains('video-frame')) { next.remove(); return; }
+    if (next && next.classList.contains('video-embed')) { next.remove(); return; }
     var box = document.createElement('div');
-    box.className = 'video-frame';
-    box.innerHTML = '<iframe allowfullscreen allow="autoplay; fullscreen" src="https://player.bilibili.com/player.html?bvid=' + bv + '&autoplay=1&high_quality=1"></iframe>';
+    box.className = 'video-embed';
+    box.innerHTML = '<div class="video-frame"><iframe allowfullscreen allow="autoplay; fullscreen" src="https://player.bilibili.com/player.html?bvid=' + bv +
+      '&autoplay=1&high_quality=1"></iframe></div><p class="video-note">播放不了？<a href="' + a.getAttribute('href') + '" target="_blank" rel="noopener">到 B 站打开</a></p>';
     a.after(box);
   });
 </script>
