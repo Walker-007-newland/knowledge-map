@@ -99,9 +99,12 @@ try {
 if ($LASTEXITCODE) { throw 'zipalign 失败' }
 
 # 签名密钥只放本机（已在 .gitignore 里），丢了以后就不能覆盖升级，记得备份
-$ks = "$here\signing\release.jks"
-$pwFile = "$here\signing\password.txt"
+# AI 团队在隔离工作区里发布时，用 KM_SIGNING_DIR 指向主目录的 signing，不能另生成一把新密钥
+$signDir = if ($env:KM_SIGNING_DIR) { $env:KM_SIGNING_DIR } else { "$here\signing" }
+$ks = "$signDir\release.jks"
+$pwFile = "$signDir\password.txt"
 if (-not (Test-Path $ks)) {
+  if ($env:KM_SIGNING_DIR) { throw "KM_SIGNING_DIR 下找不到 release.jks：$ks" }
   New-Item -ItemType Directory -Force (Split-Path $ks) | Out-Null
   $pw = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
   [IO.File]::WriteAllText($pwFile, $pw)

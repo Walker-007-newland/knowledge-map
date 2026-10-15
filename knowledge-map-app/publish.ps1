@@ -9,7 +9,8 @@ $here = $PSScriptRoot
 $teach = Split-Path $here -Parent
 $repoName = 'knowledge-map'
 
-$tokenFile = "$here\signing\github-token.txt"
+$signDir = if ($env:KM_SIGNING_DIR) { $env:KM_SIGNING_DIR } else { "$here\signing" }
+$tokenFile = "$signDir\github-token.txt"
 if (-not (Test-Path $tokenFile)) { throw "找不到 $tokenFile，请把 GitHub token 粘贴进去保存" }
 $token = [IO.File]::ReadAllText($tokenFile).Trim()
 $h = @{ Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }

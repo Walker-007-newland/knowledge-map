@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>团队审批</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --card: #ffffff; --ink: #1d1f23; --muted: #6b6f76; --line: #e4e1da;
+    --accent: #1f7a4d; --accent-ink: #ffffff; --warn: #b26b00; --bad: #b3261e; --chip: #efece6;
+    --code: #f1efea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17181b; --card: #222428; --ink: #e9e7e3; --muted: #9a9ea6; --line: #33363b;
+      --accent: #4cc38a; --accent-ink: #0d1f16; --warn: #f0b24a; --bad: #ff8a80; --chip: #2c2f34; --code: #2a2c31; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; max-width: 900px; margin: 0 auto; }
+  .bar h1 { font-size: 19px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    border-radius: 10px; padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .5; }
+  .tabs { display: flex; gap: 6px; padding: 0 16px 10px; max-width: 900px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { border-radius: 999px; padding: 6px 14px; white-space: nowrap; }
+  .tabs button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px;
+    background: var(--bad); color: #fff; font-size: 12px; line-height: 20px; text-align: center; }
+  main { max-width: 900px; margin: 0 auto; padding: 12px 16px 120px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+  .item { cursor: pointer; }
+  .item .t { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .chip { background: var(--chip); border-radius: 6px; padding: 1px 8px; font-size: 13px; }
+  .chip.s-待审批, .chip.s-阻塞 { background: var(--warn); color: #fff; }
+  .chip.s-已上线, .chip.s-已批准 { background: var(--accent); color: var(--accent-ink); }
+  .chip.s-已驳回, .chip.s-产品否决, .chip.s-返工 { background: var(--bad); color: #fff; }
+  .empty { text-align: center; color: var(--muted); padding: 48px 0; }
+  .role { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+  .role b { color: var(--ink); }
+  .card.proposal { border: 2px solid var(--accent); }
+  .md h2 { font-size: 18px; margin: 8px 0; } .md h3 { font-size: 16px; margin: 10px 0 4px; } .md h4 { font-size: 15px; margin: 8px 0 4px; }
+  .md p { margin: 6px 0; } .md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+  .md code { background: var(--code); border-radius: 4px; padding: 0 4px; font-size: 14px; word-break: break-all; }
+  .md pre { background: var(--code); border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 13px; }
+  .md pre code { background: none; padding: 0; }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; font-size: 14px; margin: 6px 0; }
+  .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  .md a { color: var(--accent); }
+  .md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+  .actions { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); z-index: 6; }
+  .actions .in { max-width: 900px; margin: 0 auto; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .actions textarea, .form textarea, .form input { width: 100%; font: inherit; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .actions textarea { height: 64px; resize: vertical; }
+  .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .row button { flex: 1; min-width: 96px; }
+  .form label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  .form textarea { min-height: 160px; }
+  .toast { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 8px 16px; border-radius: 10px; z-index: 20; font-size: 14px; max-width: 90vw; }
+  .hint { color: var(--muted); font-size: 14px; }
+  .hint ol { padding-left: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <button id="back" hidden aria-label="返回">‹ 返回</button>
+    <h1 id="title">团队审批</h1>
+    <button id="newReq" title="提一个需求">＋ 需求</button>
+    <button id="refresh" title="刷新">刷新</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main id="main"></main>
+<div class="actions" id="actions" hidden><div class="in" id="actionsIn"></div></div>
+
+<script>
+// ---------- 网络：App 里走原生桥；浏览器里 ?mock 用假数据预览界面 ----------
+const MOCK = !window.Native && /[?&]mock/.test(location.search);
+const REPO = window.Native ? Native.repo() : 'Walker-007-newland/knowledge-map-team';
+const P = '状态:';
+let seq = 0; const waiting = {};
+window.__ghDone = (id, status, text) => { const w = waiting[id]; delete waiting[id]; if (w) w(status, text); };
+function gh(method, path, body) {
+  if (MOCK) return mockApi(method, path, body);
+  return new Promise((resolve, reject) => {
+    const id = 'r' + (++seq);
+    waiting[id] = (status, text) => {
+      let data = null; try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+      if (status >= 200 && status < 300) resolve(data);
+      else reject(new Error(status === 0 ? '网络连不上：' + text : `GitHub ${status}：${(data && data.message) || text}`));
+    };
+    Native.request(id, method, path, body ? JSON.stringify(body) : '');
+  });
+}
+const hasToken = () => MOCK || (window.Native && Native.hasToken());
+
+// ---------- 状态 ----------
+const TABS = [
+  { key: 'approve', name: '待审批', states: ['待审批', '阻塞'] },
+  { key: 'doing', name: '进行中', states: ['已批准', '开发中', '待测试', '返工', '需修改'] },
+  { key: 'review', name: '待评审', states: ['待评审'] },
+  { key: 'done', name: '已结束', closed: true },
+];
+let tab = 'approve', issues = [], closed = [], current = null;
+const stateOf = i => (i.labels.map(l => l.name).find(n => n.startsWith(P)) || '').slice(P.length);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const when = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const $ = id => document.getElementById(id);
+
+function toast(msg, ms = 2200) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), ms);
+}
+
+// ---------- 极简 Markdown ----------
+function inline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2">$2</a>');
+}
+function md(src) {
+  const lines = String(src || '').replace(/\r/g, '').split('\n'); let out = '', i = 0;
+  while (i < lines.length) {
+    let l = lines[i];
+    if (/^```/.test(l)) { let code = []; i++; while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]); i++; out += `<pre><code>${esc(code.join('\n'))}</code></pre>`; continue; }
+    let h = l.match(/^(#{1,4})\s+(.*)/); if (h) { const n = Math.min(4, h[1].length + 1); out += `<h${n}>${inline(h[2])}</h${n}>`; i++; continue; }
+    if (/^\s*\|/.test(l) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
+      const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => inline(c.trim()));
+      out += '<table><tr>' + cells(l).map(c => `<th>${c}</th>`).join('') + '</tr>'; i += 2;
+      while (i < lines.length && /^\s*\|/.test(lines[i])) out += '<tr>' + cells(lines[i++]).map(c => `<td>${c}</td>`).join('') + '</tr>';
+      out += '</table>'; continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s+/.test(l)) {
+      const ol = /^\s*\d+\./.test(l); out += ol ? '<ol>' : '<ul>';
+      while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) {
+        let t = lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, '').replace(/^\[ \]\s*/, '☐ ').replace(/^\[x\]\s*/i, '☑ ');
+        out += `<li>${inline(t)}</li>`;
+      }
+      out += ol ? '</ol>' : '</ul>'; continue;
+    }
+    if (/^>\s?/.test(l)) { let q = []; while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, '')); out += `<blockquote>${inline(q.join(' '))}</blockquote>`; continue; }
+    if (!l.trim()) { i++; continue; }
+    let para = [l]; i++;
+    while (i < lines.length && lines[i].trim() && !/^(#|```|\s*([-*]|\d+\.)\s|>|\s*\|)/.test(lines[i])) para.push(lines[i++]);
+    out += `<p>${para.map(inline).join('<br>')}</p>`;
+  }
+  return out;
+}
+
+// ---------- 列表 ----------
+function renderTabs() {
+  $('tabs').innerHTML = TABS.map(t => {
+    const n = t.closed ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
+    const badge = t.key === 'approve' && n ? `<span class="badge">${n}</span>` : (n && !t.closed ? ` ${n}` : '');
+    return `<button data-k="${t.key}" class="${t.key === tab ? 'on' : ''}">${t.name}${badge}</button>`;
+  }).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.k; renderList(); });
+}
+function renderList() {
+  current = null; $('back').hidden = true; $('title').textContent = '团队审批';
+  $('tabs').hidden = false; $('actions').hidden = true; $('newReq').hidden = false;
+  renderTabs();
+  const t = TABS.find(x => x.key === tab);
+  const list = t.closed ? closed : issues.filter(i => t.states.includes(stateOf(i)));
+  $('main').innerHTML = list.length ? list.map(i => `
+    <div class="card item" data-n="${i.number}">
+      <div class="t">#${i.number} ${esc(i.title)}</div>
+      <div class="meta"><span class="chip s-${stateOf(i)}">${stateOf(i) || '无状态'}</span><span>更新于 ${when(i.updated_at)}</span>${i.comments ? `<span>${i.comments} 条记录</span>` : ''}</div>
+    </div>`).join('') : `<div class="empty">${t.key === 'approve' ? '没有等你处理的方案 🎉' : '暂无'}</div>`;
+  $('main').querySelectorAll('.item').forEach(el => el.onclick = () => openIssue(+el.dataset.n));
+  window.scrollTo(0, 0);
+}
+async function load() {
+  if (!hasToken()) return renderSetup();
+  $('main').innerHTML = '<div class="empty">加载中…</div>';
+  try {
+    const [open, done] = await Promise.all([
+      gh('GET', `/repos/${REPO}/issues?state=open&per_page=100&sort=updated`),
+      gh('GET', `/repos/${REPO}/issues?state=closed&per_page=30&sort=updated`),
+    ]);
+    issues = open.filter(i => !i.pull_request); closed = done.filter(i => !i.pull_request);
+    if (current) openIssue(current.number, true); else renderList();
+  } catch (e) {
+    $('main').innerHTML = `<div class="card">加载失败：${esc(e.message)}<div class="row"><button id="retok">重新设置 token</button></div></div>`;
+    $('retok').onclick = renderSetup;
+  }
+}
+
+// ---------- 详情 ----------
+const ROLE = [
+  [/^##\s*管理员/, '管理员'], [/^##\s*产品方案/, '产品'], [/^##\s*(开发说明|修复说明)/, '开发'],
+  [/^##\s*(测试报告|已上线)/, '测试'],
+];
+const roleOf = body => (ROLE.find(([re]) => re.test((body || '').trim())) || [0, '团队'])[1];
+
+async function openIssue(n, keepScroll) {
+  const all = issues.concat(closed); const i = all.find(x => x.number === n);
+  if (!i) return renderList();
+  current = i; $('back').hidden = false; $('tabs').hidden = true; $('newReq').hidden = true;
+  $('title').textContent = `#${n}`;
+  if (!keepScroll) $('main').innerHTML = '<div class="empty">加载中…</div>';
+  let comments = [];
+  try { comments = await gh('GET', `/repos/${REPO}/issues/${n}/comments?per_page=100`); }
+  catch (e) { toast(e.message); }
+  if (current !== i) return;
+  const st = stateOf(i);
+  const lastProposal = [...comments].reverse().find(c => roleOf(c.body) === '产品');
+  $('main').innerHTML = `
+    <div class="card"><div style="font-size:18px;font-weight:700">${esc(i.title)}</div>
+      <div class="meta"><span class="chip s-${st}">${st}</span><span>提出于 ${when(i.created_at)}</span>${i.state === 'closed' ? '<span>已关闭</span>' : ''}</div></div>
+    <div class="card"><div class="role"><span><b>需求员</b> · 需求</span><span>${when(i.created_at)}</span></div><div class="md">${md(i.body)}</div></div>
+    ${comments.map(c => `<div class="card ${c === lastProposal && st === '待审批' ? 'proposal' : ''}">
+      <div class="role"><span><b>${roleOf(c.body)}</b>${c === lastProposal ? ' · 最新方案' : ''}</span><span>${when(c.created_at)}</span></div>
+      <div class="md">${md(c.body)}</div></div>`).join('')}`;
+  if (!keepScroll) {
+    const p = $('main').querySelector('.proposal');
+    if (p) p.scrollIntoView(); else window.scrollTo(0, 0);
+  }
+  renderActions(i, st);
+}
+
+function renderActions(i, st) {
+  const box = $('actionsIn'); $('actions').hidden = i.state === 'closed';
+  if (i.state === 'closed') return;
+  let btns;
+  if (st === '待审批') btns = `<button class="primary" data-a="approve">批准</button><button data-a="revise">要求修改</button><button class="danger" data-a="reject">驳回</button>`;
+  else if (st === '阻塞') btns = `<button class="primary" data-a="toDev">交回开发</button><button data-a="toTest">交回测试</button><button data-a="revise">让产品改方案</button><button class="danger" data-a="reject">驳回</button>`;
+  else btns = `<button data-a="comment">只发评论</button><button class="danger" data-a="reject">驳回 / 不做了</button>`;
+  box.innerHTML = `<textarea id="note" placeholder="意见（批准可不填；要求修改、驳回、交回时请写原因）"></textarea><div class="row">${btns}</div>`;
+  box.querySelectorAll('button').forEach(b => b.onclick = () => act(i, b.dataset.a, b));
+  document.body.style.paddingBottom = '0';
+}
+
+const ACTS = {
+  approve: { to: '已批准', head: '## 管理员审批：批准', need: false, ok: '已批准，开发会在下一轮接手' },
+  revise: { to: '需修改', head: '## 管理员审批：要求修改', need: true, ok: '已退回产品修改' },
+  reject: { to: '已驳回', head: '## 管理员审批：驳回', need: true, ok: '已驳回' },
+  toDev: { to: '已批准', head: '## 管理员处理阻塞：交回开发', need: true, ok: '已交回开发' },
+  toTest: { to: '待测试', head: '## 管理员处理阻塞：交回测试', need: true, ok: '已交回测试' },
+  comment: { to: null, head: '## 管理员评论', need: true, ok: '评论已发送' },
+};
+async function act(i, a, btn) {
+  const cfg = ACTS[a]; const note = $('note').value.trim();
+  if (cfg.need && !note) { toast('请先在上面写下意见'); $('note').focus(); return; }
+  const label = { approve: '批准', revise: '要求修改', reject: '驳回', toDev: '交回开发', toTest: '交回测试', comment: '发送评论' }[a];
+  if (!confirm(`确定${label} #${i.number}？`)) return;
+  document.querySelectorAll('#actionsIn button').forEach(b => b.disabled = true);
+  try {
+    await gh('POST', `/repos/${REPO}/issues/${i.number}/comments`, { body: `${cfg.head}\n\n${note || '同意按此方案执行。'}` });
+    if (cfg.to) {
+      for (const l of i.labels) if (l.name.startsWith(P) && l.name !== P + cfg.to)
+        await gh('DELETE', `/repos/${REPO}/issues/${i.number}/labels/${encodeURIComponent(l.name)}`);
+      await gh('POST', `/repos/${REPO}/issues/${i.number}/labels`, { labels: [P + cfg.to] });
+    }
+    toast(cfg.ok); current = null; await load();
+  } catch (e) {
+    toast('失败：' + e.message, 4000);
+    document.querySelectorAll('#actionsIn button').forEach(b => b.disabled = false);
+  }
+}
+
+// ---------- 管理员自己提需求 ----------
+function renderNew() {
+  current = { number: -1 }; $('back').hidden = false; $('tabs').hidden = true; $('newReq').hidden = true; $('actions').hidden = true;
+  $('title').textContent = '提一个需求';
+  $('main').innerHTML = `<div class="card form">
+    <div class="hint">直接交给产品评审，产品出方案后再回到「待审批」给你看。</div>
+    <label for="nt">标题</label><input id="nt" placeholder="如：英语听写支持按单元选词">
+    <label for="nb">想要什么、为什么</label><textarea id="nb" placeholder="遇到的问题、希望的效果、优先级"></textarea>
+    <div class="row"><button class="primary" id="ns">提交给产品</button></div></div>`;
+  $('ns').onclick = async () => {
+    const t = $('nt').value.trim(), b = $('nb').value.trim();
+    if (!t || !b) return toast('标题和内容都要写');
+    $('ns').disabled = true;
+    try {
+      await gh('POST', `/repos/${REPO}/issues`, { title: t, body: `## 背景\n管理员直接提出。\n\n## 问题或机会\n${b}\n\n## 优先级\n管理员提出，优先处理`, labels: [P + '待评审'] });
+      toast('已提交'); current = null; tab = 'review'; await load();
+    } catch (e) { toast('失败：' + e.message, 4000); $('ns').disabled = false; }
+  };
+}
+
+// ---------- 首次设置 token ----------
+function renderSetup() {
+  current = { number: -2 }; $('tabs').hidden = true; $('actions').hidden = true; $('back').hidden = !window.Native || !Native.hasToken();
+  $('title').textContent = '设置';
+  $('main').innerHTML = `<div class="card form">
+    <div class="hint">需要一个只能访问团队看板仓库的 GitHub token（只存在本机）：
+      <ol><li>电脑浏览器打开 github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new token</li>
+      <li>Repository access 选 <b>Only select repositories</b> → <code>${esc(REPO)}</code></li>
+      <li>Permissions → Repository permissions → <b>Issues: Read and write</b>（Metadata 自动只读）</li>
+      <li>生成后复制，粘贴到下面</li></ol></div>
+    <label for="tk">Token</label><input id="tk" type="password" autocomplete="off" placeholder="github_pat_…">
+    <div class="row"><button class="primary" id="tks">保存并检查</button></div></div>`;
+  $('tks').onclick = async () => {
+    const v = $('tk').value.trim(); if (!v) return toast('请粘贴 token');
+    if (window.Native) Native.setToken(v);
+    try { await gh('GET', `/repos/${REPO}`); toast('连接成功'); current = null; load(); }
+    catch (e) { toast('不行：' + e.message, 5000); }
+  };
+}
+
+// ---------- 导航 ----------
+window.goBack = () => { if (current) { current = null; renderList(); return true; } return false; };
+window.onAppResume = () => { if (!current && hasToken()) load(); };
+$('back').onclick = () => (current && current.number === -2 && hasToken()) ? (current = null, load()) : window.goBack();
+$('refresh').onclick = () => load();
+$('newReq').onclick = renderNew;
+$('title').ondblclick = renderSetup;
+
+// ---------- 浏览器预览用假数据 ----------
+function mockApi(method, path, body) {
+  const now = new Date().toISOString();
+  const L = s => [{ name: P + s }];
+  window.__mock = window.__mock || {
+    issues: [
+      { number: 3, title: '物理浮力章节缺少阿基米德原理实验题', state: 'open', labels: L('待审批'), comments: 1, created_at: now, updated_at: now,
+        body: '## 背景\n福建中考物理实验题占比高。\n\n## 问题或机会\n`science-map/data/phys-g8b.js` 浮力一节只有概念题，没有实验探究题。\n\n## 期望效果\n补 3–5 道实验题。\n\n## 优先级\n高：中考必考' },
+      { number: 2, title: '英语听写支持按单元选词', state: 'open', labels: L('开发中'), comments: 3, created_at: now, updated_at: now, body: '## 背景\n…' },
+      { number: 4, title: '宠物页在竖屏平板上按钮被遮挡', state: 'open', labels: L('阻塞'), comments: 4, created_at: now, updated_at: now, body: '## 背景\n…' },
+    ],
+    closed: [{ number: 1, title: '总入口显示各科学习进度', state: 'closed', labels: L('已上线'), comments: 5, created_at: now, updated_at: now, body: '…' }],
+    comments: { 3: [{ created_at: now, body: '## 产品方案\n\n**结论：做。** 给浮力一节补实验探究题，学生能练到中考最常考的「称重法测浮力」。\n\n### 具体改动\n1. `science-map/data/phys-g8b.js` 浮力知识点新增 4 道题\n2. 每题附图示说明\n\n### 验收标准\n- [ ] 4 道题覆盖称重法、阿基米德原理验证、影响因素探究、密度计\n- [ ] 页面无控制台报错\n\n| 项 | 值 |\n|---|---|\n| 工作量 | 小 |\n| 风险 | 低 |' }] },
+  };
+  const m = window.__mock;
+  return new Promise(r => setTimeout(() => {
+    if (/state=open/.test(path)) return r(m.issues);
+    if (/state=closed/.test(path)) return r(m.closed);
+    const c = path.match(/issues\/(\d+)\/comments/);
+    if (c && method === 'GET') return r(m.comments[c[1]] || []);
+    if (c) { (m.comments[c[1]] = m.comments[c[1]] || []).push({ created_at: now, body: body.body }); return r({}); }
+    const lb = path.match(/issues\/(\d+)\/labels/);
+    if (lb && method === 'POST') { const i = m.issues.find(x => x.number == lb[1]); i.labels = body.labels.map(n => ({ name: n })); return r([]); }
+    if (method === 'POST' && /\/issues$/.test(path)) { m.issues.unshift({ number: 9, title: body.title, body: body.body, state: 'open', labels: body.labels.map(n => ({ name: n })), comments: 0, created_at: now, updated_at: now }); return r({}); }
+    r({});
+  }, 150));
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：一张单子 + 对勾（审批），安全区在中间 66dp 内 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#ffffff" android:pathData="M38,30 h32 a4,4 0 0 1 4,4 v40 a4,4 0 0 1 -4,4 h-32 a4,4 0 0 1 -4,-4 v-40 a4,4 0 0 1 4,-4 z" />
+    <path android:strokeColor="#1f7a4d" android:strokeWidth="3" android:strokeLineCap="round"
+        android:pathData="M42,40 h24 M42,48 h18" />
+    <path android:strokeColor="#ffd34d" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M44,62 l7,7 l14,-14" />
+</vector>
