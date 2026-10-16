@@ -49,12 +49,12 @@ KG.nodes.push(
       <p>At the hospital, the old man's grandson thanked Lin Tao again and again. “You are a kind boy,” he said. “Many people are too <span class="blank">(7)</span>____ to notice someone like my grandpa.”</p>
       <p>Lin Tao got home at noon, wet but happy. His mother asked <span class="blank">(8)</span>____ he had been. After hearing the story, she smiled and said, “You didn't play basketball today, but you did something more <span class="blank">(9)</span>____.”</p>
       <p>That night, Lin Tao wrote in his diary: “Rainy days are not always bad. Helping others can <span class="blank">(10)</span>____ a grey day into a sunny one.”</p>` },
-    e2: { title: '例题短文二', html: `<p>Tom wanted to join the school band, but he didn't have a guitar. So he <span class="blank">(1)</span>____ one from his uncle and practiced every evening. On the day of the school show, Tom felt very <span class="blank">(2)</span>____. His hands were shaking and his heart was beating fast. “What if I make a mistake?” he thought. But <span class="blank">(3)</span>____ he began to play, he forgot all his worries. After the show, everyone clapped. The next day, Tom gave the <span class="blank">(4)</span>____ back to his uncle and said, “Thank you! Practice really made me <span class="blank">(5)</span>____.”</p>` },
+    e2: { title: '例题短文二', html: `<p>Tom wanted to join the school band, but he didn't have a guitar. So he <span class="blank">(1)</span>____ one from his uncle and practiced every evening. On the day of the school show, Tom felt very <span class="blank">(2)</span>____. His hands were shaking and his heart was beating fast. “What if I make a mistake?” he thought. But <span class="blank">(3)</span>____ he began to play, he forgot all his worries. After the show, everyone cheered for him. The next day, Tom gave the <span class="blank">(4)</span>____ back to his uncle and said, “Thank you! Practice really made me <span class="blank">(5)</span>____.”</p>` },
     p2: { title: '完形填空 B：阅读短文，从三个选项中选出最佳答案', html: `
       <p>Every spring, there is a kite festival in a big park in Lily's city. This year, Lily and her grandpa decided to <span class="blank">(1)</span>____ a kite by themselves. They spent a whole week making it. Grandpa cut the bamboo, and Lily painted a big red fish on the paper. It was the most <span class="blank">(2)</span>____ kite she had ever seen.</p>
       <p>On the day of the festival, Lily ran across the grass and the red fish rose high into the sky. Many people stopped to look at it and took photos. Lily felt very <span class="blank">(3)</span>____.</p>
-      <p><span class="blank">(4)</span>____ a few minutes later, a strong wind came and the string broke. The kite fell into a tall tree. Lily tried to get it down, but the tree was too <span class="blank">(5)</span>____ for her to climb. When Grandpa finally got the kite down, one of its wings was broken. Lily wanted to <span class="blank">(6)</span>____. “I'll never make a kite again,” she cried.</p>
-      <p>Grandpa smiled. “A broken kite can be <span class="blank">(7)</span>____,” he said. “So can a broken heart.” That evening, they fixed the wing together. Grandpa also showed her how to tie a stronger string <span class="blank">(8)</span>____ it wouldn't break again.</p>
+      <p><span class="blank">(4)</span>____ a few minutes later, a strong wind came and the line broke. The kite fell into a tall tree. Lily tried to get it down, but the tree was too <span class="blank">(5)</span>____ for her to climb. When Grandpa finally got the kite down, one of its wings was broken. Lily wanted to <span class="blank">(6)</span>____. “I'll never make a kite again,” she cried.</p>
+      <p>Grandpa smiled. “A broken kite can be <span class="blank">(7)</span>____,” he said. “So can a broken heart.” That evening, they fixed the wing together. Grandpa also showed her how to tie a stronger line <span class="blank">(8)</span>____ it wouldn't break again.</p>
       <p>The next weekend, they went back to the park, <span class="blank">(9)</span>____ the red fish flew even higher than before. Lily learned an important <span class="blank">(10)</span>____ from her grandpa: when something goes wrong, don't give up — try to fix it.</p>` },
     p3: { title: '完形填空 C：阅读短文，从三个选项中选出最佳答案', html: `
       <p>Wang Hao sits behind me in class. He is good at maths, but he is quiet and seldom talks <span class="blank">(1)</span>____ others.</p>
@@ -62,7 +62,7 @@ KG.nodes.push(
       <p>Then Wang Hao came to my desk. “You can <span class="blank">(3)</span>____ my notes,” he said. “I'll <span class="blank">(4)</span>____ them to you until Friday.” His notes were very clear, and he even drew pictures to explain the hard problems. With his help, I <span class="blank">(5)</span>____ up with the class in two weeks.</p>
       <p>I wanted to thank him, <span class="blank">(6)</span>____ I didn't know how. Later I noticed that Wang Hao was not good at English. His test results were always <span class="blank">(7)</span>____. English is my best subject, <span class="blank">(8)</span>____ I offered to help him.</p>
       <p>Now we often study together in the school library, <span class="blank">(9)</span>____ we help each other with maths and English. I've learned that “a friend in <span class="blank">(10)</span>____ is a friend indeed”. Helping each other has made us both better.</p>` },
-    e3: { title: '例题短文三', html: `<p>Last Sunday, Lucy cooked dinner for her family for the first time. At first she was <span class="blank">(1)</span>____, because she had never cooked before and she was afraid to <span class="blank">(2)</span>____ mistakes. She followed the recipe step by step. When her parents tasted the fish, they smiled and said it was <span class="blank">(3)</span>____. Lucy's worry soon turned into joy. Everyone ate a lot. After dinner, they were all too <span class="blank">(4)</span>____ to eat any fruit.</p>` }
+    e3: { title: '例题短文三', html: `<p>Last Sunday, Lucy cooked dinner for her family for the first time. At first she was <span class="blank">(1)</span>____, because she had never cooked before and she was afraid to <span class="blank">(2)</span>____ mistakes. She did everything step by step, just as her mother had told her. When her parents tasted the fish, they smiled and said it was <span class="blank">(3)</span>____. Lucy's worry soon turned into joy. Everyone ate a lot. After dinner, they were all too <span class="blank">(4)</span>____ to eat any fruit.</p>` }
   },
   examples: [
     { type: 'choice', passage: 'e1', q: '(1)', options: ['talk', 'laugh', 'write'], answer: 0,
@@ -227,7 +227,7 @@ KG.nodes.push(
       <p>From next Monday, the library will be open from 7:30 a.m. to 5:30 p.m. <span class="blank">(1)</span> e______ weekday. Students can borrow three books at a time and keep them for two <span class="blank">(2)</span> w______. Please <span class="blank">(3)</span> r______ the books on time.</p>
       <p>Please keep <span class="blank">(4)</span> q______ in the library. Don't eat or drink <span class="blank">(5)</span> ______ the reading room. Each student may use the computers for 30 <span class="blank">(6)</span> m______ at a time. If you lose a book, you <span class="blank">(7)</span> s______ pay for it.</p>
       <p>We hope the library will be a good place <span class="blank">(8)</span> ______ read and study.</p>` },
-    e1: { title: '例题短文：用括号内所给词的适当形式填空', html: `<p>Last weekend my family went to Mount Wuyi. On the first day, we <span class="blank">(1)</span>______ (climb) the mountain for three hours. The view from the top was <span class="blank">(2)</span>______ (amaze). The next morning, we <span class="blank">(3)</span>______ (take) a bamboo raft down the Nine-Bend Stream.</p>` }
+    e1: { title: '例题短文：用括号内所给词的适当形式填空', html: `<p>Last weekend my family went to Mount Wuyi. On the first day, we <span class="blank">(1)</span>______ (climb) the mountain for three hours. The view from the top was <span class="blank">(2)</span>______ (amaze). The next morning, we <span class="blank">(3)</span>______ (take) a boat trip on the Nine-Bend Stream.</p>` }
   },
   examples: [
     { type: 'fill', q: 'There are many tall ______ (build) in our city.（用所给词的适当形式）', answer: ['buildings'],
@@ -256,7 +256,7 @@ KG.nodes.push(
       explain: '前面有 the，后面有 of my life（一生中），用最高级；bad 是不规则变化：bad → worse → <b>worst</b>。' },
     { type: 'fill', q: 'He gave a wonderful ______ (speak) at the meeting.（用所给词的适当形式）', answer: ['speech'],
       explain: '词性转换：a wonderful 后面要名词，给的却是动词 speak。“演讲”的名词是 <b>speech</b>，不要写成 speaking。' },
-    { type: 'fill', q: 'Please stop ______ (run) in the hallway.（用所给词的适当形式）', answer: ['running'],
+    { type: 'fill', q: 'Please stop ______ (run) in the hall.（用所给词的适当形式）', answer: ['running'],
       explain: 'stop doing 表示“停止正在做的事”；run 是“辅音 + 元音 + 辅音”结尾的重读闭音节，要<b>双写 n</b> 再加 ing → <b>running</b>。' },
     { type: 'fill', q: 'Thank you for ______ (give) me a ride.（用所给词的适当形式）', answer: ['giving'],
       explain: '介词 for 后面接动名词；give 以不发音的 e 结尾，<b>去 e</b> 加 ing → <b>giving</b>。' },
@@ -346,7 +346,7 @@ KG.nodes.push(
       explain: 'Could you please 后接<b>动词原形</b>，所以这里不用变形 → <b>open</b>。' },
     { type: 'fill', q: 'Let\'s ______ (go) swimming this afternoon.（用所给词的适当形式）', answer: ['go'],
       explain: 'Let\'s = let us，let sb do 后面用<b>动词原形</b> → <b>go</b>。不要因为有 this afternoon 就写成 will go 或 going。' },
-    { type: 'fill', q: 'Look! She is ______ (write) a letter to her pen pal.（用所给词的适当形式）', answer: ['writing'],
+    { type: 'fill', q: 'Look! She is ______ (write) a letter to her pen friend.（用所给词的适当形式）', answer: ['writing'],
       explain: '现在进行时 is + doing；write 以不发音的 e 结尾，<b>去 e</b> 加 ing → <b>writing</b>（只有一个 t）。' },
     { type: 'fill', q: 'My grandpa is 80 years old, but he is still in good h______.（根据首字母提示填一个词）', answer: ['health'],
       explain: '先用中文说意思：“爷爷 80 岁了，但身体还很好”。固定说法 in good <b>health</b>（身体健康）；介词短语里要名词，不能填形容词 healthy。' },
@@ -580,19 +580,19 @@ KG.nodes.push(
       <p>Second, sleep is good for our bodies. Teenagers are still growing, and the body does much of its growing while we sleep. Good sleep also makes us stronger against illness, so we catch colds less often.</p>
       <p>So how can we sleep better? Try to go to bed at the same time every night. Put your phone away at least half an hour before bed, and don't drink coffee or strong tea in the evening. Doctors say students of your age need 8 to 10 hours of sleep. Start tonight — your body and brain will thank you!</p>` },
     p2: { title: '阅读理解 B', html: `
-      <p>When I was in Grade 7, I joined the school English speech contest. I practiced my speech only twice because I thought it was easy. But when I stood on the stage and saw hundreds of faces, my mind went blank. I forgot half of my speech and ran off the stage in tears.</p>
+      <p>When I was in Grade 7, I joined the school English speech competition. I practiced my speech only twice because I thought it was easy. But when I stood on the stage and saw hundreds of faces, my mind went blank. I forgot half of my speech and ran off the stage in tears.</p>
       <p>For weeks, I didn't want to talk about it. Then my English teacher, Ms. Zheng, said something I will never forget: “Falling down is not the end. Staying down is.”</p>
-      <p>So I made a plan. Every morning I got up half an hour earlier and practiced speaking at the beach near my home. I recorded myself on my phone and listened for mistakes. I also asked my little brother to be my audience, even though he often fell asleep!</p>
-      <p>One year later, I entered the contest again. My hands were still shaking a little, but I remembered every word. I didn't win first prize — I came third. But as I walked off the stage, I was smiling. I had won something more important: I had beaten my fear.</p>` },
+      <p>So I made a plan. Every morning I got up half an hour earlier and practiced speaking at the beach near my home. I recorded myself on my phone and listened for mistakes. I also asked my little brother to sit and listen to me, even though he often fell asleep!</p>
+      <p>One year later, I entered the competition again. My hands were still shaking a little, but I remembered every word. I didn't win first prize — I came third. But as I walked off the stage, I was smiling. I had won something more important: I had beaten my fear.</p>` },
     e2: { title: '例题短文二', html: `
       <p>In many Chinese cities, you can now see four bins of different colours on the street. They are for different kinds of rubbish. Sorting rubbish has become part of our daily life.</p>
-      <p>The blue bin is for things that can be recycled, like paper, plastic bottles and cans. The red bin is for harmful waste, such as old batteries and medicine. The green bin is for kitchen waste, like vegetable leaves and leftover food. Everything else goes into the grey bin.</p>
+      <p>The blue bin is for things that can be recycled, like paper, plastic bottles and cans. The red bin is for harmful waste, such as old batteries and medicine. The green bin is for kitchen waste, like vegetable leaves and food that people didn't finish. Everything else goes into the grey bin.</p>
       <p>Why do we sort rubbish? Recycled things can be made into new products, so we use fewer natural resources. Harmful waste can be dealt with safely. Kitchen waste can even be turned into food for plants. Sorting rubbish takes only a few seconds, but it makes our cities cleaner.</p>` },
     p3: { title: '阅读理解 C', html: `
       <p>Do you love stories? Do you want to meet a real writer? Come to the Spring Reading Festival at Haixi Library!</p>
-      <p>On April 23rd, World Book Day, the library will hold a reading festival for teenagers. The children's writer Ye Lan will talk about how she writes her stories, and you can ask her questions. There will also be a book swap: bring a book you have finished and take home one you haven't read.</p>
-      <p>Students who read ten books during April will get a special “Reading Star” badge.</p>
-      <p>The festival is free, but seats are limited. Sign up at the front desk before April 20th. Don't miss it!</p>` },
+      <p>On April 23rd, World Book Day, the library will hold a reading festival for teenagers. The children's writer Ye Lan will talk about how she writes her stories, and you can ask her questions. You can also trade books there: bring a book you have finished and take home one you haven't read.</p>
+      <p>Students who read ten books during April will get a special “Reading Star” card.</p>
+      <p>The festival is free, but there are only 100 seats. Sign up at the front desk before April 20th. Don't miss it!</p>` },
     p4: { title: '阅读理解 D', html: `
       <p>In many Chinese cities, you can see rows of colourful bikes on the streets. They are shared bikes. You don't need to buy one — you can just find one nearby and ride it.</p>
       <p>Using a shared bike is easy. First, open the app on your phone and scan the QR code on the bike. Then the lock opens and you can ride away. When you finish, park the bike in a proper place and lock it. The app will tell you how much to pay. A short ride usually costs only a few yuan. Riders must be at least 12 years old.</p>
@@ -622,7 +622,7 @@ KG.nodes.push(
       explain: '第二段每句都是“某种颜色的桶装什么”，概括起来就是<b>每种颜色的桶分别装什么</b>。“为什么要分类”是第三段的内容（首句 Why do we sort rubbish? 就是第三段的主题句）。' },
     { type: 'choice', passage: 'e2', q: 'Why did the writer write the passage?', options: ['To introduce rubbish sorting and its good points.', 'To tell a story about a family.', 'To sell new rubbish bins.', 'To invite readers to a party.'], answer: 0,
       explain: '这是<b>说明文</b>：介绍垃圾分类是什么、为什么要做，写作目的是 to introduce / to explain。文中没有讲故事（记叙文），也没有卖东西、发邀请（广告、通知）。' },
-    { type: 'choice', passage: 'e2', q: 'How is the passage organized?', options: ['It introduces the topic, then gives details, then gives reasons.', 'It tells a story in time order.', 'It gives reasons first, then introduces the topic.', 'It compares two cities.'], answer: 0,
+    { type: 'choice', passage: 'e2', q: 'How is the passage organized?', options: ['It first says what it is about, then explains each bin, then gives reasons.', 'It tells a story in time order.', 'It gives reasons first, then says what it is about.', 'It compares two cities.'], answer: 0,
       explain: '第一段引出话题（四种颜色的垃圾桶），第二段讲具体分类（细节），第三段用 Why do we sort rubbish? 讲原因。没有按时间讲故事，也没有比较两个城市。' },
     { type: 'choice', passage: 'e3', q: 'What is the story mainly about?', options: ['How the writer learned to read instructions before doing something.', 'Camping is fun for every family.', 'How to put up a tent in twenty minutes.', 'Why Dad didn\'t like camping.'], answer: 0,
       explain: '先<b>用一句话概括</b>：“谁 + 怎么样”——“我”搭帐篷不看说明书，失败了；听爸爸的话先读再做，成功了。对照选项，第一项最接近。“露营对每个家庭都有趣”太宽；“二十分钟搭好帐篷”只是一个细节（太窄）；爸爸不喜欢露营原文没说（偏离）。' },
@@ -650,18 +650,18 @@ KG.nodes.push(
       explain: '这是建议类文章，最后一段给出建议并号召 Start tonight，目的是<b>鼓励</b>学生睡够觉。文中没有讲故事，也没有卖东西或介绍某位医生。' },
     { type: 'choice', passage: 'p1', q: 'How is the passage organized?', options: ['It gives a problem, then reasons, then advice.', 'It tells a story in time order.', 'It compares two kinds of students.', 'It gives advice first, then a story.'], answer: 0,
       explain: '第一段提出问题（学生睡眠不足），第二、三段用 First、Second 讲睡眠重要的原因，第四段用 So how can we sleep better? 给建议。' },
-    { type: 'choice', passage: 'p2', q: 'What is the story mainly about?', options: ['How the writer got over a failure by practicing hard.', 'How the writer won first prize in a contest.', 'Why the writer liked the beach.', 'Why the writer\'s brother often fell asleep.'], answer: 0,
+    { type: 'choice', passage: 'p2', q: 'What is the story mainly about?', options: ['How the writer did badly at first but beat the fear by practicing hard.', 'How the writer won first prize in a competition.', 'Why the writer liked the beach.', 'Why the writer\'s brother often fell asleep.'], answer: 0,
       explain: '故事从第一次比赛失败写起，到坚持练习，最后战胜恐惧。作者得的是第三名，不是第一名；海边和弟弟睡着都只是细节。' },
-    { type: 'choice', passage: 'p2', q: 'What is Paragraph 3 mainly about?', options: ['The writer practiced hard in different ways.', 'The writer was afraid of the stage.', 'Ms. Zheng gave the writer a gift.', 'The writer\'s brother joined the contest.'], answer: 0,
+    { type: 'choice', passage: 'p2', q: 'What is Paragraph 3 mainly about?', options: ['The writer practiced hard in different ways.', 'The writer was afraid of the stage.', 'Ms. Zheng gave the writer a gift.', 'The writer\'s brother joined the competition.'], answer: 0,
       explain: '第三段首句 So I made a plan，接着讲早起去海边练、录音找错误、请弟弟当观众——用不同方法努力练习。' },
     { type: 'choice', passage: 'p2', q: 'What\'s the best title for the story?', options: ['Falling Down Is Not the End', 'My Little Brother', 'A Morning at the Beach', 'How to Win First Prize'], answer: 0,
       explain: '标题取自老师的话，正是全文的转折点和主题：失败了不要一蹶不振。My Little Brother、A Morning at the Beach 太窄；作者没有得第一名，How to Win First Prize 不符合原文。' },
-    { type: 'choice', passage: 'p2', q: 'What does the writer want to tell us?', options: ['We should face failure and keep trying.', 'Speech contests are not important.', 'Practicing twice is enough.', 'Winning first prize is everything.'], answer: 0,
+    { type: 'choice', passage: 'p2', q: 'What does the writer want to tell us?', options: ['We should not give up when we fail.', 'Speech competitions are not important.', 'Practicing twice is enough.', 'Winning first prize is everything.'], answer: 0,
       explain: '记叙文的道理常在结尾：I had won something more important: I had beaten my fear，加上老师的话，说明要正视失败、坚持努力。作者第一次只练两次就失败了，所以“练两次就够”是错的。' },
     { type: 'choice', passage: 'p3', q: 'Why was this passage written?', options: ['To invite teenagers to a reading festival.', 'To introduce the life of the writer Ye Lan.', 'To tell a story about a library.', 'To ask students to buy new books.'], answer: 0,
       explain: '这是<b>通知/广告</b>：开头用问句吸引读者，结尾 Sign up ... Don\'t miss it! 号召报名，目的是吸引、邀请青少年参加读书节（to invite / to attract）。叶兰只是活动的一部分（太窄），文中也没讲故事、没卖书。' },
-    { type: 'choice', passage: 'p3', q: 'What\'s the best title for the passage?', options: ['Come and Enjoy the Reading Festival!', 'Books', 'Ye Lan\'s New Book', 'How to Make a Badge'], answer: 0,
-      explain: '好标题要覆盖全文、简洁具体、有吸引力：Come and Enjoy the Reading Festival! 正合适。Books 范围太大（<b>太宽</b>）；叶兰只是其中一项活动（<b>太窄</b>），文中也没说她出新书；做徽章原文没讲（偏离）。' },
+    { type: 'choice', passage: 'p3', q: 'What\'s the best title for the passage?', options: ['Come and Enjoy the Reading Festival!', 'Books', 'Ye Lan\'s New Book', 'How to Make a Card'], answer: 0,
+      explain: '好标题要覆盖全文、简洁具体、有吸引力：Come and Enjoy the Reading Festival! 正合适。Books 范围太大（<b>太宽</b>）；叶兰只是其中一项活动（<b>太窄</b>），文中也没说她出新书；做卡片原文没讲（偏离）。' },
     { type: 'choice', passage: 'p3', q: 'What does the writer hope readers will do?', options: ['Sign up and come to the festival.', 'Write a story for the library.', 'Give all their books to the library.', 'Visit Ye Lan at her home.'], answer: 0,
       explain: '广告、通知的目的看结尾的号召：Sign up at the front desk ... Don\'t miss it! 作者希望读者<b>报名参加</b>。书是拿来交换的，不是全部捐出；其他两项原文没说。' },
     { type: 'choice', passage: 'p4', q: 'What is the passage mainly about?', options: ['Shared bikes: how to use them, their good points and problems.', 'Ways of travelling around the world.', 'How to scan a QR code.', 'Why people should buy cars.'], answer: 0,

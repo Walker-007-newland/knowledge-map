@@ -41,7 +41,7 @@ KG.nodes.push(
     { type: 'choice', q: 'My cousin is ___ university student.', options: ['a', 'an', '/'], answer: 0, explain: 'university 虽然以字母 u 开头，但 u 读 /ju:/，第一个音是辅音 /j/，所以用 a。“一名大学生”是可数名词单数，不能不加冠词。' },
     { type: 'choice', q: '___ moon goes round ___ earth.', options: ['The; the', 'A; the', 'The; an'], answer: 0, explain: '月亮和地球都是世界上独一无二的东西，前面都用 the。' },
     { type: 'choice', q: 'Tom is ___ tallest boy in our class, and he is always ___ first to come to school.', options: ['the; the', 'a; the', '/; the'], answer: 0, explain: '最高级 tallest 前用 the；序数词 first 前也用 the。' },
-    { type: 'choice', q: 'Fujian is in ___ southeast of China. Go along the road, and you can see the bank on ___ left.', options: ['the; the', '/; the', 'a; the'], answer: 0, explain: '表示方位：in the southeast（在东南部）、on the left（在左边），前面都要用 the。' },
+    { type: 'choice', q: 'Beijing is in ___ north of China. Go along the road, and you can see the bank on ___ left.', options: ['the; the', '/; the', 'a; the'], answer: 0, explain: '表示方位：in the north（在北部）、on the left（在左边），前面都要用 the。' },
     { type: 'choice', q: 'My favourite subject is ___ math.', options: ['a', 'the', '/'], answer: 2, explain: '学科名称前不用冠词：English, math, science 都直接用。' },
     { type: 'choice', q: 'We often go to the park ___ bus in ___ spring.', options: ['by; /', 'by a; the', 'by the; /'], answer: 0, explain: 'by + 交通工具中间不加冠词：by bus；季节前一般也不用冠词：in spring。' },
     { type: 'choice', q: "It's ten o'clock. Mum tells me to go to ___ bed.", options: ['a', 'the', '/'], answer: 2, explain: 'go to bed（上床睡觉）是固定搭配，不用冠词。同类的还有 go to school, at home, at night。' },
@@ -378,9 +378,9 @@ KG.nodes.push(
     { type: 'choice', q: 'My father reads newspapers ___.', options: ['every morning', 'in every morning', 'on every morning'], answer: 0, explain: '有 every 时前面不加介词。' },
     { type: 'choice', q: 'I went to the cinema with my parents ___.', options: ['yesterday', 'on yesterday', 'at yesterday'], answer: 0, explain: 'yesterday 前面不加介词。' },
     { type: 'fill', q: '改错：I will visit my aunt in tomorrow. 句中多了一个词，写出这个多余的词。', answer: ['in'], explain: 'tomorrow 前面不用介词。' },
-    { type: 'choice', q: 'We watched the flag-raising ceremony on TV ___ National Day.', options: ['in', 'on', 'at'], answer: 1, explain: '节日这一天用 on：on National Day。' },
+    { type: 'choice', q: 'We watched a film on TV ___ National Day.', options: ['in', 'on', 'at'], answer: 1, explain: '节日这一天用 on：on National Day。' },
     { type: 'fill', q: 'What do you usually do ___ Christmas Day?（填介词）', answer: ['on'], explain: 'Christmas Day 指圣诞节这一天，用 on。' },
-    { type: 'fill', q: '整个春节期间，我们都去看望亲戚。We visit our relatives ___ the Spring Festival.（填 at 或 on）', answer: ['at'], explain: '指整个节日期间，常用 at：at the Spring Festival。' },
+    { type: 'fill', q: '整个春节期间，我们都去看望爷爷奶奶。We visit our grandpa and grandma ___ the Spring Festival.（填 at 或 on）', answer: ['at'], explain: '指整个节日期间，常用 at：at the Spring Festival。' },
     { type: 'choice', q: '听句子，选出你听到的短语。', say: 'Many families get together at Christmas.', options: ['at Christmas', 'on Christmas Day', 'in Christmas'], answer: 0, explain: '听到的是 at Christmas，指整个圣诞节期间。' }
   ]
 },
@@ -425,7 +425,7 @@ KG.nodes.push(
     { type: 'choice', q: 'Tom sits ___ me in class. I can only see the back of his head.', options: ['in front of', 'behind', 'next to'], answer: 0, explain: '我只能看到他的后脑勺，说明他坐在我前面：in front of。反过来，我就坐在他后面（behind）。' },
     { type: 'choice', q: 'The bookshop is ___ the bank. They are side by side.', options: ['next to', 'behind', 'between'], answer: 0, explain: 'side by side 是“并排、挨着”，用 next to（= beside）。' },
     { type: 'fill', q: 'My home is ___ the park, so I often take a walk there.（在……附近，填一个词）', answer: ['near'], explain: '“在……附近”用 near。' },
-    { type: 'fill', q: 'In the alphabet, the letter B is ___ A and C.（填一个词）', answer: ['between'], explain: '在两者之间用 between ... and ...。' },
+    { type: 'fill', q: 'The zoo is ___ the park and the shop.（填一个词）', answer: ['between'], explain: '在两者之间用 between ... and ...。' },
     { type: 'choice', q: "Let's meet ___ the school gate. My cousin lives ___ Fuzhou.", options: ['at; in', 'in; at', 'on; in'], answer: 0, explain: '校门口是一个具体的小地点，用 at；福州是城市，用 in。' },
     { type: 'choice', q: 'There are two windows ___ the wall.', options: ['in', 'on', 'at'], answer: 0, explain: '窗户是嵌在墙里的，用 in the wall；挂在墙面上的地图、画才用 on the wall。' },
     { type: 'choice', q: 'My pencils are ___ my schoolbag.', options: ['in', 'on', 'between'], answer: 0, explain: '铅笔装在书包里面，用 in（在……里面）。' },
@@ -442,7 +442,7 @@ KG.nodes.push(
     { type: 'choice', q: 'We are waiting for the bus ___ the bus stop.', options: ['at', 'in', 'on'], answer: 0, explain: '公交站是一个小地点，用 at the bus stop。' },
     { type: 'fill', q: 'The milk is ___ the fridge.（填介词）', answer: ['in'], explain: '牛奶放在冰箱里面，用 in。' },
     { type: 'choice', q: 'Put the cup ___ the table, please.', options: ['on', 'in', 'between'], answer: 0, explain: '杯子放在桌面上，接触表面，用 on。' },
-    { type: 'choice', q: 'Our ball rolled ___ the bed. We can get it out with a long stick.', options: ['under', 'on', 'above'], answer: 0, explain: '要用长棍才能把球弄出来，说明球滚到床底下，用 under。' },
+    { type: 'choice', q: 'Our ball is ___ the bed. We can\'t see it.', options: ['under', 'on', 'above'], answer: 0, explain: '球在床上或床的上方都能看见；看不见，说明球在床底下，用 under。' },
     { type: 'choice', q: '听句子，狗在哪里？', say: 'The dog is sleeping next to the bed.', options: ['床底下', '床上', '床旁边'], answer: 2, explain: 'next to the bed 是“在床旁边”。' },
     { type: 'choice', q: "Bob is hiding ___ the door. We can't see him.", options: ['behind', 'in front of', 'on'], answer: 0, explain: '躲起来看不见，说明在门后面，用 behind。' },
     { type: 'fill', q: '在门后：___ the door（填一个词）', answer: ['behind'], explain: '“在……后面”用 behind。' },
@@ -607,7 +607,7 @@ KG.nodes.push(
       <p class="ex">Be quiet! The baby is sleeping.<span class="zh">安静！宝宝在睡觉。</span></p>
       <p class="warn">句子里是形容词（quiet, careful, late）时，前面要用动词原形 be：Be careful!</p>` },
     { h: '否定祈使句', html: `<p>在句首加 <b>Don't</b>，后面还是动词原形：</p>
-      <p class="ex">Don't run in the hallway.<span class="zh">不要在走廊上跑。</span></p>
+      <p class="ex">Don't run in the library.<span class="zh">不要在图书馆里跑。</span></p>
       <p class="ex">Don't be late for school again.<span class="zh">上学别再迟到了。</span></p>
       <p>公共标志常用 <b>No + 名词 / 动词-ing</b>：No smoking!（禁止吸烟） No parking!（禁止停车）</p>` },
     { h: "Let's 和 Let me", html: `<p><b>Let's = Let us</b>，表示“我们一起……吧”；let 后面用<b>宾格 + 动词原形</b>：</p>
@@ -636,7 +636,7 @@ KG.nodes.push(
   tests: [
     { type: 'choice', q: '___ the door, please.', options: ['Open', 'Opens', 'Opening'], answer: 0, explain: '祈使句用动词原形开头。' },
     { type: 'choice', q: '___ quiet, please! The baby is sleeping.', options: ['Is', 'Be', 'Are'], answer: 1, explain: '形容词 quiet 前用 be 的原形 Be。' },
-    { type: 'choice', q: '___ run in the hallway.', options: ["Don't", 'Not', 'No'], answer: 0, explain: '否定祈使句用 Don\'t + 动词原形。' },
+    { type: 'choice', q: '___ run in the library.', options: ["Don't", 'Not', 'No'], answer: 0, explain: '否定祈使句用 Don\'t + 动词原形。' },
     { type: 'fill', q: "Let's ___ swimming this afternoon.（go 的适当形式）", answer: ['go'], explain: "Let's 后面接动词原形。" },
     { type: 'fill', q: '改为否定句：Play football in the street.<br>→ ___ play football in the street.（首字母大写）', answer: ["Don't", 'Do not'], explain: '否定祈使句在句首加 Don\'t。' },
     { type: 'choice', q: "—Let's go to the zoo this Sunday.<br>—___", options: ['Good idea!', "You're welcome.", 'Thank you.'], answer: 0, explain: '回应别人的建议用 Good idea!' },
@@ -692,7 +692,7 @@ KG.nodes.push(
   examples: [
     { type: 'fill', q: 'Please listen ___.（careful）', answer: ['carefully'], explain: '修饰动词 listen 用副词，careful 加 ly。' },
     { type: 'choice', q: 'The music sounds ___.', options: ['nice', 'nicely', 'well'], answer: 0, explain: 'sound 是系动词，后面接形容词 nice。' },
-    { type: 'choice', q: 'Lily dances ___.', options: ['beautifully', 'beautiful', 'beauty'], answer: 0, explain: '修饰动词 dances，说明“跳得怎么样”，要用副词 beautifully。' },
+    { type: 'choice', q: 'Lily dances ___.', options: ['beautifully', 'beautiful', 'nice'], answer: 0, explain: '修饰动词 dances，说明“跳得怎么样”，要用副词 beautifully。' },
     { type: 'choice', q: "It's a ___ day today. Let's go out to play.", options: ['sunny', 'sunnily', 'sun'], answer: 0, explain: '放在名词 day 前面修饰它，用形容词 sunny。' },
     { type: 'fill', q: 'The question is easy. I can answer it ___.（easy）', answer: ['easily'], explain: '修饰动词 answer 用副词；easy 是辅音字母 + y，变 y 为 i 再加 ly：easily。' },
     { type: 'fill', q: 'Please speak ___ to the baby.（gentle）', answer: ['gently'], explain: '修饰动词 speak 用副词；gentle 以辅音字母 + le 结尾，去 e 加 y：gently。' },
@@ -722,7 +722,7 @@ KG.nodes.push(
     { type: 'choice', q: 'The nurse held the baby ___.', options: ['gently', 'gentlely', 'gentle'], answer: 0, explain: '修饰动词 held 用副词；le 结尾去 e 加 y：gently，不能写 gentlely。' },
     { type: 'fill', q: 'He plays the piano very ___.（good）', answer: ['well'], explain: '修饰动词 plays 用副词，good 的副词是 well。' },
     { type: 'choice', q: 'Tom is a ___ swimmer. He swims ___.', options: ['good; well', 'well; good', 'good; good'], answer: 0, explain: '修饰名词 swimmer 用形容词 good；修饰动词 swims 用副词 well。' },
-    { type: 'choice', q: 'The bird flies very ___ in the sky.', options: ['high', 'highly', 'height'], answer: 0, explain: '“飞得高”用 high，它形容词和副词同形；highly 意思是“高度地、非常”，不表示具体的高。' },
+    { type: 'choice', q: 'The bird flies very ___ in the sky.', options: ['high', 'highly', 'tall'], answer: 0, explain: '“飞得高”用 high，它形容词和副词同形；highly 意思是“非常”，不表示具体的高；tall 指人、树、楼“个子高”，不能说飞得 tall。' },
     { type: 'fill', q: '改错：He runs very fastly. 句中有一个词错了，写出改正后的词。', answer: ['fast'], explain: 'fast 形容词和副词同形，没有 fastly 这个词。' },
     { type: 'choice', q: 'The baby panda is very ___.', options: ['lovely', 'love', 'lovelily'], answer: 0, explain: 'be 后用形容词；lovely 以 ly 结尾，但它是形容词“可爱的”。' },
     { type: 'fill', q: 'The street is ___ with music and people.（live 的形容词形式，以 ly 结尾）', answer: ['lively'], explain: 'lively（热闹的、充满活力的）以 ly 结尾，但是形容词，放在 be 后面。' },
@@ -768,7 +768,7 @@ KG.nodes.push(
     { type: 'choice', q: 'There ___ some juice in the bottle.', options: ['is', 'are', 'be'], answer: 0, explain: 'juice 是不可数名词，没有复数，做主语时用 is；不可数名词前也不能直接用 a / an。' },
     { type: 'choice', q: 'Here ___ some good news for you.', options: ['is', 'are', 'be'], answer: 0, explain: 'news 虽然以 s 结尾，但它是不可数名词，用 is。' },
     { type: 'choice', q: "I don't have ___ money with me. I can't buy the toy.", options: ['much', 'many', 'few'], answer: 0, explain: 'money 是不可数名词，“许多”用 much；many 修饰可数名词复数。' },
-    { type: 'choice', q: 'We need ___ eggs and ___ flour to make the cake.', options: ['some; some', 'many; many', 'a few; a few'], answer: 0, explain: 'some 既能修饰可数名词复数（eggs），也能修饰不可数名词（flour）；many 和 a few 不能修饰不可数的 flour。a lot of / lots of 也是两队都能用。' },
+    { type: 'choice', q: 'We need ___ eggs and ___ milk to make the cake.', options: ['some; some', 'many; many', 'a few; a few'], answer: 0, explain: 'some 既能修饰可数名词复数（eggs），也能修饰不可数名词（milk）；many 和 a few 不能修饰不可数的 milk。a lot of / lots of 也是两队都能用。' },
     { type: 'choice', q: "There aren't ___ students in the classroom now.", options: ['any', 'some', 'a little'], answer: 0, explain: '否定句一般用 any；a little 不能修饰可数名词。' },
     { type: 'choice', q: "Can I have ___ water, please? I'm thirsty.", options: ['some', 'any', 'many'], answer: 0, explain: '表示请求、希望对方同意时，疑问句也用 some。' }
   ],
@@ -783,7 +783,7 @@ KG.nodes.push(
     { type: 'fill', q: 'There are three ___ on the plate.（tomato）', answer: ['tomatoes'], explain: 'tomato 是可数名词，three 后用复数，tomato 加 es：tomatoes。' },
     { type: 'choice', q: 'I can see many ___ in the sky.', options: ['birds', 'bird', 'a bird'], answer: 0, explain: 'bird 是可数名词，many 后面用复数 birds。' },
     { type: 'choice', q: 'There is ___ rice in the bowl.', options: ['some', 'a', 'many'], answer: 0, explain: 'rice 是不可数名词，不能用 a 和 many 修饰，可以用 some。' },
-    { type: 'fill', q: '改错：I want to buy two breads. 应改为：two ___ of bread（填一个词）', answer: ['pieces', 'loaves', 'slices'], explain: 'bread 不可数，没有复数；要表示数量，用“数词 + 量词 + of”：two pieces of bread。' },
+    { type: 'fill', q: '改错：I want to buy two breads. 应改为：two ___ of bread（填一个词）', answer: ['pieces'], explain: 'bread 不可数，没有复数；要表示数量，用“数词 + 量词 + of”：two pieces of bread。' },
     { type: 'fill', q: 'No news ___ good news.（be 的适当形式）', answer: ['is'], explain: 'news 是不可数名词，用 is。这句话的意思是“没有消息就是好消息”。' },
     { type: 'choice', q: "He didn't eat ___ food this morning, so he is hungry now.", options: ['much', 'many', 'a few'], answer: 0, explain: 'food 是不可数名词，用 much 修饰。' },
     { type: 'fill', q: 'There are too ___ people in the shop.（填 many 或 much）', answer: ['many'], explain: 'people 是可数名词复数，用 many。' },

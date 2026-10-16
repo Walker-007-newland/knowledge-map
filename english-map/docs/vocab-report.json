@@ -1,0 +1,1996 @@
+{
+ "g-be": {
+  "grade": 4,
+  "title": "be 动词 am / is / are",
+  "words": [
+   {
+    "word": "cute",
+    "level": "B",
+    "type": "初中词",
+    "where": "测12",
+    "context": "Look at my dog. It ___ very cute.（填 be 动词）"
+   },
+   {
+    "word": "twins",
+    "level": "B",
+    "type": "初中词",
+    "where": "测22",
+    "context": "Lily and Lucy ___ twins.（填 be 动词）"
+   }
+  ]
+ },
+ "g-pronoun": {
+  "grade": 4,
+  "title": "人称代词与物主代词",
+  "words": [
+   {
+    "word": "wagging",
+    "level": "A",
+    "type": "课标外",
+    "where": "测5",
+    "context": "The dog is wagging ___ tail."
+   },
+   {
+    "word": "tail",
+    "level": "B",
+    "type": "初中词",
+    "where": "测5",
+    "context": "The dog is wagging ___ tail."
+   }
+  ]
+ },
+ "g-plural": {
+  "grade": 4,
+  "title": "名词的单复数",
+  "words": [
+   {
+    "word": "wolfs",
+    "level": "B",
+    "type": "初中词",
+    "where": "测16",
+    "context": "wolfs"
+   },
+   {
+    "word": "wolves",
+    "level": "B",
+    "type": "初中词",
+    "where": "测16",
+    "context": "wolves"
+   },
+   {
+    "word": "wolfes",
+    "level": "B",
+    "type": "初中词",
+    "where": "测16",
+    "context": "wolfes"
+   },
+   {
+    "word": "brush",
+    "level": "B",
+    "type": "初中词",
+    "where": "测25",
+    "context": "Brush your ___ twice a day.（tooth）"
+   },
+   {
+    "word": "sharp",
+    "level": "B",
+    "type": "初中词",
+    "where": "例6",
+    "context": "Be careful with those sharp ___.（knife）"
+   },
+   {
+    "word": "hill",
+    "level": "B",
+    "type": "初中词",
+    "where": "例11",
+    "context": "There are many ___ on the hill."
+   },
+   {
+    "word": "dish",
+    "level": "B",
+    "type": "初中词",
+    "where": "测12",
+    "context": "ase help me wash all the ___.（dish）"
+   }
+  ]
+ },
+ "g-there-be": {
+  "grade": 4,
+  "title": "There be 句型",
+  "words": [
+   {
+    "word": "fridge",
+    "level": "B",
+    "type": "初中词",
+    "where": "测11",
+    "context": "some milk and two eggs in the fridge.（填 be 动词）"
+   }
+  ]
+ },
+ "g-present-simple": {
+  "grade": 5,
+  "title": "一般现在时",
+  "words": [
+   {
+    "word": "boil",
+    "level": "B",
+    "type": "初中词",
+    "where": "测10",
+    "context": "Water ___ at 100°C.（boil）"
+   },
+   {
+    "word": "boils",
+    "level": "B",
+    "type": "初中词",
+    "where": "测10",
+    "context": "boils"
+   },
+   {
+    "word": "twins",
+    "level": "B",
+    "type": "初中词",
+    "where": "测29",
+    "context": "The twins ___ swimming very much."
+   },
+   {
+    "word": "wings",
+    "level": "B",
+    "type": "初中词",
+    "where": "测17",
+    "context": "A bird ___ with its wings.（fly）"
+   }
+  ]
+ },
+ "g-present-cont": {
+  "grade": 5,
+  "title": "现在进行时",
+  "words": [
+   {
+    "word": "storybook",
+    "level": "A",
+    "type": "课标外",
+    "where": "测10",
+    "context": "I ___ a storybook at the moment.（read，填两个词）"
+   },
+   {
+    "word": "o'clock",
+    "level": "B",
+    "type": "初中词",
+    "where": "测5",
+    "context": "It's 9 o'clock now. The students ___ an English"
+   },
+   {
+    "word": "hurry",
+    "level": "B",
+    "type": "初中词",
+    "where": "测17",
+    "context": "Hurry up! The class ___.（begin，用现在进行时，填两"
+   }
+  ]
+ },
+ "g-future": {
+  "grade": 6,
+  "title": "一般将来时",
+  "words": [
+   {
+    "word": "ringing",
+    "level": "B",
+    "type": "初中词",
+    "where": "测11",
+    "context": "—The phone is ringing.—OK. I ___ answer it."
+   }
+  ]
+ },
+ "g-comparative": {
+  "grade": 6,
+  "title": "形容词和副词的比较级、最高级",
+  "words": [
+   {
+    "word": "pianists",
+    "level": "B",
+    "type": "初中词",
+    "where": "测37",
+    "context": "Lang Lang is one of ___ pianists in the world."
+   },
+   {
+    "word": "hometown",
+    "level": "B",
+    "type": "初中词",
+    "where": "例12",
+    "context": "Our hometown is becoming ___ ___ ___ beautif"
+   }
+  ]
+ },
+ "g-passive": {
+  "grade": 9,
+  "title": "被动语态",
+  "words": [
+   {
+    "word": "soybeans",
+    "level": "A",
+    "type": "课标外",
+    "where": "测27",
+    "context": "Tofu ___ soybeans."
+   }
+  ]
+ },
+ "g-article": {
+  "grade": 4,
+  "title": "冠词 a / an / the",
+  "words": [
+   {
+    "word": "volleyball",
+    "level": "B",
+    "type": "初中词",
+    "where": "例16",
+    "context": "The girls are playing ___ volleyball on the playground."
+   },
+   {
+    "word": "cute",
+    "level": "B",
+    "type": "初中词",
+    "where": "讲解例句",
+    "context": "I have a dog. The dog is very cute."
+   },
+   {
+    "word": "o'clock",
+    "level": "B",
+    "type": "初中词",
+    "where": "例11",
+    "context": "It's ten o'clock. Mum tells me to go to ___ bed."
+   },
+   {
+    "word": "southeast",
+    "level": "B",
+    "type": "初中词",
+    "where": "例8",
+    "context": "Fujian is in ___ southeast of China. Go along the road, a"
+   },
+   {
+    "word": "guitar",
+    "level": "B",
+    "type": "初中词",
+    "where": "例15",
+    "context": "Lily can play ___ guitar very well."
+   },
+   {
+    "word": "round",
+    "level": "B",
+    "type": "初中词",
+    "where": "例6",
+    "context": "___ moon goes round ___ earth."
+   },
+   {
+    "word": "salt",
+    "level": "B",
+    "type": "初中词",
+    "where": "例14",
+    "context": "Lily, can you pass me ___ salt on the table, please?"
+   }
+  ]
+ },
+ "g-numeral": {
+  "grade": 4,
+  "title": "数词：基数词、序数词与时间日期",
+  "words": [
+   {
+    "word": "thirtieth",
+    "level": "B",
+    "type": "初中词",
+    "where": "测28",
+    "context": "thirtieth"
+   },
+   {
+    "word": "match",
+    "level": "B",
+    "type": "初中词",
+    "where": "测21",
+    "context": "f people watched the football match.（thousand，首字母大写）"
+   }
+  ]
+ },
+ "g-possessive": {
+  "grade": 4,
+  "title": "名词所有格 's 与 of",
+  "words": [
+   {
+    "word": "twins",
+    "level": "B",
+    "type": "初中词",
+    "where": "例2",
+    "context": "Jim and Kate are twins. They share a room. This is ___ ro"
+   },
+   {
+    "word": "bedroom",
+    "level": "B",
+    "type": "初中词",
+    "where": "测13",
+    "context": "im are brothers. They share a bedroom. It's Tom and ___ bedroom.（Jim）"
+   }
+  ]
+ },
+ "g-prep-time": {
+  "grade": 4,
+  "title": "时间介词 in / on / at",
+  "words": [
+   {
+    "word": "ceremony",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测21",
+    "context": "We watched the flag-raising ceremony on TV ___ National Day."
+   },
+   {
+    "word": "picnic",
+    "level": "B",
+    "type": "初中词",
+    "where": "测17",
+    "context": "改错：We will have a picnic on next Saturday. 句中多了一个词，写出这个多余的"
+   },
+   {
+    "word": "flag",
+    "level": "B",
+    "type": "初中词",
+    "where": "测21",
+    "context": "We watched the flag-raising ceremony on TV ___ National"
+   },
+   {
+    "word": "relatives",
+    "level": "B",
+    "type": "初中词",
+    "where": "测23",
+    "context": "整个春节期间，我们都去看望亲戚。We visit our relatives ___ the Spring Festival.（填 at "
+   },
+   {
+    "word": "match",
+    "level": "B",
+    "type": "初中词",
+    "where": "讲解例句",
+    "context": "We have a match on Saturday afternoon."
+   }
+  ]
+ },
+ "g-prep-place": {
+  "grade": 4,
+  "title": "方位介词",
+  "words": [
+   {
+    "word": "alphabet",
+    "level": "A",
+    "type": "课标外",
+    "where": "例8",
+    "context": "In the alphabet, the letter B is ___ A and C.（填"
+   },
+   {
+    "word": "rolled",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测10",
+    "context": "Our ball rolled ___ the bed. We can get it out wi"
+   },
+   {
+    "word": "bookshop",
+    "level": "B",
+    "type": "初中词",
+    "where": "例6",
+    "context": "The bookshop is ___ the bank. They are side "
+   },
+   {
+    "word": "fridge",
+    "level": "B",
+    "type": "初中词",
+    "where": "测8",
+    "context": "The milk is ___ the fridge.（填介词）"
+   },
+   {
+    "word": "post",
+    "level": "B",
+    "type": "初中词",
+    "where": "测17",
+    "context": "My house is ___ to the post office."
+   }
+  ]
+ },
+ "g-yes-no-q": {
+  "grade": 4,
+  "title": "一般疑问句与选择疑问句",
+  "words": [
+   {
+    "word": "pet",
+    "level": "B",
+    "type": "初中词",
+    "where": "测24",
+    "context": "Is your pet a cat or a dog?"
+   }
+  ]
+ },
+ "g-imperative": {
+  "grade": 4,
+  "title": "祈使句",
+  "words": [
+   {
+    "word": "hallway",
+    "level": "A",
+    "type": "课标外",
+    "where": "讲解例句",
+    "context": "Don't run in the hallway."
+   },
+   {
+    "word": "repeat",
+    "level": "B",
+    "type": "初中词",
+    "where": "例3",
+    "context": "___ to the tape and repeat after it."
+   }
+  ]
+ },
+ "g-adj-adv": {
+  "grade": 5,
+  "title": "形容词与副词的用法",
+  "words": [
+   {
+    "word": "height",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测18",
+    "context": "height"
+   },
+   {
+    "word": "beauty",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例3",
+    "context": "beauty"
+   },
+   {
+    "word": "smells",
+    "level": "B",
+    "type": "初中词",
+    "where": "测9",
+    "context": "The cake smells ___."
+   }
+  ]
+ },
+ "g-countable": {
+  "grade": 5,
+  "title": "可数/不可数名词与 many / much / a few / a little",
+  "words": [
+   {
+    "word": "loaves",
+    "level": "A",
+    "type": "课标外",
+    "where": "测11",
+    "context": "loaves"
+   },
+   {
+    "word": "slices",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测11",
+    "context": "slices"
+   },
+   {
+    "word": "hurry",
+    "level": "B",
+    "type": "初中词",
+    "where": "测2",
+    "context": "Hurry up! There is ___ time left."
+   },
+   {
+    "word": "flour",
+    "level": "B",
+    "type": "初中词",
+    "where": "例7",
+    "context": "We need ___ eggs and ___ flour to make the cake."
+   }
+  ]
+ },
+ "g-linking-verb": {
+  "grade": 7,
+  "title": "系动词 + 形容词",
+  "words": [
+   {
+    "word": "length",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测4",
+    "context": "length"
+   },
+   {
+    "word": "beauty",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测3",
+    "context": "The music sounds ___.（beauty，用适当形式）"
+   }
+  ]
+ },
+ "g-prep-common": {
+  "grade": 7,
+  "title": "常用介词辨析",
+  "words": [
+   {
+    "word": "tunnel",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测10",
+    "context": "The train went ___ a long tunnel."
+   }
+  ]
+ },
+ "g-gerund": {
+  "grade": 7,
+  "title": "动名词 doing",
+  "words": [
+   {
+    "word": "pal",
+    "level": "A",
+    "type": "课标外",
+    "where": "例7",
+    "context": "looking forward to ___ my pen pal this summer.（meet）"
+   }
+  ]
+ },
+ "g-too-enough": {
+  "grade": 7,
+  "title": "too / enough / so / such",
+  "words": [
+   {
+    "word": "clapped",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测13",
+    "context": "e sang ___ well that everyone clapped.（填一个词）"
+   }
+  ]
+ },
+ "g-exclamation": {
+  "grade": 7,
+  "title": "感叹句 What / How",
+  "words": [
+   {
+    "word": "beauty",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测10",
+    "context": "beauty"
+   }
+  ]
+ },
+ "g-adj-ed-ing": {
+  "grade": 8,
+  "title": "-ed 形容词与 -ing 形容词",
+  "words": [
+   {
+    "word": "fright",
+    "level": "A",
+    "type": "课标外",
+    "where": "测8",
+    "context": "fright"
+   }
+  ]
+ },
+ "g-word-form": {
+  "grade": 8,
+  "title": "构词法与词性转换",
+  "words": [
+   {
+    "word": "adjective",
+    "level": "A",
+    "type": "课标外",
+    "where": "测24",
+    "context": " of the following words is an adjective, NOT an adverb?"
+   },
+   {
+    "word": "junk",
+    "level": "A",
+    "type": "课标外",
+    "where": "测6",
+    "context": "Eating too much junk food is bad for our ___."
+   }
+  ]
+ },
+ "g-to-vs-ing": {
+  "grade": 8,
+  "title": "to do 与 doing 的区别",
+  "words": [
+   {
+    "word": "storybooks",
+    "level": "A",
+    "type": "课标外",
+    "where": "测24",
+    "context": "Lily likes ___ storybooks in her free time.（read，写出一种正确"
+   }
+  ]
+ },
+ "g-so-neither": {
+  "grade": 8,
+  "title": "So do I / Neither do I",
+  "words": [
+   {
+    "word": "cola",
+    "level": "A",
+    "type": "课标外",
+    "where": "测10",
+    "context": "—I never drink cola.—___. I only drink water and milk."
+   }
+  ]
+ },
+ "g-adv-time": {
+  "grade": 8,
+  "title": "时间状语从句",
+  "words": [
+   {
+    "word": "doorbell",
+    "level": "A",
+    "type": "课标外",
+    "where": "例3",
+    "context": "I was having a shower ___ the doorbell rang."
+   }
+  ]
+ },
+ "g-adv-reason": {
+  "grade": 8,
+  "title": "原因、结果、目的状语从句",
+  "words": [
+   {
+    "word": "clapped",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测14",
+    "context": "e sang ___ well that everyone clapped."
+   }
+  ]
+ },
+ "g-past-future": {
+  "grade": 9,
+  "title": "过去将来时",
+  "words": [
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测12",
+    "context": "I ___ take part in the speech contest."
+   }
+  ]
+ },
+ "g-past-perfect": {
+  "grade": 9,
+  "title": "过去完成时",
+  "words": [
+   {
+    "word": "stadium",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例5",
+    "context": "By the time we got to the stadium, the match ___."
+   }
+  ]
+ },
+ "g-tense-review": {
+  "grade": 9,
+  "title": "时态综合辨析（动词填空思路）",
+  "words": [
+   {
+    "word": "pal",
+    "level": "A",
+    "type": "课标外",
+    "where": "测28",
+    "context": "e you ___ (write) to your pen pal yet?"
+   }
+  ]
+ },
+ "p-letter-sounds": {
+  "grade": 4,
+  "title": "自然拼读：辅音字母的发音",
+  "words": [
+   {
+    "word": "pan",
+    "level": "B",
+    "type": "初中词",
+    "where": "测22",
+    "context": "pan"
+   },
+   {
+    "word": "dig",
+    "level": "B",
+    "type": "初中词",
+    "where": "测1",
+    "context": "dig"
+   }
+  ]
+ },
+ "p-short-vowels": {
+  "grade": 4,
+  "title": "短元音与闭音节",
+  "words": [
+   {
+    "word": "cape",
+    "level": "A",
+    "type": "课标外",
+    "where": "测19",
+    "context": "cape"
+   },
+   {
+    "word": "fin",
+    "level": "A",
+    "type": "课标外",
+    "where": "例6",
+    "context": "fin"
+   },
+   {
+    "word": "bug",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例9",
+    "context": "bug"
+   },
+   {
+    "word": "tip",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测15",
+    "context": "tip"
+   },
+   {
+    "word": "cute",
+    "level": "B",
+    "type": "初中词",
+    "where": "测4",
+    "context": "cute"
+   },
+   {
+    "word": "tap",
+    "level": "B",
+    "type": "初中词",
+    "where": "测15",
+    "context": "tap"
+   },
+   {
+    "word": "pan",
+    "level": "B",
+    "type": "初中词",
+    "where": "测18",
+    "context": "pan"
+   },
+   {
+    "word": "fun",
+    "level": "B",
+    "type": "初中词",
+    "where": "例6",
+    "context": "fun"
+   },
+   {
+    "word": "fat",
+    "level": "B",
+    "type": "初中词",
+    "where": "讲解例句",
+    "context": "A fat cat sat on the mat."
+   }
+  ]
+ },
+ "p-long-vowels": {
+  "grade": 5,
+  "title": "长元音与“不发音的 e”",
+  "words": [
+   {
+    "word": "hip",
+    "level": "A",
+    "type": "课标外",
+    "where": "测2",
+    "context": "hip"
+   }
+  ]
+ },
+ "p-vowel-teams": {
+  "grade": 5,
+  "title": "元音字母组合 ee/ea/ai/oa/oo/ar/er...",
+  "words": [
+   {
+    "word": "luck",
+    "level": "B",
+    "type": "初中词",
+    "where": "测21",
+    "context": "luck"
+   },
+   {
+    "word": "pack",
+    "level": "B",
+    "type": "初中词",
+    "where": "测1",
+    "context": "pack"
+   },
+   {
+    "word": "fun",
+    "level": "B",
+    "type": "初中词",
+    "where": "例9",
+    "context": "fun"
+   }
+  ]
+ },
+ "p-consonant-blends": {
+  "grade": 5,
+  "title": "辅音字母组合 sh/ch/th/ph/ck/ng...",
+  "words": [
+   {
+    "word": "sip",
+    "level": "A",
+    "type": "课标外",
+    "where": "例2",
+    "context": "sip"
+   },
+   {
+    "word": "chop",
+    "level": "A",
+    "type": "课标外",
+    "where": "例3",
+    "context": "chop"
+   },
+   {
+    "word": "sin",
+    "level": "A",
+    "type": "课标外",
+    "where": "例6",
+    "context": "sin"
+   },
+   {
+    "word": "lack",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测25",
+    "context": "lack"
+   },
+   {
+    "word": "jeep",
+    "level": "B",
+    "type": "初中词",
+    "where": "测10",
+    "context": "jeep"
+   },
+   {
+    "word": "chip",
+    "level": "B",
+    "type": "初中词",
+    "where": "例2",
+    "context": "chip"
+   }
+  ]
+ },
+ "p-ipa": {
+  "grade": 7,
+  "title": "国际音标",
+  "words": [
+   {
+    "word": "yam",
+    "level": "A",
+    "type": "课标外",
+    "where": "测21",
+    "context": "yam"
+   },
+   {
+    "word": "bay",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测19",
+    "context": "bay"
+   },
+   {
+    "word": "sin",
+    "level": "A",
+    "type": "课标外",
+    "where": "例9",
+    "context": "sin"
+   },
+   {
+    "word": "jet",
+    "level": "A",
+    "type": "课标外",
+    "where": "测3",
+    "context": "jet"
+   },
+   {
+    "word": "cop",
+    "level": "A",
+    "type": "课标外",
+    "where": "测17",
+    "context": "cop"
+   }
+  ]
+ },
+ "v-numbers-time": {
+  "grade": 4,
+  "title": "数字、时间、星期与月份",
+  "words": [
+   {
+    "word": "spelled",
+    "level": "B",
+    "type": "初中词",
+    "where": "测35",
+    "context": "Which word is spelled correctly?"
+   },
+   {
+    "word": "o'clock",
+    "level": "B",
+    "type": "初中词",
+    "where": "讲解例句",
+    "context": "It's seven o'clock."
+   },
+   {
+    "word": "sentence",
+    "level": "B",
+    "type": "初中词",
+    "where": "测26",
+    "context": "Which sentence is correct?"
+   },
+   {
+    "word": "correct",
+    "level": "B",
+    "type": "初中词",
+    "where": "测26",
+    "context": "Which sentence is correct?"
+   },
+   {
+    "word": "correctly",
+    "level": "B",
+    "type": "初中词",
+    "where": "测35",
+    "context": "Which word is spelled correctly?"
+   }
+  ]
+ },
+ "v-family-people": {
+  "grade": 4,
+  "title": "家庭成员与职业",
+  "words": [
+   {
+    "word": "granny",
+    "level": "B",
+    "type": "初中词",
+    "where": "例1",
+    "context": "granny"
+   },
+   {
+    "word": "fisherman",
+    "level": "B",
+    "type": "初中词",
+    "where": "测14",
+    "context": "fisherman"
+   }
+  ]
+ },
+ "v-school": {
+  "grade": 4,
+  "title": "学校、科目与文具",
+  "words": [
+   {
+    "word": "poems",
+    "level": "B",
+    "type": "初中词",
+    "where": "测14",
+    "context": "We read poems by Li Bai in C________ class.（语文）"
+   },
+   {
+    "word": "sentence",
+    "level": "B",
+    "type": "初中词",
+    "where": "测13",
+    "context": "Which sentence is written correctly?"
+   },
+   {
+    "word": "experiments",
+    "level": "B",
+    "type": "初中词",
+    "where": "测8",
+    "context": "We do science experiments in the l________.（实验室，三个字母）"
+   },
+   {
+    "word": "fun",
+    "level": "B",
+    "type": "初中词",
+    "where": "测15",
+    "context": "her always says, \"Numbers are fun!\"（数学）"
+   },
+   {
+    "word": "correctly",
+    "level": "B",
+    "type": "初中词",
+    "where": "测13",
+    "context": "Which sentence is written correctly?"
+   },
+   {
+    "word": "straight",
+    "level": "B",
+    "type": "初中词",
+    "where": "测4",
+    "context": "I need a ___ to draw a straight line."
+   },
+   {
+    "word": "meanings",
+    "level": "B",
+    "type": "初中词",
+    "where": "测25",
+    "context": "A d________ can tell you the meanings of new words.（词典）"
+   }
+  ]
+ },
+ "v-body-health": {
+  "grade": 4,
+  "title": "身体部位与疾病",
+  "words": [
+   {
+    "word": "brush",
+    "level": "B",
+    "type": "初中词",
+    "where": "例4",
+    "context": "Brush your t________ twice a day.（牙齿，用复数"
+   },
+   {
+    "word": "loudly",
+    "level": "B",
+    "type": "初中词",
+    "where": "测13",
+    "context": "ave a sore ___. I can't speak loudly."
+   },
+   {
+    "word": "temperature",
+    "level": "B",
+    "type": "初中词",
+    "where": "例6",
+    "context": "Her temperature is 39℃. She has a ___."
+   }
+  ]
+ },
+ "v-food": {
+  "grade": 4,
+  "title": "食物、饮料与餐具",
+  "words": [
+   {
+    "word": "rabbits",
+    "level": "B",
+    "type": "初中词",
+    "where": "测12",
+    "context": "Rabbits love eating c________.（胡萝卜，用复数）"
+   },
+   {
+    "word": "spelled",
+    "level": "B",
+    "type": "初中词",
+    "where": "测25",
+    "context": "Which word is spelled correctly?"
+   },
+   {
+    "word": "o'clock",
+    "level": "B",
+    "type": "初中词",
+    "where": "例4",
+    "context": "l________ at school at twelve o'clock.（午餐）"
+   },
+   {
+    "word": "basket",
+    "level": "B",
+    "type": "初中词",
+    "where": "例2",
+    "context": "ere are some p________ in the basket.（土豆，用复数）"
+   },
+   {
+    "word": "lemon",
+    "level": "B",
+    "type": "初中词",
+    "where": "例8",
+    "context": "The lemon is very ___."
+   },
+   {
+    "word": "terrible",
+    "level": "B",
+    "type": "初中词",
+    "where": "测18",
+    "context": "terrible"
+   },
+   {
+    "word": "correctly",
+    "level": "B",
+    "type": "初中词",
+    "where": "测25",
+    "context": "Which word is spelled correctly?"
+   }
+  ]
+ },
+ "v-clothes-colors": {
+  "grade": 4,
+  "title": "颜色、衣物与购物",
+  "words": [
+   {
+    "word": "sentence",
+    "level": "B",
+    "type": "初中词",
+    "where": "例11",
+    "context": "Which sentence is right?"
+   },
+   {
+    "word": "mix",
+    "level": "B",
+    "type": "初中词",
+    "where": "例4",
+    "context": "Mix blue and yellow, and you get ___."
+   }
+  ]
+ },
+ "v-animals-nature": {
+  "grade": 5,
+  "title": "动物、植物与自然",
+  "words": [
+   {
+    "word": "bamboo",
+    "level": "B",
+    "type": "初中词",
+    "where": "讲解例句",
+    "context": "andas live in China. They eat bamboo."
+   },
+   {
+    "word": "tails",
+    "level": "B",
+    "type": "初中词",
+    "where": "测18",
+    "context": " the hill. They have long red tails."
+   },
+   {
+    "word": "pocket",
+    "level": "B",
+    "type": "初中词",
+    "where": "测20",
+    "context": "_____ carries its baby in its pocket.（袋鼠）"
+   },
+   {
+    "word": "climb",
+    "level": "B",
+    "type": "初中词",
+    "where": "讲解例句",
+    "context": "Monkeys can climb trees."
+   },
+   {
+    "word": "climbs",
+    "level": "B",
+    "type": "初中词",
+    "where": "测21",
+    "context": "climbs"
+   },
+   {
+    "word": "climbing",
+    "level": "B",
+    "type": "初中词",
+    "where": "测21",
+    "context": "climbing"
+   }
+  ]
+ },
+ "v-home-city": {
+  "grade": 5,
+  "title": "家居、城市场所与交通标志",
+  "words": [
+   {
+    "word": "borrow",
+    "level": "B",
+    "type": "初中词",
+    "where": "测6",
+    "context": "I want to borrow some books. I'll go to the ___."
+   },
+   {
+    "word": "meals",
+    "level": "B",
+    "type": "初中词",
+    "where": "测1",
+    "context": "We cook meals in the k________."
+   }
+  ]
+ },
+ "v-hobbies-sports": {
+  "grade": 5,
+  "title": "爱好、运动与娱乐",
+  "words": [
+   {
+    "word": "beach",
+    "level": "B",
+    "type": "初中词",
+    "where": "测15",
+    "context": "playing ___ volleyball on the beach."
+   }
+  ]
+ },
+ "v-travel-transport": {
+  "grade": 6,
+  "title": "交通出行与旅游",
+  "words": [
+   {
+    "word": "hurry",
+    "level": "B",
+    "type": "初中词",
+    "where": "测14",
+    "context": "Hurry up! Let's ___ the bus. It's leavin"
+   },
+   {
+    "word": "beach",
+    "level": "B",
+    "type": "初中词",
+    "where": "测19",
+    "context": "ten ___ from the hotel to the beach."
+   },
+   {
+    "word": "fun",
+    "level": "B",
+    "type": "初中词",
+    "where": "测28",
+    "context": "an you r___ a horse? It looks fun.（骑）"
+   }
+  ]
+ },
+ "v-high-freq-verbs": {
+  "grade": 7,
+  "title": "高频动词辨析 say/speak/talk/tell 等",
+  "words": [
+   {
+    "word": "comic",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测22",
+    "context": "My friend lent me his comic book, and I have k___ it for a wee"
+   },
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测27",
+    "context": "ing to ___ the English speech contest next week?"
+   }
+  ]
+ },
+ "v-festivals-culture": {
+  "grade": 7,
+  "title": "节日、文化与家乡福建",
+  "words": [
+   {
+    "word": "costumes",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测12",
+    "context": "Children wear costumes and say \"trick or treat\" at ___"
+   },
+   {
+    "word": "pine",
+    "level": "A",
+    "type": "课标外",
+    "where": "测14",
+    "context": "pine trees"
+   }
+  ]
+ },
+ "v-feelings-personality": {
+  "grade": 7,
+  "title": "情感与性格",
+  "words": [
+   {
+    "word": "vase",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测2",
+    "context": "because I broke her favourite vase."
+   }
+  ]
+ },
+ "v-environment": {
+  "grade": 8,
+  "title": "环境保护与自然灾害",
+  "words": [
+   {
+    "word": "melted",
+    "level": "A",
+    "type": "课标外",
+    "where": "测21",
+    "context": "ass bottles can be collected, melted and made into new bottles. This i"
+   },
+   {
+    "word": "bare",
+    "level": "A",
+    "type": "课标外",
+    "where": "测27",
+    "context": " houses, and the hills become bare.（砍）"
+   },
+   {
+    "word": "golden",
+    "level": "A",
+    "type": "课标外",
+    "where": "测7",
+    "context": "Golden monkeys are ___ animals. We must "
+   }
+  ]
+ },
+ "v-science-tech": {
+  "grade": 8,
+  "title": "科技、发明与网络",
+  "words": [
+   {
+    "word": "hybrid",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "讲解例句",
+    "context": "great scientist. He developed hybrid rice."
+   }
+  ]
+ },
+ "v-life-growth": {
+  "grade": 9,
+  "title": "成长、梦想、志愿与人际",
+  "words": [
+   {
+    "word": "forgive",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测15",
+    "context": "forgive"
+   }
+  ]
+ },
+ "t-thanks-sorry": {
+  "grade": 4,
+  "title": "感谢、道歉与回应",
+  "words": [
+   {
+    "word": "lending",
+    "level": "B",
+    "type": "初中词",
+    "where": "测11",
+    "context": "—Thanks for lending me your bike.—___"
+   },
+   {
+    "word": "invite",
+    "level": "B",
+    "type": "初中词",
+    "where": "测14",
+    "context": "Thank you for ___ (invite) me to your party."
+   },
+   {
+    "word": "inviting",
+    "level": "B",
+    "type": "初中词",
+    "where": "测14",
+    "context": "inviting"
+   }
+  ]
+ },
+ "t-invite-suggest": {
+  "grade": 6,
+  "title": "邀请、建议与回应",
+  "words": [
+   {
+    "word": "luck",
+    "level": "B",
+    "type": "初中词",
+    "where": "例10",
+    "context": "Good luck."
+   },
+   {
+    "word": "beach",
+    "level": "B",
+    "type": "初中词",
+    "where": "测25",
+    "context": "Shall we go to the beach or the mountains?"
+   }
+  ]
+ },
+ "t-wishes": {
+  "grade": 7,
+  "title": "祝愿、祝贺与节日问候",
+  "words": [
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "讲解例句",
+    "context": "on first prize in the singing contest. —Congratulations!"
+   }
+  ]
+ },
+ "t-feelings": {
+  "grade": 8,
+  "title": "表达情感与安慰鼓励",
+  "words": [
+   {
+    "word": "puzzle",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例8",
+    "context": "—This puzzle is too hard. I want to stop.—Neve"
+   },
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测25",
+    "context": "on first prize in the drawing contest!"
+   }
+  ]
+ },
+ "s-listening-basic": {
+  "grade": 7,
+  "title": "听力：听句子选图与听对话选答",
+  "words": [
+   {
+    "word": "pal",
+    "level": "A",
+    "type": "课标外",
+    "where": "测17",
+    "context": "s writing a letter to her pen pal."
+   }
+  ]
+ },
+ "s-listening-long": {
+  "grade": 8,
+  "title": "听力：长对话、独白与信息记录",
+  "words": [
+   {
+    "word": "stadium",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "听力 e2",
+    "context": "t will take place at the city stadium, not on our school playground, b"
+   }
+  ]
+ },
+ "s-dialogue": {
+  "grade": 8,
+  "title": "补全对话（七选五口语表达）",
+  "words": [
+   {
+    "word": "seafood",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 d2",
+    "context": " B: You should try the seafood. The fish balls there are delici"
+   }
+  ]
+ },
+ "s-picture": {
+  "grade": 8,
+  "title": "看图写话",
+  "words": [
+   {
+    "word": "balcony",
+    "level": "A",
+    "type": "课标外",
+    "where": "例7",
+    "context": "Li Hua ___ the flowers on the balcony every day.（water）"
+   }
+  ]
+ },
+ "s-cloze": {
+  "grade": 8,
+  "title": "完形填空",
+  "words": [
+   {
+    "word": "clapped",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 e2",
+    "context": "ies. After the show, everyone clapped. The next day, Tom gave the (4)_"
+   },
+   {
+    "word": "string",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": "r, a strong wind came and the string broke. The kite fell into a tall "
+   },
+   {
+    "word": "recipe",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 e3",
+    "context": "__ mistakes. She followed the recipe step by step. When her parents ta"
+   }
+  ]
+ },
+ "s-passage-fill": {
+  "grade": 9,
+  "title": "短文填空（所给词/首字母，每空 1–2 词）",
+  "words": [
+   {
+    "word": "raft",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e1",
+    "context": " we (3)______ (take) a bamboo raft down the Nine-Bend Stream."
+   },
+   {
+    "word": "pal",
+    "level": "A",
+    "type": "课标外",
+    "where": "测38",
+    "context": "_ (write) a letter to her pen pal.（用所给词的适当形式）"
+   },
+   {
+    "word": "hallway",
+    "level": "A",
+    "type": "课标外",
+    "where": "例14",
+    "context": "ease stop ______ (run) in the hallway.（用所给词的适当形式）"
+   }
+  ]
+ },
+ "s-reading-main": {
+  "grade": 8,
+  "title": "阅读理解：主旨大意、标题与写作目的",
+  "words": [
+   {
+    "word": "leftover",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e2",
+    "context": "te, like vegetable leaves and leftover food. Everything else goes into"
+   },
+   {
+    "word": "swap",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p3",
+    "context": "ns. There will also be a book swap: bring a book you have finished and"
+   },
+   {
+    "word": "badge",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p3",
+    "context": " get a special “Reading Star” badge. The festival is free, but s"
+   },
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": "ned the school English speech contest. I practiced my speech only twic"
+   },
+   {
+    "word": "contests",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测9",
+    "context": "Speech contests are not important."
+   },
+   {
+    "word": "topic",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例6",
+    "context": "It introduces the topic, then gives details, then gives re"
+   },
+   {
+    "word": "failure",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测6",
+    "context": "How the writer got over a failure by practicing hard."
+   },
+   {
+    "word": "limited",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": "stival is free, but seats are limited. Sign up at the front desk befor"
+   },
+   {
+    "word": "audience",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": "ed my little brother to be my audience, even though he often fell asle"
+   },
+   {
+    "word": "details",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例6",
+    "context": "roduces the topic, then gives details, then gives reasons."
+   }
+  ]
+ },
+ "s-reading-infer": {
+  "grade": 8,
+  "title": "阅读理解：推理判断与词义猜测",
+  "words": [
+   {
+    "word": "reusable",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p2",
+    "context": "astic Week\". Everyone brought reusable bottles and lunch boxes to scho"
+   },
+   {
+    "word": "talkative",
+    "level": "A",
+    "type": "课标外",
+    "where": "例11",
+    "context": "Most of my classmates are talkative, but Jim is rather quiet. He s"
+   },
+   {
+    "word": "storybook",
+    "level": "A",
+    "type": "课标外",
+    "where": "测15",
+    "context": "In a storybook for little children."
+   },
+   {
+    "word": "guidebook",
+    "level": "A",
+    "type": "课标外",
+    "where": "测5",
+    "context": "In a guidebook to restaurants in Fuzhou."
+   },
+   {
+    "word": "pigeons",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e1",
+    "context": "nch and waits. Soon dozens of pigeons fly down and land around his fee"
+   },
+   {
+    "word": "clapped",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p1",
+    "context": "ed with interest, and the boy clapped happily. After the visitor"
+   },
+   {
+    "word": "turtle",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p2",
+    "context": "games. But after he saw a sea turtle caught in a fishing net on the ne"
+   },
+   {
+    "word": "ashamed",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测3",
+    "context": "As something to be ashamed of."
+   },
+   {
+    "word": "advertise",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测14",
+    "context": "To advertise a new car park."
+   },
+   {
+    "word": "bronze",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p1",
+    "context": "ctised my introduction to the bronze ware for hours, and I even record"
+   },
+   {
+    "word": "halfway",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p1",
+    "context": "Things did not go as planned. Halfway through my talk, a little boy as"
+   },
+   {
+    "word": "patted",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p1",
+    "context": " the visitors left, Mr. Zheng patted me on the shoulder. \"Nobody knows"
+   },
+   {
+    "word": "distracted",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e2",
+    "context": "I read a paper book, I am not distracted by messages popping up on the"
+   },
+   {
+    "word": "introduction",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p1",
+    "context": " my first day, I practised my introduction to the bronze ware for hour"
+   },
+   {
+    "word": "bench",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e1",
+    "context": "of bread. He sits on the same bench and waits. Soon dozens of pigeons "
+   },
+   {
+    "word": "tips",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 e2",
+    "context": "t article, I will share three tips for building a daily reading habit."
+   },
+   {
+    "word": "extra",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": "ibrarian. She always goes the extra mile for us. She stays late to hel"
+   },
+   {
+    "word": "audience",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "例15",
+    "context": " a deep breath, smiled at the audience and began to play. When she fin"
+   },
+   {
+    "word": "maintain",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": "too old and costs too much to maintain, that is, to keep in good condi"
+   }
+  ]
+ },
+ "s-reading-gap": {
+  "grade": 9,
+  "title": "阅读还原（六选五 / 七选五补全短文）",
+  "words": [
+   {
+    "word": "goldfish",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e1",
+    "context": " Do you want to keep a pet goldfish? (1)______ First, choose a larg"
+   },
+   {
+    "word": "bedtime",
+    "level": "A",
+    "type": "课标外",
+    "where": "测21",
+    "context": "ten told to small children at bedtime."
+   },
+   {
+    "word": "preview",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e2",
+    "context": "fference. 句子库： A. Preview your lessons. B. Usually i"
+   },
+   {
+    "word": "dripping",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p3",
+    "context": "ix leaks quickly. (3)______ A dripping tap, for example, can waste tho"
+   },
+   {
+    "word": "flush",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p3",
+    "context": " use it to clean the floor or flush the toilet. (5)______ If eve"
+   },
+   {
+    "word": "leaks",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": "you really need it. Fix leaks quickly. (3)______ A dripping tap,"
+   },
+   {
+    "word": "leak",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": " litres a year. If you find a leak, tell your parents and get it repai"
+   },
+   {
+    "word": "fiction",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测21",
+    "context": "resting books. ______ Science fiction, detective stories and fairy tal"
+   },
+   {
+    "word": "mood",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": " also affects your health and mood. (3)______ They may also catch cold"
+   },
+   {
+    "word": "tank",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 e1",
+    "context": "First, choose a large bowl or tank. A small bowl gets dirty very quick"
+   },
+   {
+    "word": "regularly",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 e2",
+    "context": " is why going over your notes regularly is so important. E. Last"
+   },
+   {
+    "word": "limited",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": "r we can actually use is very limited. C. It is perfect for wate"
+   },
+   {
+    "word": "lack",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": "n staying up all night. Lack of sleep also affects your health a"
+   },
+   {
+    "word": "affects",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": "ght. Lack of sleep also affects your health and mood. (3)______ "
+   },
+   {
+    "word": "amount",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p3",
+    "context": ", together we can save a huge amount of water for the future. 句子"
+   }
+  ]
+ },
+ "s-task-reading": {
+  "grade": 9,
+  "title": "任务型阅读（回答问题、信息转换）",
+  "words": [
+   {
+    "word": "dialect",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 p2",
+    "context": ". If you can speak the Fuzhou dialect, that will be a plus, because ma"
+   },
+   {
+    "word": "puppy",
+    "level": "A",
+    "type": "课标外",
+    "where": "材料 e2",
+    "context": "hen a little girl took home a puppy that I had looked after for a mont"
+   },
+   {
+    "word": "certificate",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p2",
+    "context": " Every volunteer will get a certificate at the end of the activity. "
+   },
+   {
+    "word": "patience",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测20",
+    "context": "patience"
+   },
+   {
+    "word": "rolled",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p1",
+    "context": "k yet. They have to be dried, rolled and heated again and again. The w"
+   },
+   {
+    "word": "charge",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p1",
+    "context": " Chen Mei's grandfather is in charge of this part, and he never lets a"
+   },
+   {
+    "word": "process",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "材料 p1",
+    "context": "ed again and again. The whole process takes almost two days. Chen Mei'"
+   }
+  ]
+ },
+ "s-writing-structure": {
+  "grade": 8,
+  "title": "书面表达：审题、要点与三段式结构",
+  "words": [
+   {
+    "word": "beauty",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "范文1",
+    "context": "s trip not only showed me the beauty of Xiamen but also taught me that"
+   }
+  ]
+ },
+ "s-writing-letter": {
+  "grade": 9,
+  "title": "书面表达：书信、邮件、倡议书与通知",
+  "words": [
+   {
+    "word": "exhibits",
+    "level": "A",
+    "type": "课标外",
+    "where": "范文5",
+    "context": " we will see many interesting exhibits and listen to a talk about spac"
+   },
+   {
+    "word": "grain",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "范文2",
+    "context": ". It is a pity, because every grain of rice comes from the hard work o"
+   },
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测26",
+    "context": "所给词的适当形式填空：The English speech contest will be ___ in the school hall n"
+   },
+   {
+    "word": "lawn",
+    "level": "A",
+    "type": "课标外",
+    "where": "范文3",
+    "context": " It will be held on the lawn in front of the school library from"
+   },
+   {
+    "word": "wrapped",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "范文4",
+    "context": "y are made of sticky rice and wrapped in leaves. In the afternoon, we "
+   }
+  ]
+ },
+ "s-writing-topics": {
+  "grade": 9,
+  "title": "书面表达：常考话题与范文（家乡、校园、成长、环保等）",
+  "words": [
+   {
+    "word": "castles",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "范文1",
+    "context": "ou, which look like big round castles. Besides, don't forget to taste "
+   },
+   {
+    "word": "junk",
+    "level": "A",
+    "type": "课标外",
+    "where": "测26",
+    "context": "eat a lot of junk food and never exercise"
+   },
+   {
+    "word": "precious",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "测24",
+    "context": "Water is very precious. We should ___ every drop of it"
+   },
+   {
+    "word": "contest",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "范文6",
+    "context": "ook part in an English speech contest. I prepared for it for weeks, bu"
+   },
+   {
+    "word": "beauty",
+    "level": "A",
+    "type": "高中课标词",
+    "where": "范文1",
+    "context": " Fujian is a place full of beauty and kindness. Welcome to Fujian, "
+   }
+  ]
+ }
+}

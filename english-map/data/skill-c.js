@@ -60,22 +60,22 @@ KG.nodes.push(
       <div class="rhyme">推理三步走：定位、推一步、找依据；<br>猜词三步走：看前后、找信号、代回去。</div>` }
   ],
   passages: {
-    e1: { title: '例题短文：Grandpa and the Pigeons', html: `
-      <p>Every Saturday morning, Grandpa Chen walks to the small park near our home with a bag of bread. He sits on the same bench and waits. Soon dozens of pigeons fly down and land around his feet. Some even sit on his arms.</p>
+    e1: { title: '例题短文：Grandpa and the Birds', html: `
+      <p>Every Saturday morning, Grandpa Chen walks to the small park near our home with a bag of bread. He sits on the same seat and waits. Soon dozens of birds fly down and land around his feet. Some even sit on his arms.</p>
       <p>Last month, Grandpa caught a bad cold and had to stay in bed for a week. On the first Saturday he couldn't go, I saw him standing at the window, looking towards the park for a long time. "Could you do me a favour?" he asked me quietly. I picked up the bag of bread and smiled.</p>
-      <p>That afternoon, the pigeons were not <u>disappointed</u>. But they kept looking around, as if they were searching for a familiar face.</p>` },
+      <p>That afternoon, the birds were not <u>disappointed</u>. But they kept looking around, as if they were searching for a familiar face.</p>` },
     e2: { title: '例题短文：Paper Books Still Matter', html: `
       <p>I am a <u>bookworm</u>—someone who can hardly stop reading. These days, more and more of my classmates read e-books on their phones. E-books are light and cheap, and you can carry hundreds of them in your pocket. I use them sometimes, too.</p>
       <p>But I still believe paper books are worth keeping. When I read a paper book, I am not <u>distracted</u> by messages popping up on the screen, so I can focus on the story for a long time. My eyes also feel less tired. Besides, I love writing notes beside my favourite lines and lending my books to friends.</p>
-      <p>I am not saying we should stop using e-books. But it would be a real pity if paper books disappeared from our lives. In my next article, I will share three tips for building a daily reading habit.</p>` },
+      <p>I am not saying we should stop using e-books. But it would be a real pity if paper books disappeared from our lives. In my next article, I will share three ideas for building a daily reading habit.</p>` },
     p1: { title: 'Passage 1: My Summer at the Museum', html: `
-      <p>Last summer, I became a volunteer guide at the Fujian Museum. Before my first day, I practised my introduction to the bronze ware for hours, and I even recorded myself to check my pronunciation. Still, my hands were shaking when the first group of visitors arrived.</p>
-      <p>Things did not go as planned. Halfway through my talk, a little boy asked, "Why is this old pot green?" I had no idea. My face turned red, and I could hear some adults laughing. I wanted to run away. Then an old volunteer, Mr. Zheng, walked over. "That's a great question," he said to the boy. "Shall we find the answer together?" He told the group that bronze slowly turns green after it stays in air and water for a long time. Everyone listened with interest, and the boy clapped happily.</p>
-      <p>After the visitors left, Mr. Zheng patted me on the shoulder. "Nobody knows everything," he said. "A good guide is not someone with all the answers. It's someone who is not afraid to keep learning."</p>
+      <p>Last summer, I became a volunteer guide at the Fujian Museum. Before my first day, I practised my talk about the bronze ware (青铜器) for hours, and I even recorded myself to check my pronunciation. Still, my hands were shaking when the first group of visitors arrived.</p>
+      <p>Things did not go as planned. In the middle of my talk, a little boy asked, "Why is this old pot green?" I had no idea. My face turned red, and I could hear some adults laughing. I wanted to run away. Then an old volunteer, Mr. Zheng, walked over. "That's a great question," he said to the boy. "Shall we find the answer together?" He told the group that bronze (青铜) slowly turns green after it stays in air and water for a long time. Everyone listened with interest, and the boy cheered happily.</p>
+      <p>After the visitors left, Mr. Zheng put his hand on my shoulder. "Nobody knows everything," he said. "A good guide is not someone with all the answers. It's someone who is not afraid to keep learning."</p>
       <p>From then on, I carried a small notebook with me. Whenever a visitor asked something I couldn't answer, I wrote it down and looked it up that evening. By the end of the summer, my notebook was full, and so was my confidence. Next week, a group of new volunteers will join us, and the museum has asked me to help them prepare for their first day.</p>` },
     p2: { title: 'Passage 2: Our Beach, Our Job', html: `
       <p>Every month, our class goes to a beach in Xiamen to pick up <u>litter</u>. We often find plastic bottles, food bags and even old shoes on the sand. Our teacher, Ms. Wu, says that a lot of this rubbish ends up in the sea and hurts fish and birds.</p>
-      <p>At first, my friend Hao was <u>unwilling</u> to join us. He said the work was dirty and boring, and he would rather stay at home and play computer games. But after he saw a sea turtle caught in a fishing net on the news, he changed his mind. Now he is always the first one to arrive at the beach.</p>
+      <p>At first, my friend Hao was <u>unwilling</u> to join us. He said the work was dirty and boring, and he would rather stay at home and play computer games. But after he saw a whale caught in a fishing net on the news, he changed his mind. Now he is always the first one to arrive at the beach.</p>
       <p>We also learned that cleaning up is not enough. We need to produce less rubbish in the first place. So our class started a "No Plastic Week". Everyone brought <u>reusable</u> bottles and lunch boxes to school instead of buying drinks in plastic bottles. Some students even made shopping bags out of old T-shirts.</p>
       <p>Small actions may seem <u>unimportant</u>, but they add up. If each of the 2,000 students in our school throws away one bottle fewer every day, we will save about 60,000 bottles a month. That is not a small number at all!</p>` },
     p3: { title: 'Passage 3: Please Don\'t Close Our Library', html: `
@@ -89,14 +89,14 @@ KG.nodes.push(
   },
   examples: [
     { type: 'choice', passage: 'e1', q: 'What did the writer probably do that afternoon?',
-      options: ['Fed the pigeons in the park for Grandpa.', 'Took Grandpa to see a doctor.', 'Bought a new bench for the park.', 'Stayed at home and played with Grandpa.'], answer: 0,
-      explain: '文中没直接说，要推：爷爷生病去不了，望着公园，请“我”帮个忙（Could you do me a favour?）；“我”拿起那袋面包笑了；下午鸽子 were not disappointed（没有失望）。连起来就是“我”替爷爷去喂鸽子了。去看医生、买长椅文中都没提；待在家里和“鸽子没失望”矛盾。' },
+      options: ['Fed the birds in the park for Grandpa.', 'Took Grandpa to see a doctor.', 'Bought a new seat for the park.', 'Stayed at home and played with Grandpa.'], answer: 0,
+      explain: '文中没直接说，要推：爷爷生病去不了，望着公园，请“我”帮个忙（Could you do me a favour?）；“我”拿起那袋面包笑了；下午鸟儿们 were not disappointed（没有失望）。连起来就是“我”替爷爷去喂鸟了。去看医生、买座椅文中都没提；待在家里和“鸟儿没失望”矛盾。' },
     { type: 'choice', passage: 'e1', q: 'The underlined word "disappointed" probably means ___.',
       options: ['失望的', '吃惊的', '聪明的', '满意的'], answer: 0,
-      explain: '鸽子有面包吃，所以“没有 disappointed”；但它们还在四处找那张熟悉的脸（爷爷）。“没有失望”最通顺。如果代入“满意的”，变成“鸽子不满意”，就和吃到面包矛盾了。另外 dis- 是表示否定的前缀，也是个提示。' },
-    { type: 'choice', passage: 'e1', q: 'How does Grandpa feel about the pigeons?',
+      explain: '鸟儿有面包吃，所以“没有 disappointed”；但它们还在四处找那张熟悉的脸（爷爷）。“没有失望”最通顺。如果代入“满意的”，变成“鸟儿不满意”，就和吃到面包矛盾了。另外 dis- 是表示否定的前缀，也是个提示。' },
+    { type: 'choice', passage: 'e1', q: 'How does Grandpa feel about the birds?',
       options: ['He cares about them a lot.', 'He thinks they are too noisy.', 'He is afraid of them.'], answer: 0,
-      explain: '推理依据：他每周六都去喂（Every Saturday），生病时还站在窗前长时间望着公园，并请“我”帮忙。说明他非常在乎这些鸽子。另外两项文中没有任何依据。' },
+      explain: '推理依据：他每周六都去喂（Every Saturday），生病时还站在窗前长时间望着公园，并请“我”帮忙。说明他非常在乎这些鸟儿。另外两项文中没有任何依据。' },
     { type: 'choice', passage: 'e2', q: 'What is the writer\'s attitude towards paper books?',
       options: ['Supportive.', 'Against.', 'Doubtful.', 'Uninterested.'], answer: 0,
       explain: '作者态度题找“情感词”：I still believe paper books are worth keeping（我仍然相信纸质书值得保留）、I love writing notes...（我喜欢……）、it would be a real pity if paper books disappeared（纸质书消失会很可惜）。全是正面的评价，所以是“支持的”。作者虽然也用电子书，但并没有反对纸质书；“怀疑的”“不感兴趣的”都和这些情感词矛盾。' },
@@ -105,7 +105,7 @@ KG.nodes.push(
       explain: '出处题看文体：作者是学生（my classmates），用第一人称发表个人看法，最后还说 In my next article（在我的下一篇文章里），说明这是会连续刊登文章的刊物，最可能是校刊。手机说明书讲怎么用手机，词典解释词义，科学课本讲知识，都不会写“我认为纸质书值得保留”这样的观点。' },
     { type: 'choice', passage: 'e2', q: 'What will the writer probably write about in the next article?',
       options: ['Ways to make reading a part of everyday life.', 'The history of e-books.', 'How to write notes on a phone.', 'Why paper books cost too much.'], answer: 0,
-      explain: '下文推测看最后一句：I will share three tips for building a daily reading habit（分享三个养成每天阅读习惯的小建议）。“让阅读成为日常生活的一部分”就是它的同义说法。其他选项最后一句都没有提到。' },
+      explain: '下文推测看最后一句：I will share three ideas for building a daily reading habit（分享三个养成每天阅读习惯的好办法）。“让阅读成为日常生活的一部分”就是它的同义说法。其他选项最后一句都没有提到。' },
     { type: 'choice', passage: 'e2', q: 'The underlined word "bookworm" in Paragraph 1 probably means ___.',
       options: ['爱读书的人', '书里的小虫子', '卖书的人', '写书的人'], answer: 0,
       explain: '定义解释线索：破折号后面的 someone who can hardly stop reading（一读起书来就停不下来的人）就是对 bookworm 的解释。这也是“字面意思”陷阱：book + worm 看起来像“书虫子”，但在这句话里指的是人。' },
@@ -118,9 +118,9 @@ KG.nodes.push(
     { type: 'choice', q: 'After climbing the mountain for six hours, we were hungry, thirsty and <u>exhausted</u>. 划线词 exhausted 的意思是 ___。',
       options: ['筋疲力尽的', '兴高采烈的', '十分好奇的', '非常勇敢的'], answer: 0,
       explain: '同义 / 并列线索：and 把 hungry（饿）、thirsty（渴）和 exhausted 并列，三个词应该是同一类感受——爬了六小时山后的身体不适。所以是“筋疲力尽的”。“兴高采烈”和前两个词不是一类。' },
-    { type: 'choice', q: 'Most of my classmates are talkative, but Jim is rather <u>quiet</u>. He seldom speaks in class. 划线词 quiet 的意思是 ___。',
+    { type: 'choice', q: 'Most of my classmates like to talk a lot, but Jim is rather <u>quiet</u>. He seldom speaks in class. 划线词 quiet 的意思是 ___。',
       options: ['寡言少语的', '爱说话的', '爱运动的', '粗心的'], answer: 0,
-      explain: '反义 / 对比线索：but 前面说同学们都 talkative（爱说话），but 后面的 Jim 正好相反；下一句 He seldom speaks in class（他很少在课上发言）也印证了。所以是“寡言少语的”。“爱说话的”正是被对比的那一面。' },
+      explain: '反义 / 对比线索：but 前面说同学们都 like to talk a lot（爱说话），but 后面的 Jim 正好相反；下一句 He seldom speaks in class（他很少在课上发言）也印证了。所以是“寡言少语的”。“爱说话的”正是被对比的那一面。' },
     { type: 'choice', q: 'This cup is <u>unbreakable</u>, so you can drop it on the floor without worrying. 划线词 unbreakable 的意思是 ___。',
       options: ['摔不坏的', '很容易碎的', '很昂贵的', '刚买的'], answer: 0,
       explain: '构词法：un-（不）+ break（打碎）+ -able（能被……的）= 不能被打碎的。上下文也印证：so you can drop it ... without worrying（所以掉在地上也不用担心）。“很容易碎的”正好相反。' },
@@ -130,9 +130,9 @@ KG.nodes.push(
     { type: 'choice', q: 'At the party nobody said a word at first. Then Mike told a funny joke to <u>break the ice</u>, and soon everyone was chatting happily. 划线短语 break the ice 的意思是 ___。',
       options: ['打破沉默，让气氛轻松起来', '把冰块打碎', '弄坏了东西', '提前离开聚会'], answer: 0,
       explain: '不要选字面意思“打碎冰块”。看前后：一开始没人说话 → Mike 讲笑话 break the ice → 很快大家都开心地聊起来。前后对比说明这个短语是“打破冷场、活跃气氛”。' },
-    { type: 'choice', q: 'Lucy was a little nervous before her first piano show. She took a deep breath, smiled at the audience and began to play. When she finished, everyone stood up and clapped. 根据短文，可以推出 ___。',
-      options: ['The audience enjoyed her playing.', 'Lucy will never feel nervous on stage again.', 'Learning the piano is good for children\'s brains.', 'Lucy was too nervous to finish her show.'], answer: 0,
-      explain: '依据 everyone stood up and clapped（大家起立鼓掌）往前推一步：观众喜欢她的演奏。其余三项正好是三类错项：“再也不会紧张”用了 never，推过头了；“学钢琴对大脑好”可能是常识，但文中根本没讲；“紧张得没弹完”和 When she finished 矛盾。' },
+    { type: 'choice', q: 'Lucy was a little nervous before her first piano show. She took a deep breath, smiled at the people in the hall and began to play. When she finished, everyone stood up and cheered. 根据短文，可以推出 ___。',
+      options: ['People in the hall enjoyed her playing.', 'Lucy will never feel nervous on stage again.', 'Learning the piano is good for children\'s brains.', 'Lucy was too nervous to finish her show.'], answer: 0,
+      explain: '依据 everyone stood up and cheered（大家起立欢呼）往前推一步：观众喜欢她的演奏。其余三项正好是三类错项：“再也不会紧张”用了 never，推过头了；“学钢琴对大脑好”可能是常识，但文中根本没讲；“紧张得没弹完”和 When she finished 矛盾。' },
     { type: 'choice', q: 'Tom\'s alarm clock didn\'t ring this morning. He woke up at 7:40, jumped out of bed and ran out of the house without breakfast. He got to school just as the bell rang. 下面哪一项是“推理”出来的，而不是原文直接写了的？',
       options: ['Tom was in a hurry this morning.', 'Tom woke up at 7:40.', 'Tom didn\'t have breakfast.', 'Tom is always late for school.'], answer: 0,
       explain: '“原文照搬”陷阱：“7:40 起床”“没吃早饭”原文直接写了，是细节，不是推理。把“闹钟没响、跳下床、没吃早饭就跑出门、铃响时刚到”连起来，才能推出“他今天早上很匆忙”。“总是迟到”用了 always，推过头了，而且他今天也没迟到。' },
@@ -149,15 +149,15 @@ KG.nodes.push(
       explain: '第一段：他练习了好几个小时，还录音检查发音，Still（尽管如此）手还在发抖。认真准备之后还发抖，说明是第一次讲解很紧张。冷、累文中没提；生气男孩的事发生在后面，而且他当时是脸红想逃走，不是生气。' },
     { type: 'choice', passage: 'p1', q: 'What can we infer about Mr. Zheng?',
       options: ['He knew how to help others out of trouble kindly.', 'He was the little boy\'s grandfather.', 'He thought the writer should stop being a guide.', 'He didn\'t know why bronze turns green.'], answer: 0,
-      explain: '第二、三段：作者答不上来、很尴尬时，老志愿者郑先生走过来先夸男孩问得好，再带大家一起找答案，事后还拍拍作者肩膀表示鼓励。可以推出他善于友好地帮人解围。他解释了青铜变绿的原因，所以“他不知道”是错的；另外两项文中没有依据。' },
+      explain: '第二、三段：作者答不上来、很尴尬时，老志愿者郑先生走过来先夸男孩问得好，再带大家一起找答案，事后还把手放在作者肩上表示鼓励。可以推出他善于友好地帮人解围。他解释了青铜变绿的原因，所以“他不知道”是错的；另外两项文中没有依据。' },
     { type: 'choice', passage: 'p1', q: 'At the end of the story, how does the writer see questions that can\'t be answered right away?',
-      options: ['As a chance to learn something new.', 'As something to be ashamed of.', 'As questions that guides should avoid.', 'As things that are not important at all.'], answer: 0,
-      explain: '最后一段：从那以后他带着小本子，答不上的问题记下来、晚上查清楚，到暑假结束本子写满了、信心也满了。说明他把答不上的问题当成学习的机会。“觉得丢脸”是他第一天的感受，后来已经变了。' },
+      options: ['As a chance to learn something new.', 'As something that makes him look stupid.', 'As questions that guides should avoid.', 'As things that are not important at all.'], answer: 0,
+      explain: '最后一段：从那以后他带着小本子，答不上的问题记下来、晚上查清楚，到暑假结束本子写满了、信心也满了。说明他把答不上的问题当成学习的机会。“让他显得很傻、很丢脸”是他第一天的感受，后来已经变了。' },
     { type: 'choice', passage: 'p1', q: 'What will the writer probably do next week?',
       options: ['Help the new volunteers get ready.', 'Leave the museum and go back to school.', 'Ask Mr. Zheng to give all the talks.', 'Write a book about bronze ware.'], answer: 0,
       explain: '下文推测看最后一句：下周有新志愿者加入，博物馆请他帮助他们为第一天做准备（help them prepare）。所以他下周很可能帮新志愿者做准备。' },
     { type: 'choice', passage: 'p1', q: 'Where can you most probably read this passage?',
-      options: ['In a collection of students\' stories about growing up.', 'In a price list of museum tickets.', 'In a science book about metals.', 'In a guidebook to restaurants in Fuzhou.'], answer: 0,
+      options: ['In a collection of students\' stories about growing up.', 'In a price list of museum tickets.', 'In a science book about metals.', 'In a guide to restaurants in Fuzhou.'], answer: 0,
       explain: '全文用第一人称讲一个学生做志愿者、从紧张到自信的成长故事，最可能出现在学生成长故事集里。虽然提到青铜变绿，但只是一个小细节，不是科普书；也不是票价表或美食指南。' },
     { type: 'choice', passage: 'p2', q: 'The underlined word "litter" in Paragraph 1 means ___.',
       options: ['垃圾', '贝壳', '沙子', '海鱼'], answer: 0,
@@ -184,10 +184,10 @@ KG.nodes.push(
       options: ['Some children in the area depend on the library for books.', 'All the families in the city are too poor to buy books.', 'Mrs. Lin will lose her job and leave the city.', 'Reading paper books is better than reading e-books.'], answer: 0,
       explain: '依据：Many families in our area can\'t afford to buy many books. Without this library, their children would have nowhere else to read（没有图书馆，孩子们放学后就没地方看书了）。推一步：一些孩子靠这个图书馆读书。“全市所有家庭”用了 all，范围又从 our area 扩大到 city，太绝对；“林老师会失业离开”推过头了；纸质书和电子书的比较文中根本没讲，是用常识代替原文。' },
     { type: 'choice', passage: 'p3', q: 'Why did the writer write this letter?',
-      options: ['To ask the city to keep the library open.', 'To tell readers how to book a study room.', 'To advertise a new car park.', 'To thank the newspaper for its report.'], answer: 0,
+      options: ['To ask the city to keep the library open.', 'To tell readers how to book a study room.', 'To tell people about a new car park.', 'To thank the newspaper for its report.'], answer: 0,
       explain: '写作意图题：整封信都在说图书馆有多好、关掉有什么坏处，并建议把钱用来修图书馆。目的是希望保留图书馆。预订自习室只是一个小细节；作者反对建停车场；信里也没有感谢报纸。' },
     { type: 'choice', passage: 'p3', q: 'Where can you most probably read this passage?',
-      options: ['In the readers\' letters part of a newspaper.', 'In a library\'s list of opening hours.', 'In a storybook for little children.', 'In a travel guide to the city.'], answer: 0,
+      options: ['In the readers\' letters part of a newspaper.', 'In a library\'s list of opening hours.', 'In a book of stories for little children.', 'In a travel guide to the city.'], answer: 0,
       explain: '出处题看格式：开头 Dear Editor（编辑您好），第一句又说 I read in your newspaper（我在贵报上读到），结尾有署名。这是读者写给报纸的信，最可能刊登在报纸的读者来信栏目里。' },
     { type: 'choice', passage: 'p3', q: 'What will the writer probably write about in the next letter?',
       options: ['The plan to save the library.', 'The history of car parks in the city.', 'How to become a librarian.', 'The best books for Grade 8 students.'], answer: 0,
@@ -290,23 +290,23 @@ KG.nodes.push(
       <p><b>C 为什么多余</b>：C 讲熊猫住在哪儿，和“吃”这条主线无关，放进哪个空都接不上。</p>` }
   ],
   passages: {
-    e1: { title: '例题短文：How to Keep a Goldfish', html: `
-      <p>Do you want to keep a pet goldfish? <span class="blank">(1)</span>______ First, choose a large bowl or tank. A small bowl gets dirty very quickly. <span class="blank">(2)</span>______ Fresh water keeps your fish healthy. Third, don't give your fish too much food. Goldfish only need a little food once or twice a day. <span class="blank">(3)</span>______ If you follow these steps, your goldfish can live for many years.</p>
+    e1: { title: '例题短文：How to Keep a Pet Fish', html: `
+      <p>Do you want to keep a pet fish? <span class="blank">(1)</span>______ First, choose a large bowl. A small bowl gets dirty very quickly. <span class="blank">(2)</span>______ Fresh water keeps your fish healthy. Third, don't give your fish too much food. Pet fish only need a little food once or twice a day. <span class="blank">(3)</span>______ If you follow these steps, your fish can live for many years.</p>
       <p><b>句子库：</b><br>
       A. It is easier than you might think.<br>
       B. Second, change part of the water every week.<br>
       C. Too much food will make the water dirty and the fish sick.<br>
-      D. Goldfish come in many different colours.</p>` },
+      D. Pet fish come in many different colours.</p>` },
     e2: { title: '例题短文（六选四）：Be a Better Learner', html: `
       <p>Why do some students learn faster than others? <span class="blank">(1)</span>______ The good news is that anyone can build these habits.</p>
       <p><span class="blank">(2)</span>______ Before each class, spend ten minutes reading the new lesson. Mark the parts you don't understand, and pay special attention to them in class.</p>
       <p><b>Ask questions.</b> Many students are afraid to ask questions because they worry that others will laugh at them. <span class="blank">(3)</span>______ Most teachers are happy to help, and your classmates may have the same question.</p>
       <p><b>Review often.</b> Scientists have found that we forget about half of what we learn within a day. <span class="blank">(4)</span>______ Even ten minutes of review each evening can make a big difference.</p>
       <p><b>句子库：</b><br>
-      A. Preview your lessons.<br>
+      A. Prepare for new lessons.<br>
       B. Usually it is not because they are cleverer, but because they have good learning habits.<br>
       C. But asking is the fastest way to clear up a problem.<br>
-      D. That is why going over your notes regularly is so important.<br>
+      D. That is why going over your notes often is so important.<br>
       E. Last night, Tom read Lesson 5 for ten minutes before bed.<br>
       F. Many scientists work in big labs.</p>` },
     p1: { title: 'Passage 1（六选五）: How to Make Friends at a New School', html: `
@@ -325,7 +325,7 @@ KG.nodes.push(
     p2: { title: 'Passage 2（七选五）: Sleep Well, Learn Well', html: `
       <p>Many middle school students don't get enough sleep. They stay up late to finish homework, play on their phones or watch videos. <span class="blank">(1)</span>______ Scientists say that teenagers need about 8 to 10 hours of sleep every night.</p>
       <p>Why is sleep so important? <span class="blank">(2)</span>______ While you are asleep, your brain sorts out what you learned during the day and stores it in your memory. That is why a good night's sleep before an exam is more useful than staying up all night.</p>
-      <p>Lack of sleep also affects your health and mood. <span class="blank">(3)</span>______ They may also catch colds more easily because their bodies have less energy to fight illness.</p>
+      <p>Too little sleep is also bad for your health and feelings. <span class="blank">(3)</span>______ They may also catch colds more easily because their bodies have less energy to fight illness.</p>
       <p>So how can you sleep better? First, try to go to bed and get up at the same time every day, even at weekends. <span class="blank">(4)</span>______ The blue light from screens tells your brain that it is still daytime, so it becomes harder to fall asleep. Finally, don't drink tea or coffee in the evening.</p>
       <p><span class="blank">(5)</span>______ Treat it as seriously as your homework, and you will find yourself healthier, happier and more energetic every day.</p>
       <p><b>句子库：</b><br>
@@ -339,39 +339,39 @@ KG.nodes.push(
     p3: { title: 'Passage 3（七选五）: Save Water at Home', html: `
       <p>Fresh water makes up less than 3% of all the water on the earth, and much of it is frozen as ice. <span class="blank">(1)</span>______ Luckily, there are many simple ways to save water at home.</p>
       <p><span class="blank">(2)</span>______ A running tap wastes about 6 litres of water a minute. Turn it off while you brush your teeth or wash your hands, and turn it on only when you really need it.</p>
-      <p><b>Fix leaks quickly.</b> <span class="blank">(3)</span>______ A dripping tap, for example, can waste thousands of litres a year. If you find a leak, tell your parents and get it repaired as soon as possible.</p>
-      <p><b>Reuse water.</b> Don't pour away the water after washing vegetables or rice. <span class="blank">(4)</span>______ You can also use it to clean the floor or flush the toilet.</p>
-      <p><span class="blank">(5)</span>______ If every family makes these small changes, together we can save a huge amount of water for the future.</p>
+      <p><b>Repair broken taps quickly.</b> <span class="blank">(3)</span>______ A tap that loses one drop every second, for example, can waste thousands of litres a year. If you find a broken tap, tell your parents and get it repaired as soon as possible.</p>
+      <p><b>Reuse water.</b> Don't pour away the water after washing vegetables or rice. <span class="blank">(4)</span>______ You can also use it to clean the floor or the toilet.</p>
+      <p><span class="blank">(5)</span>______ If every family makes these small changes, together we can save lots of water for the future.</p>
       <p><b>句子库：</b><br>
       A. Turn off the tap.<br>
-      B. So the water we can actually use is very limited.<br>
+      B. So there is not much water that we can actually use.<br>
       C. It is perfect for watering flowers and plants.<br>
-      D. Even a small leak can waste a surprising amount of water.<br>
+      D. Even a small problem with a tap can waste a lot of water.<br>
       E. Every drop of water counts.<br>
       F. My sister once left the tap running while she was on the phone.<br>
       G. Ice skating is a popular winter sport.</p>` }
   },
   examples: [
     { type: 'choice', passage: 'e1', q: '第 (1) 空应填入哪一句？',
-      options: ['It is easier than you might think.', 'Second, change part of the water every week.', 'Goldfish come in many different colours.'], answer: 0,
-      explain: '空前是问句“你想养金鱼吗？”，空后马上开始讲步骤 First...。中间需要一句承上启下的话：“这比你想的要容易”，引出下面的方法。Second 不能出现在 First 之前；颜色和养鱼方法无关。' },
+      options: ['It is easier than you might think.', 'Second, change part of the water every week.', 'Pet fish come in many different colours.'], answer: 0,
+      explain: '空前是问句“你想养宠物鱼吗？”，空后马上开始讲步骤 First...。中间需要一句承上启下的话：“这比你想的要容易”，引出下面的方法。Second 不能出现在 First 之前；颜色和养鱼方法无关。' },
     { type: 'choice', passage: 'e1', q: '第 (2) 空应填入哪一句？',
-      options: ['Second, change part of the water every week.', 'Too much food will make the water dirty and the fish sick.', 'Goldfish come in many different colours.'], answer: 0,
+      options: ['Second, change part of the water every week.', 'Too much food will make the water dirty and the fish sick.', 'Pet fish come in many different colours.'], answer: 0,
       explain: '顺序线索：前面有 First，所以这里接 Second。复现线索：空后 Fresh water（干净的水）正好对应“每周换一部分水”。讲“喂太多食物”的句子要等后文提到喂食时才出现。' },
     { type: 'choice', passage: 'e1', q: '第 (3) 空应填入哪一句？',
-      options: ['Too much food will make the water dirty and the fish sick.', 'It is easier than you might think.', 'Goldfish come in many different colours.'], answer: 0,
+      options: ['Too much food will make the water dirty and the fish sick.', 'It is easier than you might think.', 'Pet fish come in many different colours.'], answer: 0,
       explain: '空前讲“别喂太多，一天一两次就够”，空里应该解释原因：食物太多会弄脏水、让鱼生病。复现词 food 前后呼应，而且意思也真的接得上，不是单纯撞词。' },
     { type: 'choice', passage: 'e2', q: '第 (1) 空应填入哪一句？',
       options: ['Usually it is not because they are cleverer, but because they have good learning habits.', 'But asking is the fastest way to clear up a problem.', 'Last night, Tom read Lesson 5 for ten minutes before bed.'], answer: 0,
       explain: '问句线索：空前问“为什么有些学生学得更快？”，空里应该回答原因。代词线索：空后 anyone can build these habits 里的 these habits 必须在空里找到所指——只有“因为他们有好的学习习惯”提到了 habits。讲“提问”的句子以 But 开头，前面没有可转折的内容；Tom 的句子是一个具体例子，Tom 前文也没出现过。' },
     { type: 'choice', passage: 'e2', q: '第 (2) 空应填入哪一句？',
-      options: ['Preview your lessons.', 'Last night, Tom read Lesson 5 for ten minutes before bed.', 'That is why going over your notes regularly is so important.'], answer: 0,
-      explain: '句式平行线索：后两段的开头是 Ask questions. 和 Review often.，都是简短的祈使句小标题，所以这一段开头也应该是同样结构的小标题。段首主旨：空后讲“课前花十分钟读新课、标出不懂的地方”，概括起来就是“预习功课”。Tom 的句子是“把例子当主旨”的陷阱：它只是一个具体例子，不能概括全段；而且这里是给读者的建议，不是讲 Tom 的故事。' },
+      options: ['Prepare for new lessons.', 'Last night, Tom read Lesson 5 for ten minutes before bed.', 'That is why going over your notes often is so important.'], answer: 0,
+      explain: '句式平行线索：后两段的开头是 Ask questions. 和 Review often.，都是简短的祈使句小标题，所以这一段开头也应该是同样结构的小标题。段首主旨：空后讲“课前花十分钟读新课、标出不懂的地方”，概括起来就是“为新课做好准备”（预习）。Tom 的句子是“把例子当主旨”的陷阱：它只是一个具体例子，不能概括全段；而且这里是给读者的建议，不是讲 Tom 的故事。' },
     { type: 'choice', passage: 'e2', q: '第 (3) 空应填入哪一句？',
       options: ['But asking is the fastest way to clear up a problem.', 'Many scientists work in big labs.', 'Usually it is not because they are cleverer, but because they have good learning habits.'], answer: 0,
       explain: '要“左顾右盼”：空前说很多学生怕被笑话而不敢提问，空后说老师很乐意帮忙、同学也可能有同样的问题——都是在劝人去问。空里用 But 转折：“但提问是解决问题最快的办法”，前后都接得上。科学家的句子和提问无关。' },
     { type: 'choice', passage: 'e2', q: '第 (4) 空应填入哪一句？',
-      options: ['That is why going over your notes regularly is so important.', 'Many scientists work in big labs.', 'Preview your lessons.'], answer: 0,
+      options: ['That is why going over your notes often is so important.', 'Many scientists work in big labs.', 'Prepare for new lessons.'], answer: 0,
       explain: '撞词陷阱：空前有 Scientists，“很多科学家在大实验室工作”也有 scientists，但意思接不上。正确的思路：空前说“一天之内会忘掉一半”，空里用 That is why（这就是为什么）引出结论“经常复习笔记很重要”；空后 Even ten minutes of review 里的 review 正好和 going over your notes 复现。' },
     { type: 'fill', q: '七选五：7 个句子填 5 个空，会多出 ___ 个干扰项。（填阿拉伯数字）',
       answer: ['2', 'two'],
@@ -425,7 +425,7 @@ KG.nodes.push(
       explain: '问句线索：空前问 Why is sleep so important?，空里应给出原因 One reason is that...。空后又讲大脑在睡眠中整理、储存记忆，正好解释 remember things。' },
     { type: 'choice', passage: 'p2', q: '第 (3) 空应填入哪一句？',
       options: ['Students who sleep too little are easily angry or upset.', 'Some students go to bed early and get up early.', 'Sleep is not a waste of time—it is an important part of learning.'], answer: 0,
-      explain: '段首句说缺觉影响健康和情绪（mood）。空里讲情绪：睡得少的学生容易生气、烦躁。空后 They may also catch colds 中的 They 要指“睡得少的学生”，also 表示再补充一个健康问题。早睡早起的学生不会因缺觉而感冒，接不上。' },
+      explain: '段首句说睡得太少对健康和情绪（feelings）都不好。空里讲情绪：睡得少的学生容易生气、烦躁。空后 They may also catch colds 中的 They 要指“睡得少的学生”，also 表示再补充一个健康问题。早睡早起的学生不会因缺觉而感冒，接不上。' },
     { type: 'choice', passage: 'p2', q: '第 (4) 空应填入哪一句？',
       options: ['Second, put away your phone at least half an hour before bed.', 'As a result, they often feel sleepy in class the next morning.', 'Tea is one of the most popular drinks in Fujian.'], answer: 0,
       explain: '顺序线索：空前 First，空后 Finally，中间是 Second。复现线索：空后讲 The blue light from screens（屏幕的蓝光），对应 phone。茶的句子是撞词陷阱：后面 Finally 句虽然提到 tea，但讲的是“晚上别喝茶”，不是“茶很受欢迎”。' },
@@ -433,19 +433,19 @@ KG.nodes.push(
       options: ['Sleep is not a waste of time—it is an important part of learning.', 'Students who sleep too little are easily angry or upset.', 'Some students go to bed early and get up early.'], answer: 0,
       explain: '段尾总结：最后一段是全文结论。空后 Treat it as seriously as your homework 里的 it 指“睡眠”，所以空里要以 sleep 为话题并作总结：睡眠不是浪费时间，而是学习的重要部分。其他两句的 it 都对不上。' },
     { type: 'choice', passage: 'p3', q: '第 (1) 空应填入哪一句？',
-      options: ['So the water we can actually use is very limited.', 'Ice skating is a popular winter sport.', 'My sister once left the tap running while she was on the phone.', 'It is perfect for watering flowers and plants.'], answer: 0,
-      explain: '空前说淡水不到 3%，而且很多还冻成了冰；空里用 So 得出结果：我们真正能用的水很有限。空后 Luckily（幸运的是）引出节水办法，也顺。滑冰那句是撞词陷阱（ice），意思完全无关；姐姐忘关水龙头是一个具体例子，前文还没讲到用水习惯，接不上；It is perfect for watering flowers 里的 It 在这里找不到所指。' },
+      options: ['So there is not much water that we can actually use.', 'Ice skating is a popular winter sport.', 'My sister once left the tap running while she was on the phone.', 'It is perfect for watering flowers and plants.'], answer: 0,
+      explain: '空前说淡水不到 3%，而且很多还冻成了冰；空里用 So 得出结果：我们真正能用的水并不多。空后 Luckily（幸运的是）引出节水办法，也顺。滑冰那句是撞词陷阱（ice），意思完全无关；姐姐忘关水龙头是一个具体例子，前文还没讲到用水习惯，接不上；It is perfect for watering flowers 里的 It 在这里找不到所指。' },
     { type: 'choice', passage: 'p3', q: '第 (2) 空应填入哪一句？',
-      options: ['Turn off the tap.', 'My sister once left the tap running while she was on the phone.', 'Even a small leak can waste a surprising amount of water.'], answer: 0,
-      explain: '句式平行：后面两段的小标题是 Fix leaks quickly. 和 Reuse water.，都是祈使句，所以这里也要一个祈使句小标题。段首主旨：本段讲水龙头开着浪费水、刷牙洗手时要关掉，概括就是“关掉水龙头”；空后 Turn it off 里的 it 也指 the tap。“姐姐打电话时没关水龙头”只是一个具体例子，不能当段首主旨句。' },
+      options: ['Turn off the tap.', 'My sister once left the tap running while she was on the phone.', 'Even a small problem with a tap can waste a lot of water.'], answer: 0,
+      explain: '句式平行：后面两段的小标题是 Repair broken taps quickly. 和 Reuse water.，都是祈使句，所以这里也要一个祈使句小标题。段首主旨：本段讲水龙头开着浪费水、刷牙洗手时要关掉，概括就是“关掉水龙头”；空后 Turn it off 里的 it 也指 the tap。“姐姐打电话时没关水龙头”只是一个具体例子，不能当段首主旨句。' },
     { type: 'choice', passage: 'p3', q: '第 (3) 空应填入哪一句？',
-      options: ['Even a small leak can waste a surprising amount of water.', 'It is perfect for watering flowers and plants.', 'My sister once left the tap running while she was on the phone.'], answer: 0,
-      explain: '本段小标题是 Fix leaks quickly（及时修理漏水）。空后 A dripping tap, for example（比如一个滴水的水龙头）是举例，说明空里应该是被举例说明的概括句：“哪怕很小的漏水也会浪费惊人的水量”。leak（漏水）和 dripping tap（滴水的龙头）是上下义复现。浇花那句的 It 在这一段指不到东西；姐姐那句讲的是忘关水龙头，不是漏水。' },
+      options: ['Even a small problem with a tap can waste a lot of water.', 'It is perfect for watering flowers and plants.', 'My sister once left the tap running while she was on the phone.'], answer: 0,
+      explain: '本段小标题是 Repair broken taps quickly（及时修理坏了的水龙头）。空后 A tap that loses one drop every second, for example（比如一个每秒滴一滴水的水龙头）是举例，说明空里应该是被举例说明的概括句：“水龙头哪怕有一点小毛病，也会浪费很多水”。a small problem with a tap（水龙头的小毛病）和“每秒滴一滴的龙头”是概括与具体的复现。浇花那句的 It 在这一段指不到东西；姐姐那句讲的是忘关水龙头，不是龙头坏了。' },
     { type: 'choice', passage: 'p3', q: '第 (4) 空应填入哪一句？',
       options: ['It is perfect for watering flowers and plants.', 'Ice skating is a popular winter sport.', 'Turn off the tap.'], answer: 0,
       explain: '代词 + 递进线索：空前说“洗菜洗米的水别倒掉”，空里 It 指这些水，“用来浇花很合适”；空后 You can also use it to... 中的 also 表示“还可以”，说明空里已经讲过一种用法。“关掉水龙头”是另一段的小标题，接不上。' },
     { type: 'choice', passage: 'p3', q: '第 (5) 空应填入哪一句？',
-      options: ['Every drop of water counts.', 'My sister once left the tap running while she was on the phone.', 'So the water we can actually use is very limited.'], answer: 0,
+      options: ['Every drop of water counts.', 'My sister once left the tap running while she was on the phone.', 'So there is not much water that we can actually use.'], answer: 0,
       explain: '最后一段是全文总结。空后说“如果每个家庭都做出这些小改变，我们就能省下大量的水”，空里用“每一滴水都很重要”作为结论句最合适。姐姐那句是具体例子，放在结尾不能总结全文；So 那句是第一段讲“淡水少”的结果，放在这里前面没有原因。' },
     { type: 'fill', q: '六选五：6 个句子填 5 个空，会多出 ___ 个干扰项。（填阿拉伯数字）',
       answer: ['1', 'one'],
@@ -462,9 +462,9 @@ KG.nodes.push(
     { type: 'choice', q: '一篇文章给出三条建议，小标题是：Eat breakfast every day. / ______ / Go to bed early. 哪一句最适合做中间的小标题？',
       options: ['Exercise for 30 minutes a day.', 'Exercising is what my friend loves most.', 'My cousin runs in the park every morning.'], answer: 0,
       explain: '句式平行：另外两个小标题都是“动词原形开头的祈使句”，中间的也应该一样，选 Exercise for 30 minutes a day.。“我朋友最爱运动”不是建议；“表哥每天早上跑步”只是一个具体例子，不能当小标题（把例子当主旨的陷阱）。' },
-    { type: 'choice', q: '短文：Our school library has a lot of interesting books. ______ Science fiction, detective stories and fairy tales are the most popular. 空里最适合填哪一句？',
-      options: ['Story books are the students\' favourite.', 'Fairy tales are often told to small children at bedtime.', 'The library opens at 8 a.m.'], answer: 0,
-      explain: '上下义复现：空后的科幻、侦探故事、童话都属于 story books（故事书）这一类，空里先说“故事书最受学生欢迎”，空后再具体说哪几种最受欢迎，衔接自然。童话那句是撞词陷阱，虽然有 fairy tales，但讲的是“睡前给小孩讲童话”，和图书馆借书无关；开馆时间也接不上。' }
+    { type: 'choice', q: '短文：Our school library has a lot of interesting books. ______ Detective stories, funny stories and fairy tales are the most popular. 空里最适合填哪一句？',
+      options: ['Story books are the students\' favourite.', 'Fairy tales are often told to small children before bed.', 'The library opens at 8 a.m.'], answer: 0,
+      explain: '上下义复现：空后的侦探故事、趣味故事、童话都属于 story books（故事书）这一类，空里先说“故事书最受学生欢迎”，空后再具体说哪几种最受欢迎，衔接自然。童话那句是撞词陷阱，虽然有 fairy tales，但讲的是“睡前给小孩讲童话”，和图书馆借书无关；开馆时间也接不上。' }
   ]
 },
 
@@ -537,7 +537,7 @@ KG.nodes.push(
     e1: { title: '例题短文：Tom in Xiamen', html: `
       <p>My name is Tom. I come from Canada, but now I live in Xiamen with my parents. My father teaches at a university there. I study at No. 1 Middle School. I go to school by bike every day because it is only ten minutes away. My favourite subject is Chinese. I think it is difficult but interesting.</p>` },
     e2: { title: '例题短文：Lucy\'s Summer Job', html: `
-      <p>Hi, I'm Lucy. Last summer, I worked at a pet shop near my home for six weeks. Every morning, I fed the dogs and cleaned their cages. At first, I found the work tiring, and I often wanted to stay in bed. But soon I began to enjoy it. The happiest moment came when a little girl took home a puppy that I had looked after for a month. <u>This experience taught me that hard work can bring real happiness.</u></p>
+      <p>Hi, I'm Lucy. Last summer, I worked at a pet shop near my home for six weeks. Every morning, I fed the dogs and cleaned their cages. At first, I found the work tiring, and I often wanted to stay in bed. But soon I began to enjoy it. The happiest moment came when a little girl took home a little dog that I had looked after for a month. <u>This experience taught me that hard work can bring real happiness.</u></p>
       <table class="tbl">
         <tr><th colspan="2">Lucy's Summer Job</th></tr>
         <tr><td>Place</td><td>A pet shop near her home</td></tr>
@@ -547,22 +547,22 @@ KG.nodes.push(
     p1: { title: 'Passage 1: The Girl from the Tea Hills', html: `
       <p>Chen Mei is a 15-year-old girl from Anxi, a county in Fujian famous for its tea. Her grandparents have grown tea on the hills for more than forty years.</p>
       <p>Every spring, Chen Mei goes to the tea garden with her grandmother. They get up at five o'clock in the morning, because they want to finish picking before the sun gets too hot. Her grandmother can pick tea leaves twice as fast as Chen Mei. "You need quick hands and a patient heart," she always says.</p>
-      <p>After picking, the leaves are not ready to drink yet. They have to be dried, rolled and heated again and again. The whole process takes almost two days. Chen Mei's grandfather is in charge of this part, and he never lets anyone else touch the fire.</p>
+      <p>After picking, the leaves are not ready to drink yet. There are several steps: they have to be dried, pressed and heated again and again. All the steps take almost two days. Chen Mei's grandfather looks after this part, and he never lets anyone else touch the fire.</p>
       <p>Last year, Chen Mei started a short-video account to introduce her family's tea. In her videos, she shows how tea is made and teaches people how to make a good cup of tea. To her surprise, more than 10,000 people have followed her account. Some of them have even come to Anxi to visit the tea garden.</p>
       <p>"Tea is not only a drink," Chen Mei says. "It is a part of our hometown's culture. I hope more young people will learn about it."</p>` },
     p2: { title: 'Passage 2: Volunteers Wanted!', html: `
       <p>Do you want to make your summer holiday meaningful? Sunshine Community Center in Fuzhou is looking for student volunteers.</p>
       <p><b>What will you do?</b> You will help the old people who live alone in our community. You can read newspapers to them, teach them how to use smartphones, or simply chat with them.</p>
       <p><b>When?</b> Every Saturday morning from 9:00 to 11:30, from July 12th to August 23rd.</p>
-      <p><b>Who can join?</b> Students aged 13 to 18. You should be friendly and patient. If you can speak the Fuzhou dialect, that will be a plus, because many old people here don't speak Mandarin well.</p>
+      <p><b>Who can join?</b> Students aged 13 to 18. You should be friendly and patient. If you can speak the local language of Fuzhou, that will be a plus, because many old people here don't speak Mandarin well.</p>
       <p><b>How to join?</b> Fill in a form at the center's office on Wuyi Road before July 5th.</p>
-      <p>Every volunteer will get a certificate at the end of the activity. Come and join us—your smile can light up someone's day!</p>
+      <p>Every volunteer will get a gift at the end of the activity. Come and join us—your smile can light up someone's day!</p>
       <table class="tbl">
         <tr><th colspan="2">Sunshine Community Center: Summer Volunteers</th></tr>
         <tr><td>Job</td><td>Helping old people who live (6) ______</td></tr>
         <tr><td>Time</td><td>Every (7) ______ morning, 9:00–11:30</td></tr>
         <tr><td>Age</td><td>From 13 to (8) ______</td></tr>
-        <tr><td>A plus</td><td>Being able to speak the Fuzhou (9) ______</td></tr>
+        <tr><td>A plus</td><td>Being able to speak the local (9) ______ of Fuzhou</td></tr>
         <tr><td>Reward</td><td>A (10) ______ at the end of the activity</td></tr>
       </table>` },
     p3: { title: 'Passage 3: My First Time Cooking for My Family', html: `
@@ -604,7 +604,7 @@ KG.nodes.push(
       options: ['这次经历让我明白，努力工作能带来真正的快乐。', '这次实验教会我如何努力工作。', '这次经历告诉我，快乐的人工作更努力。', '这份工作很辛苦，但是很快乐。'], answer: 0,
       explain: 'experience 在这里是“经历”，不是 experiment（实验）；taught me that... 是“让我明白……”；hard work can bring real happiness 是“努力工作能带来真正的快乐”，主语是 hard work，不能把因果说反成“快乐的人工作更努力”。翻译要每个部分都对上。' },
     { type: 'choice', passage: 'e2', q: 'Which is the best title for the passage?',
-      options: ['My Summer Job at a Pet Shop', 'How to Choose a Puppy', 'A Little Girl\'s New Home', 'Why Dogs Are Good Pets'], answer: 0,
+      options: ['My Summer Job at a Pet Shop', 'How to Choose a Pet Dog', 'A Little Girl\'s New Home', 'Why Dogs Are Good Pets'], answer: 0,
       explain: '概括标题要覆盖全文：全文讲 Lucy 暑假在宠物店打工的经历和收获。“小女孩的新家”只是其中一个细节；“怎么选小狗”“为什么狗是好宠物”文中都没讲。' },
     { type: 'choice', q: '原文：Mike went to the library because he wanted to borrow a book about space. 题目：Why did Mike go to the library?（用不超过 6 个词回答）下面哪个答案最好？',
       options: ['To borrow a book about space.', 'Because he wanted to borrow a book about space.', 'In the afternoon.', 'Because I wanted to borrow a book.'], answer: 0,
@@ -632,9 +632,9 @@ KG.nodes.push(
     { type: 'fill', passage: 'p1', q: '同义句：Her grandmother can pick tea leaves much ___ than Chen Mei.（填一个词）',
       answer: ['faster', 'quicker', 'more quickly'],
       explain: '原文 twice as fast as Chen Mei（是她速度的两倍），意思就是“比她快得多”。比较级用 faster（也可以说 more quickly / quicker）。' },
-    { type: 'fill', passage: 'p1', q: '第三段主要讲制茶的过程。请用文中一个词填空，概括第三段：the ___ of making tea',
-      answer: ['process'],
-      explain: '第三段讲采完叶子后要晾、揉、反复加热，并说 The whole process takes almost two days。process（过程）就是这一段的中心词。' },
+    { type: 'fill', passage: 'p1', q: '第三段主要讲制茶要经过哪些步骤。请用文中一个词填空，概括第三段：the ___ of making tea',
+      answer: ['steps'],
+      explain: '第三段讲采完叶子后 There are several steps（有好几个步骤）：晾干、压、反复加热，并说 All the steps take almost two days。steps（步骤）就是这一段的中心词，注意用复数。' },
     { type: 'fill', passage: 'p1', q: 'How many people have followed Chen Mei\'s account?（用 1–3 个词回答，可用阿拉伯数字）',
       answer: ['more than 10,000', 'more than 10000', 'over 10,000', 'over 10000', 'more than ten thousand', 'over ten thousand', 'more than 10,000 people', 'over 10,000 people', 'more than 10000 people', 'over 10000 people', 'more than ten thousand people', 'over ten thousand people'],
       explain: '第四段：more than 10,000 people have followed her account。注意要保留 more than（或写 over），只写 10,000 不准确。' },
@@ -653,12 +653,12 @@ KG.nodes.push(
     { type: 'fill', passage: 'p2', q: '第 (8) 空：From 13 to ___（填数字或英文单词）',
       answer: ['18', 'eighteen'],
       explain: '“Who can join?”部分：Students aged 13 to 18. 表格里前面用的是阿拉伯数字 13，填 18 最统一。' },
-    { type: 'fill', passage: 'p2', q: '第 (9) 空：Being able to speak the Fuzhou ___（填一个词）',
-      answer: ['dialect'],
-      explain: '“Who can join?”部分：If you can speak the Fuzhou dialect, that will be a plus. dialect 意思是“方言”，表格中的 A plus 就对应原文的 a plus（加分项）。' },
+    { type: 'fill', passage: 'p2', q: '第 (9) 空：Being able to speak the local ___ of Fuzhou（填一个词）',
+      answer: ['language'],
+      explain: '“Who can join?”部分：If you can speak the local language of Fuzhou, that will be a plus. the local language of Fuzhou 就是“福州本地话”，表格中的 A plus 就对应原文的 a plus（加分项）。' },
     { type: 'fill', passage: 'p2', q: '第 (10) 空：A ___ at the end of the activity（填一个词）',
-      answer: ['certificate'],
-      explain: '倒数第一段：Every volunteer will get a certificate at the end of the activity. 表格的 Reward（奖励）就是 certificate（证书）。注意拼写 c-e-r-t-i-f-i-c-a-t-e。' },
+      answer: ['gift'],
+      explain: '倒数第一段：Every volunteer will get a gift at the end of the activity. 表格的 Reward（奖励）就是 gift（礼物）。注意 A 后面填单数 gift。' },
     { type: 'fill', passage: 'p3', q: 'When did Lin Tao cook dinner for his family for the first time?（用 1–2 个词回答）',
       answer: ['last Sunday', 'Sunday', 'on Sunday'],
       explain: 'When 问时间。第一段：Last Sunday was my mother\'s birthday. I decided to cook dinner ... for the first time. 答 Last Sunday。' },
@@ -680,9 +680,9 @@ KG.nodes.push(
     { type: 'fill', passage: 'p3', q: 'To Lin Tao\'s mother, the dinner was a big ___.（填 surprised 的名词形式）',
       answer: ['surprise'],
       explain: '原文 My mother was very surprised（形容词）。这里 a big 后面要名词，surprised → surprise（惊喜）。这就是任务型阅读里常见的词形转换。' },
-    { type: 'fill', passage: 'p3', q: 'Cooking has taught Lin Tao the importance of ___ and care.（填 patient 的名词形式）',
-      answer: ['patience'],
-      explain: '原文 Cooking has taught me to be patient and careful。the importance of 后面要名词，并且和 care（名词）并列，所以 patient → patience（耐心）。注意拼写 p-a-t-i-e-n-c-e。' },
+    { type: 'fill', passage: 'p3', q: 'Cooking has taught Lin Tao to be patient and ___.（填 care 的形容词形式）',
+      answer: ['careful'],
+      explain: '原文 Cooking has taught me to be patient and careful。be 后面要形容词，并且和 patient（形容词）并列，所以 care（名词）→ careful（细心的）。后缀 -ful 把名词变成形容词，注意只有一个 l。' },
     { type: 'choice', passage: 'p3', q: '判断正误：Lin Tao had cooked dinner by himself many times before last Sunday.',
       options: ['F（错误）', 'T（正确）'], answer: 0,
       explain: '第一段：I decided to cook dinner ... for the first time ... but I had never done it myself. 他以前只是看奶奶做，从没自己做过，判 F。' },

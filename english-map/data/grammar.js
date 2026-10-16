@@ -113,7 +113,7 @@ KG.nodes.push(
     { type: 'choice', q: 'Mr. Lin teaches ___ English.', options: ['we', 'us', 'our'], answer: 1, explain: 'teach 是动词，后面用宾格 us。' },
     { type: 'choice', q: 'This is Lucy. ___ mother is a teacher.', options: ['She', 'Her', 'Hers'], answer: 1, explain: '后面有名词 mother，用形容词性物主代词 Her。' },
     { type: 'fill', q: '—Whose bag is this?<br>—It\'s ___.（用 she 的适当形式）', answer: ['hers'], explain: '后面没有名词，用名词性物主代词 hers。' },
-    { type: 'choice', q: 'The dog is wagging ___ tail.', options: ["it's", 'its', 'it'], answer: 1, explain: '“它的尾巴”用 its；it\'s 是 it is。' },
+    { type: 'choice', q: 'The cat is playing with ___ ball.', options: ["it's", 'its', 'it'], answer: 1, explain: '“它的球”用 its；it\'s 是 it is。' },
     { type: 'fill', q: 'Let ___ go to the park.（用 we 的适当形式）', answer: ['us'], explain: 'let 是动词，后面用宾格 us。' },
     { type: 'choice', q: 'The red bike is mine and the blue one is ___.', options: ['your', 'yours', 'you'], answer: 1, explain: '后面没有名词，用 yours（= your bike）。' },
     { type: 'fill', q: 'Look at the girl in red. ___ is my sister.（用 she 的适当形式）', answer: ['She'], explain: '句首做主语，用主格 She。' },
@@ -302,7 +302,7 @@ KG.nodes.push(
     { type: 'choice', q: '下面哪句是正确的？', options: ["She don't like fish.", "She doesn't likes fish.", "She doesn't like fish."], answer: 2, explain: "三单否定用 doesn't，后面动词还原为 like。" },
     { type: 'choice', q: 'I usually ___ up at six.', options: ['get', 'gets', 'getting'], answer: 0, explain: 'usually 表示习惯，用一般现在时；主语 I 用动词原形。' },
     { type: 'choice', q: '听句子，选出句子表达的意思。', say: 'My mother often goes shopping on Sundays.', options: ['妈妈周日经常去购物。', '妈妈这个周日去购物了。', '妈妈正在购物。'], answer: 0, explain: 'often 和 on Sundays（每逢周日）表示习惯，用一般现在时 goes。' },
-    { type: 'fill', q: 'Water ___ at 100°C.（boil）', answer: ['boils'], explain: '客观事实用一般现在时，water 不可数，看作三单，加 s。' },
+    { type: 'fill', q: 'A week ___ seven days.（have）', answer: ['has'], explain: '客观事实用一般现在时，a week 是三单，have 要变成 has。' },
     { type: 'fill', q: 'Kate ___ a glass of milk every morning.（drink）', answer: ['drinks'], explain: 'every morning 表习惯，Kate 是三单，一般情况加 s。' },
     { type: 'fill', q: 'The bus ___ at 7:30 every day.（leave）', answer: ['leaves'], explain: '主语 the bus 是三单，leave 加 s。' },
     { type: 'fill', q: 'He ___ his homework after school.（do）', answer: ['does'], explain: 'do 以 o 结尾，三单加 es：does。' },
@@ -361,7 +361,7 @@ KG.nodes.push(
     { type: 'choice', q: 'Be quiet! The baby ___.', options: ['sleeps', 'is sleeping', 'slept'], answer: 1, explain: 'Be quiet! 说明婴儿此刻正在睡觉，用现在进行时 is sleeping。' },
     { type: 'choice', q: '听句子，孩子们正在做什么？', say: 'Look! The children are flying kites in the park.', options: ['放风筝', '踢足球', '划船'], answer: 0, explain: 'are flying kites 表示“正在放风筝”。' },
     { type: 'choice', q: 'They ___ basketball now.', options: ['playing', 'are playing', 'is playing'], answer: 1, explain: '有 now 用现在进行时；they 用 are，be 动词不能省。' },
-    { type: 'fill', q: 'I ___ a storybook at the moment.（read，填两个词）', answer: ['am reading', "'m reading"], explain: 'at the moment 表示“此刻”，用 am reading。' },
+    { type: 'fill', q: 'I ___ a book at the moment.（read，填两个词）', answer: ['am reading', "'m reading"], explain: 'at the moment 表示“此刻”，用 am reading。' },
     { type: 'choice', q: '下面哪句是正确的？', options: ['She watching TV now.', 'She is watching TV now.', 'She is watch TV now.'], answer: 1, explain: '进行时结构是 be + 动词-ing，两部分都不能少。' },
     { type: 'fill', q: 'Look! Grandpa ___ the flowers.（water，填两个词）', answer: ['is watering'], explain: 'Look! 表示正在发生；water 一般情况直接加 ing。' },
     { type: 'fill', q: 'Look! Some girls ___ under the tree.（dance，填两个词）', answer: ['are dancing'], explain: 'dance 以不发音的 e 结尾，去 e 加 ing。' },
@@ -539,7 +539,7 @@ KG.nodes.push(
     { type: 'fill', q: 'This picture is ___ than that one.（beautiful，填两个词）', answer: ['more beautiful'], explain: 'beautiful 是多音节词，比较级在前面加 more。' },
     { type: 'choice', q: 'Your cold is getting ___. You should see a doctor.', options: ['bad', 'worse', 'worst'], answer: 1, explain: 'bad 的比较级是不规则的 worse，“越来越重了”用比较级。' },
     { type: 'choice', q: 'My room is ___ bigger than yours.', options: ['very', 'a lot', 'too'], answer: 1, explain: '修饰比较级可以用 much, a little, even, far, a lot，不能用 very 和 too。' },
-    { type: 'fill', q: 'Our hometown is becoming ___ ___ ___ beautiful.（越来越美丽，填三个词）', answer: ['more and more'], explain: '多音节词“越来越……”用 more and more + 原级，不能写 beautifuler and beautifuler。' },
+    { type: 'fill', q: 'Our city is becoming ___ ___ ___ beautiful.（越来越美丽，填三个词）', answer: ['more and more'], explain: '多音节词“越来越……”用 more and more + 原级，不能写 beautifuler and beautifuler。' },
     { type: 'choice', q: '___ you read, ___ you will write.', options: ['The more; the better', 'More; better', 'The most; the best'], answer: 0, explain: '“越……就越……”：the + 比较级, the + 比较级。' }
   ],
   tests: [
@@ -579,7 +579,7 @@ KG.nodes.push(
     { type: 'choice', q: '___ you eat, ___ you will be.', options: ['The more; the fatter', 'More; fatter', 'The most; the fattest'], answer: 0, explain: 'the + 比较级, the + 比较级，表示“吃得越多，就会越胖”。' },
     { type: 'fill', q: 'Tom is one of the ___ students in our class.（clever）', answer: ['cleverest', 'most clever'], explain: 'one of the + 最高级 + 复数名词。' },
     { type: 'choice', q: 'Quanzhou is one of the oldest ___ in China.', options: ['city', 'cities', 'citys'], answer: 1, explain: 'one of the + 最高级 + 复数名词：cities。' },
-    { type: 'choice', q: 'Lang Lang is one of ___ pianists in the world.', options: ['the greatest', 'greater', 'great'], answer: 0, explain: 'one of 后面用 the + 最高级。' }
+    { type: 'choice', q: 'Beijing is one of ___ cities in China.', options: ['the biggest', 'bigger', 'big'], answer: 0, explain: 'one of 后面用 the + 最高级。' }
   ]
 },
 
@@ -802,7 +802,7 @@ KG.nodes.push(
     { type: 'choice', q: 'The bag ___ leather.', options: ['is made of', 'is made from', 'is made in'], answer: 0, explain: '从皮包上看得出皮革，用 be made of。' },
     { type: 'fill', q: 'This kite is made ___ paper.（填 of 或 from）', answer: ['of'], explain: '风筝上看得出纸，用 of。' },
     { type: 'fill', q: 'Wine is made ___ grapes.（填 of 或 from）', answer: ['from'], explain: '从酒里看不出葡萄的样子，用 from。' },
-    { type: 'choice', q: 'Tofu ___ soybeans.', options: ['is made of', 'is made from', 'is made in'], answer: 1, explain: '豆腐里看不出黄豆的样子，用 be made from。' },
+    { type: 'choice', q: 'Cheese ___ milk.', options: ['is made of', 'is made from', 'is made in'], answer: 1, explain: '奶酪里看不出牛奶的样子，用 be made from。' },
     { type: 'fill', q: 'My watch was made ___ Switzerland.（填一个介词）', answer: ['in'], explain: '在某地制造用 be made in。' },
     { type: 'choice', q: '—Where was your phone made?<br>—It was made ___ Shenzhen.', options: ['in', 'of', 'from'], answer: 0, explain: '问产地，回答用 be made in + 地点。' }
   ]

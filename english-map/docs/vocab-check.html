@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>超纲词检查</title>
+<style>
+  :root { --bg:#f6f4ef; --fg:#1f2328; --muted:#6b6f76; --line:#ddd7cb; --bad:#c2410c; --card:#fff; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#17181b; --fg:#e8e6e1; --muted:#9a9ca3; --line:#36373d; --bad:#fb923c; --card:#212226; } }
+  body { background:var(--bg); color:var(--fg); font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; margin:0; padding:16px; line-height:1.6; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .muted { color:var(--muted); font-size:14px; }
+  table { border-collapse:collapse; width:100%; background:var(--card); margin:12px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  .w { color:var(--bad); font-family:Georgia,serif; white-space:nowrap; }
+  .rare { font-weight:700; }
+  details { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin:6px 0; }
+  summary { cursor:pointer; }
+  .ctx { font-family:Georgia,serif; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<h1>超纲词检查</h1>
+<p class="muted">四到六年级的知识点对照《小学英语大纲词汇》，七到九年级对照课标词表的“初中（义务教育）”词汇（合并《中考英语词汇表》）。词汇类知识点里教过的词（讲解中可点读的单词），从它所在年级起算作已学。人名、地名自动忽略。只检查学生看到的英文：题干、选项、答案、听力原文、阅读材料、例句、范文；不检查中文解析。<b>加粗</b> = 词频排名 5000 以后的难词。教学目标词（讲解里讲到的词）和由已学词加前后缀构成的派生词不算超纲。<br>级别 A = 必须处理：超出初中词表（高中课标词或课标外词）；级别 B = 建议简化：四到六年级用了初中词表里、但小学词表没有的词。</p>
+<div id="out">检查中……</div>
+
+<script src="../data/modules.js"></script>
+<script src="../data/grammar.js"></script>
+<script src="../data/grammar-g4-6.js"></script>
+<script src="../data/grammar-g7.js"></script>
+<script src="../data/grammar-g8a.js"></script>
+<script src="../data/grammar-g8b-9.js"></script>
+<script src="../data/phonics.js"></script>
+<script src="../data/vocab-a.js"></script>
+<script src="../data/vocab-b.js"></script>
+<script src="../data/talk.js"></script>
+<script src="../data/skill-a.js"></script>
+<script src="../data/skill-b.js"></script>
+<script src="../data/skill-c.js"></script>
+<script src="../data/skill-d.js"></script>
+<script src="wordlists/wordlists.js"></script>
+<script>
+(function () {
+  const PRIMARY = new Set(WL.primary), JUNIOR = new Set(WL.junior), SENIOR = new Set(WL.senior);
+  const RANK = new Map(); WL.coca.forEach((w, i) => { if (!RANK.has(w)) RANK.set(w, i + 1); });
+
+  // 词形还原：返回可能的原形
+  const IRR = { went:'go', gone:'go', did:'do', done:'do', was:'be', were:'be', been:'be', is:'be', are:'be', am:'be', has:'have', had:'have',
+    men:'man', women:'woman', children:'child', feet:'foot', teeth:'tooth', mice:'mouse', geese:'goose', people:'person', better:'good', best:'good',
+    worse:'bad', worst:'bad', more:'many', most:'many', less:'little', least:'little', further:'far', farther:'far', its:'it', ours:'our', yours:'your',
+    hers:'her', theirs:'their', mine:'my', lives:'life', knives:'knife', wives:'wife', leaves:'leaf', halves:'half', shelves:'shelf', thieves:'thief',
+    wolves:'wolf', selves:'self', themselves:'they', himself:'he', herself:'she', myself:'i', yourself:'you', yourselves:'you', ourselves:'we', itself:'it' };
+  function cands(w) {
+    const c = new Set([w]);
+    if (IRR[w]) c.add(IRR[w]);
+    if (WL.irr[w]) c.add(WL.irr[w]);
+    const add = x => { if (x && x.length > 1) c.add(x); };
+    if (w.endsWith('ies')) add(w.slice(0, -3) + 'y');
+    if (w.endsWith('es')) add(w.slice(0, -2));
+    if (w.endsWith('s')) add(w.slice(0, -1));
+    if (w.endsWith('ves')) { add(w.slice(0, -3) + 'f'); add(w.slice(0, -3) + 'fe'); }
+    if (w.endsWith('ied')) add(w.slice(0, -3) + 'y');
+    if (w.endsWith('ed')) { add(w.slice(0, -2)); add(w.slice(0, -1)); if (/(.)\1ed$/.test(w)) add(w.slice(0, -3)); }
+    if (w.endsWith('ing')) { const b = w.slice(0, -3); add(b); add(b + 'e'); if (/(.)\1$/.test(b)) add(b.slice(0, -1)); if (b.endsWith('y')) add(b.slice(0, -1) + 'ie'); }
+    if (w.endsWith('ier')) add(w.slice(0, -3) + 'y');
+    if (w.endsWith('iest')) add(w.slice(0, -4) + 'y');
+    if (w.endsWith('er')) { add(w.slice(0, -2)); add(w.slice(0, -1)); if (/(.)\1er$/.test(w)) add(w.slice(0, -3)); }
+    if (w.endsWith('est')) { add(w.slice(0, -3)); add(w.slice(0, -2)); if (/(.)\1est$/.test(w)) add(w.slice(0, -4)); }
+    if (w.endsWith('ily')) add(w.slice(0, -3) + 'y');
+    if (w.endsWith('ly')) { add(w.slice(0, -2)); add(w.slice(0, -2) + 'le'); }
+    return [...c];
+  }
+  // 派生词（课标允许由已学词加前后缀构成的词）
+  function derivs(w) {
+    const out = new Set(cands(w));
+    const pre = ['un', 'dis', 'im', 'in', 're', 'non', 'mis'];
+    const suf = [['ness', ''], ['iness', 'y'], ['ful', ''], ['less', ''], ['ment', ''], ['able', ''], ['ible', ''], ['er', ''], ['or', ''], ['ist', ''], ['ian', ''], ['ese', ''], ['ion', ''], ['ation', 'e'], ['tion', 'te'], ['al', ''], ['ous', ''], ['y', ''], ['ty', ''], ['th', ''], ['ward', ''], ['wards', ''], ['self', ''], ['selves', '']];
+    [...out].forEach(x => {
+      pre.forEach(p => { if (x.startsWith(p) && x.length > p.length + 2) cands(x.slice(p.length)).forEach(y => out.add(y)); });
+    });
+    [...out].forEach(x => {
+      suf.forEach(([sf, rp]) => { if (x.endsWith(sf) && x.length > sf.length + 2) { const b = x.slice(0, -sf.length) + rp; cands(b).forEach(y => out.add(y)); if (rp === '' ) out.add(b + 'e'); } });
+    });
+    return [...out];
+  }
+  const known = (w, set) => derivs(w).some(x => set.has(x));
+
+  // 学生可见英文
+  function textOf(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    d.querySelectorAll('.zh').forEach(z => z.remove());
+    return d.textContent || '';
+  }
+  function itemTexts(q) {
+    const out = [textOf(q.q)];
+    (q.options || []).forEach(o => out.push(textOf(o)));
+    if (q.type === 'fill') (q.answer || []).forEach(a => out.push(String(a)));
+    if (q.say) out.push(Array.isArray(q.say) ? q.say.map(l => l.text).join(' ') : q.say);
+    return out;
+  }
+  function nodeTexts(n) {
+    const t = [];
+    (n.learn || []).forEach(s => {
+      const d = document.createElement('div'); d.innerHTML = s.html;
+      d.querySelectorAll('.ex').forEach(e => { const c = e.cloneNode(true); c.querySelectorAll('.zh').forEach(z => z.remove()); t.push(['讲解例句', c.textContent]); });
+    });
+    Object.entries(n.passages || {}).forEach(([k, p]) => { t.push(['材料 ' + k, textOf(p.html)]); if (p.say) t.push(['听力 ' + k, Array.isArray(p.say) ? p.say.map(l => l.text).join(' ') : p.say]); });
+    (n.examples || []).forEach((q, i) => itemTexts(q).forEach(x => t.push(['例' + (i + 1), x])));
+    (n.tests || []).forEach((q, i) => itemTexts(q).forEach(x => t.push(['测' + (i + 1), x])));
+    (n.practice || []).forEach((p, i) => t.push(['范文' + (i + 1), textOf(p.sample)]));
+    return t;
+  }
+
+  // 词汇类知识点教过的词：从该年级起算已学
+  const taught = new Map();
+  KG.nodes.forEach(n => (n.learn || []).forEach(s => {
+    const d = document.createElement('div'); d.innerHTML = s.html;
+    d.querySelectorAll('.w').forEach(e => (e.textContent.toLowerCase().match(/[a-z]+/g) || []).forEach(w => {
+      if (!taught.has(w) || taught.get(w) > n.grade) taught.set(w, n.grade);
+    }));
+  }));
+  const taughtBy = (w, g) => cands(w).some(x => taught.has(x) && taught.get(x) <= g);
+
+  // 全部材料里句中大写出现过的词，当作人名地名（如 Lily、Grace 在句首时也忽略）
+  const NAMES = new Set();
+  KG.nodes.forEach(n => nodeTexts(n).forEach(([, text]) => {
+    const re = /[A-Za-z]+/g; let m;
+    while ((m = re.exec(text))) {
+      const before = text.slice(0, m.index).replace(/["“‘(—\-\s]+$/, '');
+      if (/^[A-Z][a-z]/.test(m[0]) && before !== '' && !/[.!?:]$/.test(before)) NAMES.add(m[0].toLowerCase());
+    }
+  }));
+  function targetWords(n) {
+    const t = new Set();
+    const add = str => (str.toLowerCase().match(/[a-z]+/g) || []).forEach(w => cands(w).forEach(x => t.add(x)));
+    add(n.title || '');
+    (n.learn || []).forEach(s => {
+      const d = document.createElement('div'); d.innerHTML = s.html;
+      d.querySelectorAll('.ex').forEach(e => e.remove());
+      add(d.textContent);
+    });
+    return t;
+  }
+  // 各知识点讲解里讲到的词（教学目标词），从该年级起算已学
+  const targetGrade = new Map();
+  KG.nodes.forEach(n => targetWords(n).forEach(w => { if (!targetGrade.has(w) || targetGrade.get(w) > n.grade) targetGrade.set(w, n.grade); }));
+  const result = [];
+  KG.nodes.forEach(n => {
+    const base = n.grade <= 6 ? PRIMARY : JUNIOR;
+    const targets = new Set([...targetGrade].filter(([, g]) => g <= n.grade).map(([w]) => w));
+    const hits = new Map();
+    nodeTexts(n).forEach(([where, text]) => {
+      const re = /[A-Za-z]+(?:['’][A-Za-z]+)?/g; let m;
+      while ((m = re.exec(text))) {
+        let tok = m[0].replace(/’/g, "'");
+        const lower = tok.toLowerCase();
+        let w = lower.replace(/'(s|ll|re|ve|d|m)$/, '');
+        if (/n't$/.test(w)) w = { "won't": 'will', "can't": 'can', "shan't": 'shall' }[w] || w.slice(0, -3);
+        if (w.length < 2 && w !== 'a' && w !== 'i') continue;
+        const before = text.slice(0, m.index).replace(/["“‘(—\-\s]+$/, '');
+        const sentenceStart = before === '' || /[.!?:]$/.test(before);
+        const isCap = /^[A-Z]/.test(tok);
+        if (isCap && !sentenceStart && !known(w, JUNIOR)) continue;           // 句中大写：人名地名
+        if (isCap && !known(w, JUNIOR) && !cands(w).some(x => RANK.has(x))) continue;  // 词典里没有：专有名词
+        if (isCap && NAMES.has(w)) continue;
+        if (!cands(w).some(x => RANK.has(x) || JUNIOR.has(x))) continue;     // 词典里没有：故意写错的干扰项或专有名词
+        if (known(w, base) || taughtBy(w, n.grade) || cands(w).some(x => targets.has(x))) continue;
+        if (/^[a-z]$/.test(w)) continue;
+        const h = hits.get(w) || { n: 0, where: where, ctx: text.slice(Math.max(0, m.index - 30), m.index + 40) };
+        h.n++; hits.set(w, h);
+      }
+    });
+    result.push({ id: n.id, title: n.title, grade: n.grade, module: n.module, words: [...hits.entries()].map(([w, h]) => {
+      const rank = Math.min(...cands(w).map(x => RANK.get(x) || 99999));
+      const inJunior = known(w, JUNIOR);
+      // A：超出初中（义务教育）词表；B：四到六年级用了初中词表里、但小学词表没有的词
+      const level = inJunior ? 'B' : 'A';
+      const note = inJunior ? '初中词' : known(w, SENIOR) ? '高中课标词' : '课标外';
+      return { w, n: h.n, where: h.where, ctx: h.ctx, rank, level, note };
+    }).sort((a, b) => (a.level > b.level ? 1 : a.level < b.level ? -1 : b.rank - a.rank)) });
+  });
+  window.VOCAB_REPORT = result;
+
+  // 输出
+  const byGrade = {};
+  result.forEach(r => { const g = byGrade[r.grade] || (byGrade[r.grade] = { nodes: 0, withIssues: 0, words: new Set() }); g.nodes++; if (r.words.length) g.withIssues++; r.words.forEach(x => g.words.add(x.w)); });
+  let html = '<table><tr><th>年级</th><th>对照词表</th><th>知识点</th><th>有超纲词的知识点</th><th>超纲词（去重）</th></tr>' +
+    Object.keys(byGrade).sort().map(g => `<tr><td>${g} 年级</td><td>${g <= 6 ? '小学大纲词汇' : '中考词汇'}</td><td>${byGrade[g].nodes}</td><td>${byGrade[g].withIssues}</td><td>${byGrade[g].words.size}</td></tr>`).join('') + '</table>';
+  html += result.filter(r => r.words.length).sort((a, b) => a.grade - b.grade).map(r => `<details><summary>${r.grade} 年级 · ${r.title}（${r.id}）— ${r.words.length} 个</summary>
+    <table><tr><th>级别</th><th>词</th><th>类别</th><th>次数</th><th>位置</th><th>上下文</th></tr>${r.words.map(x => `<tr><td>${x.level}</td><td class="w ${x.rank > 5000 ? 'rare' : ''}">${x.w}</td><td>${x.note}</td><td>${x.n}</td><td>${x.where}</td><td class="ctx">…${x.ctx.replace(/</g, '&lt;')}…</td></tr>`).join('')}</table></details>`).join('');
+  document.getElementById('out').innerHTML = html;
+})();
+</script>
+</body>
+</html>

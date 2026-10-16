@@ -196,7 +196,7 @@ KG.nodes.push(
   examples: [
     { type: 'choice', q: 'When I got home yesterday, my mother ___ dinner.', options: ['was cooking', 'cooks', 'will cook'], answer: 0, explain: 'when 意思是“当……时”。从句 got home 是过去的一个时间点，那时妈妈“正在做饭”，主句用过去进行时 was cooking。' },
     { type: 'choice', q: 'My father was watching TV ___ I was doing my homework.', options: ['while', 'until', 'since'], answer: 0, explain: 'while 表示“在……期间”，后面接延续性动作，常用进行时；两个动作同时在进行，用 while。' },
-    { type: 'choice', q: 'I was having a shower ___ the doorbell rang.', options: ['when', 'while', 'until'], answer: 0, explain: '辨析 when 和 while：空格后的 rang（门铃响）是一瞬间的短暂动作，while 后面必须接延续性动作，所以只能用 when。如果换成 ___ I was having a shower, the doorbell rang，空格接的是延续动作，when 和 while 都可以。' },
+    { type: 'choice', q: 'I was having a shower ___ the phone rang.', options: ['when', 'while', 'until'], answer: 0, explain: '辨析 when 和 while：空格后的 rang（电话响）是一瞬间的短暂动作，while 后面必须接延续性动作，所以只能用 when。如果换成 ___ I was having a shower, the phone rang，空格接的是延续动作，when 和 while 都可以。' },
     { type: 'choice', q: 'Please brush your teeth ___ you go to bed.', options: ['before', 'after', 'since'], answer: 0, explain: '“睡觉之前刷牙”，用 before（在……之前）；after 是“在……之后”，不合常理。' },
     { type: 'choice', q: "I'll tell him the good news as soon as he ___ back.", options: ['comes', 'will come', 'came'], answer: 0, explain: '主将从现：主句是将来时，as soon as 从句用一般现在时 comes。' },
     { type: 'choice', q: 'Please wait here until I ___ back.', options: ['come', 'will come', 'came'], answer: 0, explain: '主句是祈使句，时间状语从句同样用一般现在时表示将来，用 come。“主将从现”的“主将”也包括祈使句和含情态动词的句子。' },
@@ -336,7 +336,7 @@ KG.nodes.push(
     { type: 'fill', q: 'We had to stop the game because ___ the rain.（填一个词）', answer: ['of'], explain: 'the rain 是名词，前面用 because of。' },
     { type: 'fill', q: '改错：Because he was tired, so he went to bed early.<br>（这句话多了一个词，写出可以删去的那个词）', answer: ['so', 'because', 'Because'], explain: 'because 和 so 不能同时出现，删去其中一个即可：Because he was tired, he went to bed early. 或 He was tired, so he went to bed early.' },
     { type: 'choice', q: '下面哪句是正确的？', options: ["He was ill, so he didn't come.", "Because he was ill, so he didn't come.", "He didn't come because of he was ill."], answer: 0, explain: '只用 so 表示结果是对的；because 和 so 不能同句出现；because of 后面不能接句子。' },
-    { type: 'choice', q: 'She sang ___ well that everyone clapped.', options: ['so', 'such', 'very'], answer: 0, explain: 'well 是副词，后面没有名词，用 so...that。' },
+    { type: 'choice', q: 'She sang ___ well that everyone cheered.', options: ['so', 'such', 'very'], answer: 0, explain: 'well 是副词，后面没有名词，用 so...that。' },
     { type: 'fill', q: 'It was ___ exciting match that we all shouted loudly.（填两个词）', answer: ['such an'], explain: 'match 是可数名词单数，exciting 以元音音素开头，用 such an + 形容词 + 名词。' },
     { type: 'choice', q: 'They are ___ lovely children that everyone likes them.', options: ['such', 'so', 'such a'], answer: 0, explain: 'children 是复数名词，用 such + 形容词 + 复数名词，不加 a。' },
     { type: 'fill', q: 'We had ___ bad weather that the trip was put off.（填 so 或 such）', answer: ['such'], explain: 'weather 是不可数名词，名词前用 such。' },
@@ -504,7 +504,7 @@ KG.nodes.push(
     { type: 'choice', q: 'She said, "I will call you tonight."<br>→（几天后转述）She said she would call me ___.', options: ['that night', 'tonight', 'last night'], answer: 0, explain: '转述时 tonight 要变成 that night；last night 表示过去，和 would call 矛盾。' },
     { type: 'fill', q: 'Mike said, "I will visit you next week."<br>→ Mike said he would visit us the following ___.（填一个词）', answer: ['week'], explain: '转述时 next week 变成 the next week / the following week。' },
     { type: 'fill', q: 'Mary said, "I will be there on time."<br>→ Mary said she ___ be there on time.（填一个词）', answer: ['would'], explain: '转述后主句 said 是过去时，will 变成 would。' },
-    { type: 'choice', q: 'My teacher asked me whether I ___ take part in the speech contest.', options: ['would', 'will', 'am going to'], answer: 0, explain: '主句 asked 是过去时，从句说的是当时的将来，用过去将来时 would。' },
+    { type: 'choice', q: 'My teacher asked me whether I ___ take part in the speech competition.', options: ['would', 'will', 'am going to'], answer: 0, explain: '主句 asked 是过去时，从句说的是当时的将来，用过去将来时 would。' },
     { type: 'choice', q: 'We were sure that they ___ going to win the game.', options: ['were', 'are', 'will'], answer: 0, explain: '主句 were sure 是过去时，are going to 变成 were going to；主语 they 是复数，用 were。' }
   ]
 },
@@ -538,7 +538,7 @@ KG.nodes.push(
     { type: 'choice', q: 'When I got to the cinema, the film ___. I missed the beginning.', options: ['had begun', 'has begun', 'begins'], answer: 0, explain: '电影开始在“我到”之前，是过去的过去，用 had begun。' },
     { type: 'choice', q: 'By the end of last term, we ___ 2,000 English words.', options: ['had learned', 'have learned', 'learn'], answer: 0, explain: 'by the end of last term 是“到过去某时为止”，用过去完成时。' },
     { type: 'choice', q: 'By then, the children ___ asleep.', options: ['had fallen', 'have fallen', 'fall'], answer: 0, explain: 'by then（到那时为止）指过去某个时间，在那之前已经完成的动作用过去完成时 had fallen。' },
-    { type: 'choice', q: 'By the time we got to the stadium, the match ___.', options: ['had started', 'has started', 'starts'], answer: 0, explain: 'by the time + 一般过去时的从句（got），主句用过去完成时：我们到的时候比赛已经开始了。' },
+    { type: 'choice', q: 'By the time we got to the cinema, the film ___.', options: ['had started', 'has started', 'starts'], answer: 0, explain: 'by the time + 一般过去时的从句（got），主句用过去完成时：我们到的时候电影已经开始了。' },
     { type: 'fill', q: 'He told me he ___ (be) to Xiamen twice.', answer: ['had been', "'d been"], explain: '主句 told 是过去时，“去过厦门两次”发生在他说话之前，宾语从句用过去完成时 had been。' },
     { type: 'choice', q: 'I ___ my homework now, so I can watch TV.', options: ['have finished', 'had finished', 'finish'], answer: 0, explain: '参照点是“现在”（now, can watch），用现在完成时 have finished；过去完成时的参照点是过去某个时间。' },
     { type: 'choice', q: '下面哪句表示“我到的时候，电影已经开始了”？', options: ['When I got there, the film had begun.', 'When I got there, the film began.', 'When I get there, the film begins.'], answer: 0, explain: '电影先开始、我后到，先发生的用 had begun。第二句表示“我一到电影就开始”，两个动作几乎同时；第三句是现在时。' }
@@ -642,7 +642,7 @@ KG.nodes.push(
     { type: 'fill', q: 'I ___ (be) to Shanghai three times so far.', answer: ['have been', "'ve been"], explain: 'so far 和次数是现在完成时的标志，“去过”用 have been to。' },
     { type: 'choice', q: 'He ___ to Japan in 2019.', options: ['went', 'has gone', 'has been'], answer: 0, explain: 'in 2019 是具体的过去时间，用一般过去时 went；现在完成时不能和具体过去时间连用。' },
     { type: 'fill', q: 'While I was walking in the park, it suddenly ___ (begin) to rain.', answer: ['began'], explain: '长动作“散步”用过去进行时，短动作“突然下雨”用一般过去时；begin 的过去式是 began。' },
-    { type: 'fill', q: 'Have you ___ (write) to your pen pal yet?', answer: ['written'], explain: 'have + 过去分词构成现在完成时；write 的过去分词是 written，注意双写 t。' },
+    { type: 'fill', q: 'Have you ___ (write) to your pen friend yet?', answer: ['written'], explain: 'have + 过去分词构成现在完成时；write 的过去分词是 written，注意双写 t。' },
     { type: 'fill', q: 'Which present have you ___ (choose) for your mother?', answer: ['chosen'], explain: '现在完成时用过去分词，choose 的过去分词是 chosen（过去式是 chose）。' },
     { type: 'choice', q: 'We ___ a school trip to Wuyi Mountain in two days.<br>（先找标志词）', options: ['will have', 'had', 'have had'], answer: 0, explain: '标志词 in two days（两天后）表示将来，用一般将来时 will have。' },
     { type: 'choice', q: 'The students in our class ___ English every morning.', options: ['read', 'reads', 'is reading'], answer: 0, explain: '看主语：真正的主语是 the students（复数），in our class 只是修饰语；every morning 用一般现在时，所以用原形 read。' },

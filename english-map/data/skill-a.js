@@ -149,7 +149,7 @@ KG.nodes.push(
     { type: 'choice', q: '听句子，选出最恰当的答语。', say: 'Have you ever been to Beijing?',
       options: ['Yes, I have. I went there last year.', 'Yes, I do. I like it.', "No, I won't."], answer: 0,
       explain: 'Have you ever...? 用现在完成时问经历，要用 Yes, I have. / No, I haven\'t. 回答，后面可以用过去时补充具体时间。I do、I won\'t 和问句的助动词对不上。' },
-    { type: 'choice', q: '听句子，选出与句子内容相符的图片。', say: 'Lily is writing a letter to her pen pal.',
+    { type: 'choice', q: '听句子，选出与句子内容相符的图片。', say: 'Lily is writing a letter to her pen friend.',
       options: ['图：女孩在书桌前写信', '图：女孩坐在沙发上读信', '图：女孩在邮局寄信'], answer: 0,
       explain: '三幅图都和 letter（信）有关，这是原词复现的陷阱。关键是动词 writing（写），不是读，也不是寄。' },
     { type: 'choice', q: '听对话，回答问题：What is Ben\'s favorite subject?',
@@ -283,7 +283,7 @@ KG.nodes.push(
       html: '<p class="muted">信息记录：每空填一个单词或数字。</p>',
       say: "Good morning, everyone. I have some news about this year's Summer Science Camp. The camp will start on July fifteenth and last for five days. It will be held at Fuzhou Science Museum, not at our school. Every morning, students will do experiments with real scientists, and in the afternoon they will visit factories and farms. The camp costs three hundred yuan, including lunch. If you want to join, please write your name on the list in Room two oh six before Friday. If you have any questions, please ask Mr. Chen. That's C-H-E-N, Chen. Remember, only forty students can join, so hurry up!" },
     e2: { title: '例：听独白（校园广播），回答问题', hidden: true, html: '',
-      say: "Hello, everyone. This is your headteacher speaking. Our school sports meeting will be held next Wednesday and Thursday. It will take place at the city stadium, not on our school playground, because our playground is being repaired. The buses will leave the school gate at seven forty in the morning, so please don't be late. Remember to wear your school uniform and bring enough water. I'm sure all of you will do your best. Good luck!" },
+      say: "Hello, everyone. This is your headteacher speaking. Our school sports meeting will be held next Wednesday and Thursday. It will take place at the city sports centre, not on our school playground, because our playground is being repaired. The buses will leave the school gate at seven forty in the morning, so please don't be late. Remember to wear your school uniform and bring enough water. I'm sure all of you will do your best. Good luck!" },
     p3: { title: '长对话：买运动鞋（听对话，回答第 11–16 题）', hidden: true, html: '',
       say: [
         { who: 'W', text: 'Tom, your sports shoes are too small now. Let\'s buy a new pair this afternoon.' },
@@ -322,8 +322,8 @@ KG.nodes.push(
       options: ['按题号顺序边听边找答案，听到时间就先答第 1 题', '先听完全文，最后再一起看题', '从第 3 题开始倒着找答案'], answer: 0,
       explain: '听力题目的顺序和原文顺序基本一致，题号就是你的“导航”：先等第 1 题的信息，答完马上盯第 2 题。听完再看题，前面的细节很可能已经忘了。' },
     { type: 'choice', passage: 'e2', q: 'Where will the sports meeting be held?',
-      options: ['On the school playground.', 'At the city stadium.', 'In the school gym.'], answer: 1,
-      explain: '原文：at the city stadium, not on our school playground。not 后面是被否定的地点，学校操场正在维修，所以运动会在市体育场举行。只听到 school playground 就会掉进“否定转移”的陷阱。' },
+      options: ['On the school playground.', 'At the city sports centre.', 'In the school gym.'], answer: 1,
+      explain: '原文：at the city sports centre, not on our school playground。not 后面是被否定的地点，学校操场正在维修，所以运动会在市体育中心举行。只听到 school playground 就会掉进“否定转移”的陷阱。' },
     { type: 'fill', passage: 'e2', q: 'The buses will leave at ___ in the morning.（填时间，如 8:15）', answer: ['7:40', '7.40', 'seven forty'],
       explain: '原文：at seven forty in the morning。边听边用阿拉伯数字记下 7:40，比写英文单词快得多。注意 forty 是 40，不是 fourteen。' },
     { type: 'choice', q: '听对话，回答问题：How does the woman feel about the plan?',
@@ -512,7 +512,7 @@ KG.nodes.push(
         <p>A: <span class="blank">(3)</span></p>
         <p>B: Yes, but there are no cars on the island, so you'll have to walk.</p>
         <p>A: That's fine. I like walking. <span class="blank">(4)</span></p>
-        <p>B: You should try the seafood. The fish balls there are delicious.</p>
+        <p>B: You should try the fish balls. They are really delicious.</p>
         <p>A: Thanks for your advice. <span class="blank">(5)</span></p>
         <p>B: Have a good time!</p>
         <p class="small">A. Which place should I visit?<br>B. How can I get there?<br>C. Is it easy to get around there?<br>D. What food would you suggest?<br>E. I can't wait to go there.<br>F. How long have you lived there?<br>G. Who will you go with?</p>` },
@@ -644,7 +644,7 @@ KG.nodes.push(
       explain: '后面以 Yes, but... 开头，说明空格是一般疑问句；内容讲岛上没车、要步行，正好回答“在那儿四处走走方便吗”。' },
     { type: 'choice', passage: 'd2', q: '第 (4) 空：',
       options: ['What food would you suggest?', 'Which place should I visit?', 'Who will you go with?'], answer: 0,
-      explain: '后面建议 You should try the seafood，说的是吃什么，所以问 What food would you suggest?。Which place 已经在第 (1) 空用过了。' },
+      explain: '后面建议 You should try the fish balls，说的是吃什么，所以问 What food would you suggest?。Which place 已经在第 (1) 空用过了。' },
     { type: 'choice', passage: 'd2', q: '第 (5) 空：',
       options: ["I can't wait to go there.", 'How long have you lived there?', 'How can I get there?'], answer: 0,
       explain: '后面 Lin Tao 说 Have a good time!（玩得开心），说明 A 在表达期待，I can\'t wait to go there 最合适；另外两个是问句，与“玩得开心”接不上。' },
@@ -778,7 +778,7 @@ KG.nodes.push(
     { type: 'choice', q: '下面这两句描述的都是“昨天”的事，哪一组时态前后一致？',
       options: ['Yesterday we went to the zoo. We saw many animals there.', 'Yesterday we went to the zoo. We see many animals there.', 'Yesterday we go to the zoo. We saw many animals there.'], answer: 0,
       explain: '一段话写的是同一时间的事，时态要统一。yesterday 用一般过去时，went 和 saw 都是过去式。另外两组各有一句用了一般现在时。' },
-    { type: 'fill', q: '图：李华每天都给阳台上的花浇水。<br>Li Hua ___ the flowers on the balcony every day.（water）', answer: ['waters'],
+    { type: 'fill', q: '图：李华每天都给花园里的花浇水。<br>Li Hua ___ the flowers in the garden every day.（water）', answer: ['waters'],
       explain: '先写主干：主语 Li Hua + 谓语 waters + 宾语 the flowers。every day 表示经常做，用一般现在时；Li Hua 是第三人称单数，动词加 -s。' },
     { type: 'fill', q: '图：上周日下午，李华和朋友们在河边钓鱼。<br>Li Hua and his friends went fishing ___ the river last Sunday afternoon.（填一个介词，首字母 b）', answer: ['by', 'beside'],
       explain: '主干句 Li Hua and his friends went fishing 写好后，再加地点 by the river（在河边）和时间 last Sunday afternoon，句子就具体了。' },

@@ -206,14 +206,14 @@ KG.nodes.push(
       explain: "You're welcome. 不客气。" },
     { type: 'choice', q: "—Thank you for showing me around your school.<br>—___", options: ["My pleasure.", "It doesn't matter.", "Don't thank me."], answer: 0,
       explain: "My pleasure. 回答感谢；It doesn't matter 回答道歉；Don't thank me 是中式英语。" },
-    { type: 'choice', q: "—Thanks for lending me your bike.<br>—___", options: ["Not at all.", "Never mind.", "Sorry, I can't."], answer: 0,
-      explain: "Not at all. 可以回答感谢（不用谢）。车已经借了，不能说“对不起我不能”。" },
+    { type: 'choice', q: "—Thanks for helping me with my homework.<br>—___", options: ["Not at all.", "Never mind.", "Sorry, I can't."], answer: 0,
+      explain: "Not at all. 可以回答感谢（不用谢）。忙已经帮过了，不能说“对不起我不能”；Never mind. 是回答道歉的。" },
     { type: 'choice', q: '听一听，选出恰当的答语。', say: "Thank you so much for your help.", options: ["Not at all.", "It doesn't matter.", "Excuse me."], answer: 0,
       explain: "对方感谢你，回答 Not at all.（不用谢）；It doesn't matter 是回答道歉的。" },
     { type: 'choice', q: "Thank you for ___ me the way to the station.", options: ['showing', 'show', 'to show'], answer: 0,
       explain: "Thank you for 后面接动词 -ing。" },
-    { type: 'fill', q: "Thank you for ___ (invite) me to your party.", answer: ['inviting'],
-      explain: "for 是介词，后面用 inviting。" },
+    { type: 'fill', q: "Thank you for ___ (help) me with my English.", answer: ['helping'],
+      explain: "for 是介词，后面用动词 -ing 形式 helping。" },
     { type: 'choice', q: "—Thank you for carrying the bag for me, Tom.<br>—___", options: ["That's OK.", "Don't thank me.", "Yes, it's heavy."], answer: 0,
       explain: "That's OK. 可以回答感谢；Don't thank me. 是中式英语，不能用。" },
     { type: 'choice', q: "下面哪一句可以用来回答别人的感谢？", options: ["It's my pleasure.", "Don't thank me.", "Never mind."], answer: 0,
@@ -758,7 +758,7 @@ KG.nodes.push(
       explain: "What about / How about 后面接名词或 doing。" },
     { type: 'choice', q: "—Let's play football this afternoon.<br>—___ I have to look after my little sister.", options: ["Sorry, I can't.", "Good idea!", "Sounds great!"], answer: 0,
       explain: "后面说要照顾妹妹，是不同意：Sorry, I can't." },
-    { type: 'choice', q: "—Shall we go by bus or by bike?<br>—___ I'm OK with both.", options: ["It's up to you.", "Good luck.", "You're welcome."], answer: 0,
+    { type: 'choice', q: "—Shall we go by bus or by bike?<br>—___ I'm OK with both.", options: ["It's up to you.", "Have a good time.", "You're welcome."], answer: 0,
       explain: "两个都可以，让对方决定：It's up to you." }
   ],
   tests: [
@@ -1055,7 +1055,7 @@ KG.nodes.push(
       <tr><th>说法</th><th>意思</th><th>怎么回答</th></tr>
       <tr><td>Congratulations (on winning)!</td><td>祝贺你（获胜）！</td><td>Thank you.</td></tr>
       <tr><td>Well done! / Good job!</td><td>干得好！</td><td>Thanks.</td></tr></table>
-      <p class="ex">—I won first prize in the singing contest. —Congratulations!<span class="zh">——我在歌唱比赛中得了一等奖。——祝贺你！</span></p>
+      <p class="ex">—I won first prize in the singing competition. —Congratulations!<span class="zh">——我在歌唱比赛中得了一等奖。——祝贺你！</span></p>
       <p class="warn">Congratulations 一定带 <b>s</b>；后面用 on：Congratulations on your success!</p>` }
   ],
   examples: [
@@ -1087,7 +1087,7 @@ KG.nodes.push(
       explain: '生日只是 Lucy 一个人的，回答 Thank you.，不能说 The same to you.' },
     { type: 'choice', q: '听一听，选出恰当的答语。', say: 'Have a good time at the party!', options: ['Thanks, I will.', 'Yes, I have.', "You're welcome."], answer: 0,
       explain: '回答 Have a good time! 用 Thanks, I will.' },
-    { type: 'fill', q: "—I won first prize in the speech contest.<br>—C___!", answer: ['congratulations', 'congrats'],
+    { type: 'fill', q: "—I won first prize in the speech competition.<br>—C___!", answer: ['congratulations', 'congrats'],
       explain: '祝贺别人用 Congratulations!（一定带 s）' },
     { type: 'fill', q: "—I'm going to take the exam tomorrow.<br>—Good ___!（运气）", answer: ['luck'],
       explain: 'Good luck! 祝你好运！' },
@@ -1180,7 +1180,7 @@ KG.nodes.push(
       explain: "对方难过，鼓励他振作：Cheer up!" },
     { type: 'choice', q: "（运动会上，同学在跑最后一圈）___ You can do it!", options: ["Come on!", "Take care!", "Never mind!"], answer: 0,
       explain: "给人加油：Come on! You can do it!" },
-    { type: 'choice', q: "—This puzzle is too hard. I want to stop.<br>—Never give ___! Try again.", options: ['up', 'in', 'out'], answer: 0,
+    { type: 'choice', q: "—This maths problem is too hard. I want to stop.<br>—Never give ___! Try again.", options: ['up', 'in', 'out'], answer: 0,
       explain: "Never give up! 永不放弃！" },
     { type: 'fill', q: "Don't worry. Everything will be O___.", answer: ['ok', 'okay'],
       explain: "Everything will be OK. 一切都会好的。" },
@@ -1242,7 +1242,7 @@ KG.nodes.push(
       explain: "Everything will be fine / OK. 一切都会好的。" },
     { type: 'choice', q: '听一听，选出恰当的答语。', say: "We're going to have a picnic this Sunday.", options: ["Sounds great!", "What a pity!", "I'm sorry to hear that."], answer: 0,
       explain: "好计划，回答 Sounds great!；What a pity 用于坏事。" },
-    { type: 'choice', q: '听一听，选出恰当的答语。', say: "I won first prize in the drawing contest!", options: ["Well done!", "That's too bad.", "Never mind."], answer: 0,
+    { type: 'choice', q: '听一听，选出恰当的答语。', say: "I won first prize in the drawing competition!", options: ["Well done!", "That's too bad.", "Never mind."], answer: 0,
       explain: "别人取得好成绩：Well done!" },
     { type: 'fill', q: "—We're going to Gulangyu this weekend.<br>—How w___!", answer: ['wonderful'],
       explain: "How wonderful! 多好啊！" },

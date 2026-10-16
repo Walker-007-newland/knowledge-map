@@ -189,12 +189,12 @@ KG.nodes.push(
     { type: 'choice', q: 'I ___ two books from the school library yesterday.', options: ['borrowed', 'lent', 'kept'], answer: 0, explain: '从图书馆借进来：borrow sth from ...，过去式 borrowed。' },
     { type: 'fill', q: 'Can I borrow your bike? = Can you ___ me your bike?（填一个词）', answer: ['lend'], explain: '“你借给我”是借出，lend sb sth；can 后面用原形。' },
     { type: 'choice', q: '—How long can I ___ these books?<br>—For two weeks.', options: ['keep', 'borrow', 'lend'], answer: 0, explain: '问“能借多久”，后面接一段时间，要用延续性的 keep；borrow、lend 是短暂动作，不能和一段时间连用。' },
-    { type: 'fill', q: 'My friend lent me his comic book, and I have k___ it for a week.（借，保存，注意时态）', answer: ['kept'], explain: 'keep sth for + 一段时间，表示借了以后保存多久；have 后接过去分词 kept。' },
+    { type: 'fill', q: 'My friend lent me his story book, and I have k___ it for a week.（借，保存，注意时态）', answer: ['kept'], explain: 'keep sth for + 一段时间，表示借了以后保存多久；have 后接过去分词 kept。' },
     { type: 'choice', q: 'The box is too heavy. Can you help me ___ it upstairs?', options: ['carry', 'fetch', 'borrow'], answer: 0, explain: '搬、扛重东西用 carry；fetch 是“去取来”，borrow 是借。' },
     { type: 'choice', q: "I'm thirsty. Could you go and ___ me a glass of water from the kitchen?", options: ['fetch', 'take', 'carry'], answer: 0, explain: '去厨房取水再拿回来，一去一回，用 fetch；take 是拿走，carry 只是搬运、没有“取回”的意思。' },
     { type: 'choice', q: 'Wait a minute. I need to ___ my shoes first.', options: ['put on', 'wear', 'dress'], answer: 0, explain: '出门前“穿上”鞋是动作，用 put on；wear 表示穿着的状态；dress 的宾语是人。' },
     { type: 'fill', q: 'Look! The girl is d___ in red today.（穿着）', answer: ['dressed'], explain: 'be dressed in + 颜色 / 衣服，表示“穿着……”。' },
-    { type: 'choice', q: 'Are you going to ___ the English speech contest next week?', options: ['take part in', 'take care of', 'take off'], answer: 0, explain: '参加比赛、运动会等活动用 take part in；take care of 是照顾，take off 是脱下。' },
+    { type: 'choice', q: 'Are you going to ___ the English speech competition next week?', options: ['take part in', 'take care of', 'take off'], answer: 0, explain: '参加比赛、运动会等活动用 take part in；take care of 是照顾，take off 是脱下。' },
     { type: 'fill', q: 'My brother j___ the Art Club last term. Now he is a member of it.（加入，注意时态）', answer: ['joined'], explain: '加入组织并成为其中一员用 join；last term 是过去，用 joined。' },
     { type: 'choice', q: 'When will they arrive ___ Shanghai?', options: ['in', 'at', 'to'], answer: 0, explain: '上海是大城市，arrive in；arrive 后面不接 to。' },
     { type: 'choice', q: 'Excuse me, how can I get ___ the museum?', options: ['to', 'at', 'in'], answer: 0, explain: 'get 表示“到达”时后面接 to：get to the museum。' },
@@ -270,9 +270,9 @@ KG.nodes.push(
     { type: 'choice', q: '听一听，说的是哪个节日？', say: 'On this day, people eat yuanxiao, watch lanterns and guess lantern riddles.', options: ['元宵节', '端午节', '中秋节'], answer: 0, explain: '吃元宵、看花灯、猜灯谜是元宵节（Lantern Festival）的习俗。' },
     { type: 'fill', q: 'Tomb-sweeping Day is also called ___ Festival. People remember the dead on that day.（清明）', answer: ['Qingming'], explain: '清明节是 Qingming Festival，也叫 Tomb-sweeping Day。' },
     { type: 'choice', q: 'October 1st is ___.', options: ['National Day', 'Labour Day', "New Year's Day"], answer: 0, explain: '10 月 1 日是国庆节 National Day；劳动节是 5 月 1 日，元旦是 1 月 1 日。' },
-    { type: 'choice', q: 'Children wear costumes and say "trick or treat" at ___.', options: ['Halloween', 'Christmas', 'Thanksgiving'], answer: 0, explain: '“不给糖就捣蛋”（trick or treat）是万圣节前夜 Halloween 的习俗。' },
+    { type: 'choice', q: 'Children dress up and say "trick or treat" at ___.', options: ['Halloween', 'Christmas', 'Thanksgiving'], answer: 0, explain: '“不给糖就捣蛋”（trick or treat）是万圣节前夜 Halloween 的习俗。' },
     { type: 'fill', q: 'Children hope S___ Claus will bring them presents at Christmas.（圣诞老人）', answer: ['Santa'], explain: '圣诞老人是 Santa Claus。' },
-    { type: 'choice', q: 'Fuzhou is called "the city of ___" because there are many big old trees of this kind.', options: ['banyan trees', 'apple trees', 'pine trees'], answer: 0, explain: '福州榕树多，被称为“榕城”，榕树是 banyan tree。' },
+    { type: 'choice', q: 'Fuzhou is called "the city of ___" because there are many big old trees of this kind.', options: ['banyan trees', 'apple trees', 'orange trees'], answer: 0, explain: '福州榕树多，被称为“榕城”，榕树是 banyan tree。' },
     { type: 'choice', q: '___ Fujian! I hope you will have a good time here.', options: ['Welcome to', 'Welcome in', 'Welcome at'], answer: 0, explain: '“欢迎来到某地”是 Welcome to + 地点。' },
     { type: 'fill', q: 'Xiamen is famous ___ its beautiful beaches.（填一个介词）', answer: ['for'], explain: 'be famous for 因……而出名。' },
     { type: 'fill', q: 'Welcome to Quanzhou! I hope you will have a good t___ here.（时光）', answer: ['time'], explain: 'have a good time 玩得开心。' },
@@ -344,7 +344,7 @@ KG.nodes.push(
   ],
   tests: [
     { type: 'choice', q: "Don't be ___. Take it easy. The exam is not hard.", options: ['nervous', 'honest', 'helpful'], answer: 0, explain: '“放轻松，考试不难”，说明对方很紧张：nervous。' },
-    { type: 'choice', q: 'My mother was ___ me because I broke her favourite vase.', options: ['angry with', 'proud of', 'interested in'], answer: 0, explain: '打碎了妈妈心爱的花瓶，妈妈生气：be angry with sb。' },
+    { type: 'choice', q: 'My mother was ___ me because I broke her favourite cup.', options: ['angry with', 'proud of', 'interested in'], answer: 0, explain: '打碎了妈妈心爱的杯子，妈妈生气：be angry with sb。' },
     { type: 'choice', q: '听一听，说话人现在感觉怎么样？', say: "I can't find my dog anywhere. I'm so worried.", options: ['担心的', '兴奋的', '无聊的'], answer: 0, explain: '说话人找不到狗，说 I\'m so worried，意思是很担心。' },
     { type: 'choice', q: 'Lily is ___. She is always the first to help others.', options: ['helpful', 'careless', 'lazy'], answer: 0, explain: '总是第一个帮助别人，说明她乐于助人：helpful。' },
     { type: 'fill', q: "Lucy is s___. She doesn't like to talk to strangers.（害羞的）", answer: ['shy'], explain: '不喜欢和陌生人说话，说明她害羞：shy。' },
@@ -515,7 +515,7 @@ KG.nodes.push(
     { type: 'choice', q: "Don't drop ___ in the street. Put it into the bin.", options: ['litter', 'energy', 'climate'], answer: 0, explain: '不要在街上乱扔垃圾，要扔进垃圾桶：litter。' },
     { type: 'fill', q: 'We must p___ the environment. It is our home.（保护）', answer: ['protect'], explain: 'must 后面用动词原形 protect（保护）。' },
     { type: 'fill', q: 'We can r___ old newspapers to make new paper.（回收再利用，共 7 个字母）', answer: ['recycle'], explain: '把旧报纸回收加工成新纸，是 recycle。' },
-    { type: 'fill', q: 'Golden monkeys are ___ animals. We must protect them.（danger，濒危的，注意词形）', answer: ['endangered'], explain: '“濒危的”是 endangered，endangered animals 濒危动物。' },
+    { type: 'fill', q: 'South China tigers are ___ animals. We must protect them.（danger，濒危的，注意词形）', answer: ['endangered'], explain: '“濒危的”是 endangered，endangered animals 濒危动物。' },
     { type: 'fill', q: "There is too much n___ outside. I can't sleep.（噪音）", answer: ['noise'], explain: '吵得睡不着，是噪音 noise；too much 后面接不可数名词。' },
     { type: 'choice', q: 'Because of ___, the earth is getting hotter and hotter.', options: ['global warming', 'public transport', 'low-carbon life'], answer: 0, explain: '地球越来越热，原因是全球变暖 global warming。' },
     { type: 'choice', q: 'Please ___ the lights when you leave the classroom.', options: ['turn off', 'turn on', 'turn up'], answer: 0, explain: '离开教室要关灯：turn off；turn on 是打开，turn up 是调大。' },
@@ -529,13 +529,13 @@ KG.nodes.push(
     { type: 'fill', q: 'We should do more for the ___ of the environment.（protect，注意词形）', answer: ['protection'], explain: 'the 和 of 之间要用名词，protect 的名词是 protection。' },
     { type: 'choice', q: 'The river was ___ by the factory, and the fish died.', options: ['polluted', 'pollution', 'polluting'], answer: 0, explain: '河流“被污染”，被动语态 was + 过去分词 polluted。' },
     { type: 'fill', q: 'We should pay attention to ___ problems.（environment，注意词形）', answer: ['environmental'], explain: '修饰名词 problems 要用形容词，environment 加 -al：environmental。' },
-    { type: 'choice', q: 'Old glass bottles can be collected, melted and made into new bottles. This is called ___.', options: ['recycling', 'reducing', 'reusing'], answer: 0, explain: '回收后加工成新东西是 recycle；reuse 是原样再用，reduce 是少用。' },
+    { type: 'choice', q: 'Old glass bottles can be collected and made into new bottles. This is called ___.', options: ['recycling', 'reducing', 'reusing'], answer: 0, explain: '回收后加工成新东西是 recycle；reuse 是原样再用，reduce 是少用。' },
     { type: 'choice', q: 'There ___ a lot of rubbish on the beach after the holiday.', options: ['is', 'are', 'be'], answer: 0, explain: 'rubbish 不可数，作主语时谓语用单数 is。' },
     { type: 'choice', q: 'There is less ___ in our city now. The sky is bluer.', options: ['pollution', 'pollutions', 'a pollution'], answer: 0, explain: 'pollution 不可数，less 修饰不可数名词，不加 s 也不加 a。' },
     { type: 'fill', q: '改错：Let\'s pick up the rubbishes on the beach. 写出改正后的那个词。', answer: ['rubbish'], explain: 'rubbish 不可数，不能加 -es。' },
     { type: 'choice', q: 'Planting trees is good for ___ environment.', options: ['the', 'an', '不填'], answer: 0, explain: 'environment 表示自然环境时前面通常加 the。' },
     { type: 'choice', q: 'People ___ too many trees, so there are more sandstorms now.', options: ['cut down', 'cut off', 'cut in'], answer: 0, explain: '树被大量砍倒，沙尘暴变多：cut down 砍倒。' },
-    { type: 'fill', q: 'Some people c___ down trees to build houses, and the hills become bare.（砍）', answer: ['cut'], explain: '“砍倒”是 cut down；主语 some people 是复数，谓语用原形 cut。' }
+    { type: 'fill', q: 'Some people c___ down trees to build houses, so there are fewer trees on the hills now.（砍）', answer: ['cut'], explain: '“砍倒”是 cut down；主语 some people 是复数，谓语用原形 cut。' }
   ]
 },
 
@@ -568,7 +568,7 @@ KG.nodes.push(
     { h: '谈论发明的句型', html: `<p class="ex">The telephone was invented by Bell.<span class="zh">电话是贝尔发明的。</span></p>
       <p class="ex">Robots are used to do dangerous work.<span class="zh">机器人被用来做危险的工作。</span></p>
       <p class="ex">Smartphones make our life easier.<span class="zh">智能手机让我们的生活更方便。</span></p>
-      <p class="ex">Yuan Longping was a great scientist. He developed hybrid rice.<span class="zh">袁隆平是一位伟大的科学家，他培育出了杂交水稻。</span></p>
+      <p class="ex">Yuan Longping was a great scientist. He developed a new kind of rice.<span class="zh">袁隆平是一位伟大的科学家，他培育出了一种新水稻（杂交水稻）。</span></p>
       <p class="small">写科技话题时常用被动语态 be invented / be used to do，详见“被动语态”。</p>` },
     { h: '易错点', html: `<ul>
       <li><b>invent</b> 发明（原来没有的东西）；<b>discover</b> 发现（本来就存在的东西）：discover a new island。</li>
@@ -605,7 +605,7 @@ KG.nodes.push(
     { type: 'fill', q: 'Please type your name on the k___.（键盘）', answer: ['keyboard'], explain: '打字用键盘 keyboard。' },
     { type: 'choice', q: 'Robots are used ___ some dangerous jobs.', options: ['to do', 'doing', 'do'], answer: 0, explain: 'be used to do sth 被用来做某事。' },
     { type: 'choice', q: 'Paper ___ in ancient China.', options: ['was invented', 'invented', 'invents'], answer: 0, explain: '纸是“被发明”的，又是古代的事，用 was invented。' },
-    { type: 'fill', q: 'Hybrid rice was d___ by Yuan Longping.（培育，注意词形）', answer: ['developed'], explain: '被动语态 was + 过去分词，develop → developed。' },
+    { type: 'fill', q: 'A new kind of rice was d___ by Yuan Longping.（培育，注意词形）', answer: ['developed'], explain: '被动语态 was + 过去分词，develop → developed。' },
     { type: 'fill', q: 'Online maps make travelling ___.（easy，用比较级）', answer: ['easier'], explain: 'make + 宾语 + 形容词，“使……更容易”用比较级 easier（y 变 i 加 -er）。' },
     { type: 'choice', q: 'The Internet makes it ___ for us to learn new things.', options: ['easier', 'easily', 'more easily'], answer: 0, explain: 'make it + 形容词 + for sb to do，这里用形容词比较级 easier，不用副词。' },
     { type: 'choice', q: 'Scientists ___ a new kind of frog in the forest last year.', options: ['discovered', 'invented', 'made'], answer: 0, explain: '青蛙本来就存在，是“发现”：discover。' },
@@ -685,7 +685,7 @@ KG.nodes.push(
     { type: 'choice', q: '听一听，他们上周日做了什么志愿活动？', say: 'Last Sunday, we volunteered to clean the streets in our community.', options: ['打扫社区街道', '去养老院看望老人', '为灾区筹钱'], answer: 0, explain: 'clean the streets in our community 打扫社区的街道。' },
     { type: 'choice', q: 'Exams bring us a lot of ___. How do you ___ it?', options: ['pressure; deal with', 'pressure; give up', 'advice; come true'], answer: 0, explain: '考试带来压力 pressure；“应对、处理”压力用 deal with。' },
     { type: 'choice', q: 'Where there is a ___, there is a way.', options: ['will', 'dream', 'goal'], answer: 0, explain: '谚语“有志者事竟成”：Where there is a will, there is a way.' },
-    { type: 'choice', q: 'I will never ___ the three years in junior high school.', options: ['forget', 'remember', 'forgive'], answer: 0, explain: '“永远不会忘记”是 never forget；never remember 意思相反，forgive 是原谅。' },
+    { type: 'choice', q: 'I will never ___ the three years in junior high school.', options: ['forget', 'remember', 'forgot'], answer: 0, explain: '“永远不会忘记”是 never forget；never remember 意思相反；will 后接动词原形，不能用过去式 forgot。' },
     { type: 'choice', q: 'Thanks to the volunteers, the sick boy\'s wish to see the sea ___ last summer.', options: ['came true', 'realized', 'achieved'], answer: 0, explain: '愿望自己“实现”用 come true（过去式 came true）；realize、achieve 后面要带宾语（realize / achieve one\'s dream），不能用“愿望”作主语。' },
     { type: 'fill', q: '改错：I hope my dream can realize. 用两个词替换 realize。', answer: ['come true'], explain: '梦想作主语时要说 dream comes true，不说 dream realizes。' },
     { type: 'choice', q: 'Work hard, and you will ___ your dream.', options: ['achieve', 'come true', 'succeed'], answer: 0, explain: '“实现梦想”，后面有宾语 your dream，用 achieve；come true 和 succeed 不能直接带宾语。' },

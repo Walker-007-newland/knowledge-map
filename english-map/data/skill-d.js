@@ -200,7 +200,7 @@ KG.nodes.push(
       sample: `<p><b>A Day I Will Never Forget</b></p>
         <p>Last October, our class went to Gulangyu in Xiamen for a school trip. It was a day I will never forget.</p>
         <p>In the morning, we walked along the quiet streets and visited the Piano Museum. Our guide told us many stories about the island. In the afternoon, we were divided into groups to collect rubbish on the beach. Although we were tired, we felt proud when the beach became clean again.</p>
-        <p>This trip not only showed me the beauty of Xiamen but also taught me that everyone can do something for the environment. I hope to visit Gulangyu again.</p>`,
+        <p>This trip not only showed me how beautiful Xiamen is but also taught me that everyone can do something for the environment. I hope to visit Gulangyu again.</p>`,
       notes: `<ul>
         <li>开头 It was a day I will never forget. 直接扣题，后面省略了 that 的定语从句很自然。</li>
         <li>In the morning / In the afternoon 按时间顺序展开，层次清楚。</li>
@@ -591,7 +591,7 @@ KG.nodes.push(
       explain: '书面通知的标题是 Notice，写在最上面正中。Dear students, 是称呼，Yours, 是书信结束语。' },
     { type: 'choice', q: '书面通知的最后应该写：', options: ['落款和日期', '期待回信', 'Dear fellow students,'], answer: 0,
       explain: '通知的结构：标题 → 何事、目的 → 时间地点 → 内容和注意事项 → 欢迎参加 → 落款和日期。“期待回信”是书信的结尾。' },
-    { type: 'fill', q: '用所给词的适当形式填空：<br>The English speech contest will be ___ in the school hall next Monday.（hold）', answer: ['held'],
+    { type: 'fill', q: '用所给词的适当形式填空：<br>The English speech competition will be ___ in the school hall next Monday.（hold）', answer: ['held'],
       explain: 'will be held 是被动语态，“将被举行”，通知里说明时间地点的典型句式。hold 的过去分词是 held。' },
     { type: 'choice', say: 'May I have your attention, please? There will be a talk on safety in the school hall this Friday afternoon. Please be there on time. That\'s all. Thank you.', q: '听录音，判断这是哪种应用文。', options: ['口头通知', '书信', '倡议书'], answer: 0,
       explain: '以 May I have your attention, please? 开头、以 That\'s all. Thank you. 结尾，告知讲座的时间地点，是口头通知。' },
@@ -652,7 +652,7 @@ KG.nodes.push(
       ],
       sample: `<p><b>Say No to Food Waste</b></p>
         <p>Dear fellow students,</p>
-        <p>These days we have found that a lot of food is wasted in our dining hall. Some students only eat half of their meals and throw the rest away. It is a pity, because every grain of rice comes from the hard work of farmers.</p>
+        <p>These days we have found that a lot of food is wasted in our dining hall. Some students only eat half of their meals and throw the rest away. It is a pity, because all the rice we eat comes from the hard work of farmers.</p>
         <p>Here are some suggestions. First, take only as much food as you can eat. Second, if you don't like a dish, ask for less of it. Third, remind your friends not to waste food.</p>
         <p>Let's join the Clean Plate Campaign and save food together!</p>
         <p>The Students' Union</p>`,
@@ -678,7 +678,7 @@ KG.nodes.push(
       ],
       sample: `<p><b>Notice</b></p>
         <p>To help students practice spoken English, our school is going to start an English Corner. Everyone is welcome!</p>
-        <p>It will be held on the lawn in front of the school library from 4:30 to 5:30 every Friday afternoon. At the English Corner, you can talk freely with others, sing English songs and play interesting games. Our foreign teacher Mr. Brown will join us, too. Don't worry about making mistakes. The more you speak, the better your English will be.</p>
+        <p>It will be held in the small garden in front of the school library from 4:30 to 5:30 every Friday afternoon. At the English Corner, you can talk freely with others, sing English songs and play interesting games. Our foreign teacher Mr. Brown will join us, too. Don't worry about making mistakes. The more you speak, the better your English will be.</p>
         <p>Just bring your smile and courage. Come and join us!</p>
         <p>The Students' Union<br>October 10th</p>`,
       notes: `<ul>
@@ -703,13 +703,13 @@ KG.nodes.push(
       ],
       sample: `<p>Dear Tom,</p>
         <p>I'm writing to invite you to spend the Dragon Boat Festival with my family. It is a traditional Chinese festival with a history of over 2,000 years. Could you come to my home at 9 a.m. that day?</p>
-        <p>In the morning, my grandma will teach us how to make zongzi. They are made of sticky rice and wrapped in leaves. In the afternoon, we are going to watch the dragon boat races by the Minjiang River.</p>
+        <p>In the morning, my grandma will teach us how to make zongzi. They are made of sticky rice and covered with leaves. In the afternoon, we are going to watch the dragon boat races by the Minjiang River.</p>
         <p>Would you like to join us? Please let me know as soon as possible.</p>
         <p>Looking forward to your reply.</p>
         <p>Yours,<br>Li Hua</p>`,
       notes: `<ul>
         <li>开头 I'm writing to invite you to … 一句话说明写信目的，再补一句节日背景，方便外国朋友理解。</li>
-        <li>zongzi 用拼音，再用 They are made of … and wrapped in leaves. 简单解释，是写中国特色事物的好办法。</li>
+        <li>zongzi 用拼音，再用 They are made of … and covered with leaves. 简单解释，是写中国特色事物的好办法。</li>
         <li>will teach / are going to watch 交替使用，表达将来的安排不显得重复。</li>
         <li>Would you like to join us? Please let me know as soon as possible. 礼貌地请对方回复，扣住要点 3。</li>
       </ul>` },
@@ -727,7 +727,7 @@ KG.nodes.push(
         '拼写、大小写、标点正确，字数在 80–100 词之间'
       ],
       sample: `<p>Boys and girls, may I have your attention, please?</p>
-        <p>To help us learn more about science, our school is going to take Grade 8 students to the Science Museum this Friday afternoon. We will meet at the school gate at 1:30 and go there by school bus. At the museum, we will see many interesting exhibits and listen to a talk about space.</p>
+        <p>To help us learn more about science, our school is going to take Grade 8 students to the Science Museum this Friday afternoon. We will meet at the school gate at 1:30 and go there by school bus. At the museum, we will see a lot of interesting things and listen to a talk about space.</p>
         <p>Please wear your school uniform and bring a notebook. Don't make any noise in the museum. If you can't go, please tell your head teacher before Thursday.</p>
         <p>That's all. Thank you.</p>`,
       notes: `<ul>
@@ -896,11 +896,11 @@ KG.nodes.push(
       explain: 'learn from mistakes 意为“从错误中学习”，成长话题常用。' },
     { type: 'fill', q: '根据中文提示填空（填一个词）：<br>我们应该乘坐公共交通出行。We should take p___ transport.', answer: ['public'],
       explain: 'take public transport 意为“乘坐公共交通”，环保话题常用短语。' },
-    { type: 'choice', q: 'Water is very precious. We should ___ every drop of it.', options: ['save', 'waste', 'spend'], answer: 0,
-      explain: 'save water 意为“节约用水”。waste 是浪费，与“珍贵”矛盾；spend 用于时间和钱。' },
+    { type: 'choice', q: 'Water is very important to us. We should ___ every drop of it.', options: ['save', 'waste', 'spend'], answer: 0,
+      explain: 'save water 意为“节约用水”。waste 是浪费，与“水很重要”矛盾；spend 用于时间和钱。' },
     { type: 'fill', q: '根据中文提示填空（填一个词）：<br>运动能帮助我们保持健康。Doing sports can help us keep h___.', answer: ['healthy'],
       explain: 'keep healthy 意为“保持健康”，keep 后面接形容词 healthy，不用名词 health。' },
-    { type: 'choice', q: 'To keep healthy, we should ___.', options: ['get enough sleep and eat more vegetables', 'stay up late and play computer games every night', 'eat a lot of junk food and never exercise'], answer: 0,
+    { type: 'choice', q: 'To keep healthy, we should ___.', options: ['get enough sleep and eat more vegetables', 'stay up late and play computer games every night', 'eat a lot of fast food and never exercise'], answer: 0,
       explain: '保持健康要睡眠充足、均衡饮食。另外两项都是不健康的生活方式。' },
     { type: 'choice', q: '志愿服务话题的作文，最常用的升华句是：', options: ['Helping others is helping ourselves.', 'Fujian is famous for its tea.', 'The weather was fine that day.'], answer: 0,
       explain: '“帮助别人就是帮助自己”是志愿服务话题的经典升华句；另外两句一个属于家乡话题，一个只是普通描述。' },
@@ -952,13 +952,13 @@ KG.nodes.push(
       ],
       sample: `<p><b>Welcome to Fujian</b></p>
         <p>Fujian lies in the southeast of China, near the sea. It is warm and wet here, so it is green all year round.</p>
-        <p>There are many things to enjoy in Fujian. If you like nature, Wuyi Mountain is a must. It is famous for its beautiful scenery and tea. If you are interested in culture, you can visit Fujian Tulou, which look like big round castles. Besides, don't forget to taste local food such as fish balls and Shaxian snacks.</p>
-        <p>Fujian is a place full of beauty and kindness. Welcome to Fujian, and I'm sure you will love it here!</p>`,
+        <p>There are many things to enjoy in Fujian. If you like nature, Wuyi Mountain is a must. It is famous for its beautiful scenery and tea. If you are interested in culture, you can visit Fujian Tulou, the big round houses where many families live together. Besides, don't forget to taste local food such as fish balls and Shaxian snacks.</p>
+        <p>Fujian is a beautiful place with kind people. Welcome to Fujian, and I'm sure you will love it here!</p>`,
       notes: `<ul>
         <li>If you like nature, … If you are interested in culture, … 两个 if 句针对不同兴趣推荐，结构整齐。</li>
-        <li>which look like big round castles 用定语从句加比喻，让外国读者一下子有画面感。</li>
+        <li>the big round houses where many families live together 用同位语加定语从句解释土楼，让外国读者一下子有画面感。</li>
         <li>a must 意为“必去之地”，地道又简洁。</li>
-        <li>结尾 a place full of beauty and kindness 概括全文，再表达欢迎，首尾呼应。</li>
+        <li>结尾 a beautiful place with kind people 概括全文，再表达欢迎，首尾呼应。</li>
       </ul>` },
     { title: 'A Volunteer Experience',
       prompt: `<p>校英语报“Helping Others”栏目正在征稿。请以“A Volunteer Experience”为题，写一次你做志愿者的经历。要点如下：</p>
@@ -1072,9 +1072,9 @@ KG.nodes.push(
         '字数在 80–100 词之间'
       ],
       sample: `<p><b>A Failure That Helped Me Grow</b></p>
-        <p>Last term, I took part in an English speech contest. I prepared for it for weeks, but on the day of the contest I was so nervous that I forgot my words. I didn't win any prize, and I felt very sad.</p>
+        <p>Last term, I took part in an English speech competition. I prepared for it for weeks, but on the day of the competition I was so nervous that I forgot my words. I didn't win any prize, and I felt very sad.</p>
         <p>My teacher told me that failure is the mother of success. She helped me find out my problems. Since then, I have practiced speaking in front of my classmates every week.</p>
-        <p>This term I won second prize in the same contest. From this experience, I learned that we should never give up.</p>`,
+        <p>This term I won second prize in the same competition. From this experience, I learned that we should never give up.</p>`,
       notes: `<ul>
         <li>I was so nervous that I forgot my words. 用 so…that 把失败的原因和结果写在一句话里。</li>
         <li>My teacher told me that failure is the mother of success. 把成长话题的好句子放进宾语从句，自然不生硬。</li>
@@ -1121,7 +1121,7 @@ KG.nodes.push(
       ],
       sample: `<p><b>How to Keep Healthy</b></p>
         <p>As we all know, health is very important. Without it, we can't study or live happily. Here are some ways to keep healthy.</p>
-        <p>First, we should have a balanced diet. Eat more fruit and vegetables and less junk food. Second, it's good for our health to get enough sleep, so don't stay up late. What's more, we need to do some exercise every day, such as running or playing ball games. Finally, when we feel stressed, we can talk with our parents or friends.</p>
+        <p>First, we should have a balanced diet. Eat more fruit and vegetables and less fast food. Second, it's good for our health to get enough sleep, so don't stay up late. What's more, we need to do some exercise every day, such as running or playing ball games. Finally, when we feel stressed, we can talk with our parents or friends.</p>
         <p>In a word, the more we care about our health, the happier we will be.</p>`,
       notes: `<ul>
         <li>开头 As we all know, … Here are some ways … 两句话点题并引出下文。</li>
