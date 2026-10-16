@@ -25,9 +25,11 @@ final class Gh {
 
     /** 返回 [状态码, 响应正文]；网络错误时状态码为 0。 */
     static String[] request(Context c, String method, String path, String body) {
+        // token 只能发给 GitHub API：别的地址（包括同步节点）一律不发请求
+        String url = path != null && path.startsWith("/") ? API + path : path;
+        if (url == null || !url.startsWith(API + "/")) return new String[]{"0", "只允许访问 https://api.github.com/"};
         HttpURLConnection con = null;
         try {
-            String url = path.startsWith("http") ? path : API + path;
             con = (HttpURLConnection) new URL(url).openConnection();
             con.setRequestMethod(method);
             con.setConnectTimeout(20000);

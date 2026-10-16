@@ -85,6 +85,29 @@
     padding: 8px 16px; border-radius: 10px; z-index: 20; font-size: 14px; max-width: 90vw; }
   .hint { color: var(--muted); font-size: 14px; }
   .hint ol { padding-left: 20px; }
+  /* 节点页（node.js） */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-left: 5px; vertical-align: middle; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .seg button { padding: 5px 12px; border-radius: 8px; font-size: 14px; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin-top: 8px; font-size: 15px; }
+  .kv span { color: var(--muted); } .kv b { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .nok { color: var(--accent); } .nbad { color: var(--bad); } .nwarn { color: var(--warn); }
+  .chip.nok { background: var(--accent); color: var(--accent-ink); } .chip.nbad { background: var(--bad); color: #fff; } .chip.nwarn { background: var(--warn); color: #fff; }
+  .ngray { opacity: .55; }
+  .nsec { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+  label.btn { display: inline-flex; align-items: center; justify-content: center; flex: 1; min-width: 96px; border: 1px solid var(--line); background: var(--card);
+    color: var(--ink); border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 400; margin: 0; }
+  label.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .ncode-msg { margin-top: 8px; font-size: 14px; }
+  .nform2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0 12px; }
+  .form select { width: 100%; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .ncheck { display: flex !important; gap: 8px; align-items: flex-start; font-weight: 400 !important; margin: 4px 0 8px !important; }
+  .ncheck input { width: auto !important; margin-top: 5px; }
+  .nmodal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .nmodal-in { background: var(--card); border-radius: 14px; padding: 16px; width: 100%; max-width: 520px; max-height: 100%; overflow-y: auto; text-align: center; }
+  .nmodal-in canvas { width: 100%; max-width: 420px; height: auto; image-rendering: pixelated; margin: 10px auto; display: block; border-radius: 6px; }
+  .nmodal-in textarea { width: 100%; font: 13px/1.4 monospace; color: var(--ink); background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 6px; height: 64px; resize: none; }
 </style>
 </head>
 <body>
@@ -101,6 +124,7 @@
 <main id="main"></main>
 <div class="actions" id="actions" hidden><div class="in" id="actionsIn"></div></div>
 
+<script src="node.js"></script>
 <script>
 // ---------- 网络：App 里走原生桥；浏览器里 ?mock 用假数据预览界面 ----------
 const MOCK = !window.Native && /[?&]mock/.test(location.search);
@@ -125,6 +149,7 @@ const hasToken = () => MOCK || (window.Native && Native.hasToken());
 // ---------- 状态 ----------
 const TABS = [
   { key: 'office', name: '办公室', office: true },
+  { key: 'node', name: '节点', node: true },
   { key: 'approve', name: '待审批', states: ['待审批', '阻塞'] },
   { key: 'doing', name: '进行中', states: ['已批准', '开发中', '待测试', '返工', '需修改'] },
   { key: 'review', name: '待评审', states: ['待评审'] },
@@ -183,8 +208,9 @@ function md(src) {
 // ---------- 列表 ----------
 function renderTabs() {
   $('tabs').innerHTML = TABS.map(t => {
-    const n = t.closed || t.office ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
-    const badge = t.key === 'approve' && n ? `<span class="badge">${n}</span>` : (n && !t.closed ? ` ${n}` : '');
+    const n = t.closed || t.office || t.node ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
+    const badge = t.node ? (window.nodeAlert ? '<span class="dot" title="节点需要注意"></span>' : '')
+      : t.key === 'approve' && n ? `<span class="badge">${n}</span>` : (n && !t.closed ? ` ${n}` : '');
     return `<button data-k="${t.key}" class="${t.key === tab ? 'on' : ''}">${t.name}${badge}</button>`;
   }).join('');
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.k; renderList(); });
@@ -196,6 +222,7 @@ function renderList() {
   const t = TABS.find(x => x.key === tab);
   if (t.office) return renderOffice();
   stopOffice();
+  if (t.node) return renderNode();
   const list = t.closed ? closed : issues.filter(i => t.states.includes(stateOf(i)));
   $('main').innerHTML = list.length ? list.map(i => `
     <div class="card item" data-n="${i.number}">
@@ -538,7 +565,9 @@ function renderSetup() {
       <li>Permissions → Repository permissions → <b>Issues: Read and write</b>（Metadata 自动只读）</li>
       <li>生成后复制，粘贴到下面</li></ol></div>
     <label for="tk">Token</label><input id="tk" type="password" autocomplete="off" placeholder="github_pat_…">
-    <div class="row"><button class="primary" id="tks">保存并检查</button></div></div>`;
+    <div class="row"><button class="primary" id="tks">保存并检查</button></div></div>
+    <div id="nodeSettings"></div>`;
+  renderNodeSettings($('nodeSettings'));
   $('upd').onclick = () => window.Native && Native.checkUpdate ? Native.checkUpdate() : toast('只有在 App 里才能更新');
   $('tks').onclick = async () => {
     const v = $('tk').value.trim(); if (!v) return toast('请粘贴 token');
@@ -595,6 +624,7 @@ function mockApi(method, path, body) {
 }
 
 load();
+nodeCheck();   // 打开 App 时取一次节点状态（节点标签红点）
 </script>
 </body>
 </html>
