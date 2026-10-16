@@ -379,23 +379,37 @@
 
   /* 按条目合并（进度、错题、草稿、词单）：
      内容 = 两边内容（含删除时记下的内容）取上界；修改时间、设备取较新的；删除时间取较晚的。
-     某一边还有这一条，且（没有删除记录，或最近一次修改 / 条目自带时间晚于删除）→ 保留；否则算删除（另一台设备后来删掉了它） */
+     规则（#8）：保留 ⇔ 没有任何删除记录，或「最近修改时间 t / 条目自带时间（错题 at、词单听写记录 at）」晚于最晚的删除时间 x（相等算删除）。
+       没有修改记录的旧条目 t 记为 0（最早），只靠条目自带时间和删除比先后；进度、草稿没有自带时间，碰到删除记录就算删了。
+     为了任意顺序合并结果都一样，保留与否只由“合并后的 (内容, t, x)”决定：
+       某一边没有这一条（已删除）时，它的删除时间至少算到它自己记下的 t 和删除前内容的时间——
+       这台设备是在看到这些之后才删的（两台设备时钟不准时可能出现 x 比 t / at 早）；
+       没有删除时间也没有修改时间的“删除前内容”不算数（不是我们写出来的数据）。
+       这样已删除的一边永远不会让条目“复活”，合并结果写回后再读也是同一个状态，所以满足交换、结合、幂等 */
+  const itemHint = (kind, v) => kind === 'list' ? listHint(v) : kind === 'mathWrong' && isObj(v) ? +v.at || 0 : 0;
+  function deadSide(kind, e) {
+    const x = Math.max(e.x, e.t, itemHint(kind, e.v));
+    const r = Object.assign({}, e, { x });
+    if (!x) delete r.v;
+    return r;
+  }
   function mergeItems(kind, A, B2) {
     const ia = isObj(A.items) ? A.items : {}, ib = isObj(B2.items) ? B2.items : {};
     const ma = isObj(A.meta) ? A.meta : {}, mb = isObj(B2.meta) ? B2.meta : {};
     const ids = Array.from(new Set(Object.keys(ia).concat(Object.keys(ib), Object.keys(ma), Object.keys(mb)))).filter(id => id !== '@settings' && id !== '*').sort();
     const items = {}, meta = {};
     ids.forEach(id => {
-      const ea = entryOf(ma, id), eb = entryOf(mb, id);
       const ha = hasOwn(ia, id), hb = hasOwn(ib, id);
+      const ea = ha ? entryOf(ma, id) : deadSide(kind, entryOf(ma, id)), eb = hb ? entryOf(mb, id) : deadSide(kind, entryOf(mb, id));
       const va = ha ? ia[id] : ea.v, vb = hb ? ib[id] : eb.v;
       const w = pick(ea, eb, entryKey), x = Math.max(ea.x, eb.x);
-      let val, vers, hint = 0;
+      let val, vers;
       if (kind === 'drafts') ({ val, vers } = joinDraftNode(va, vb, ea, eb, A.dev, B2.dev));
-      else if (kind === 'list') { val = joinList(va, vb, ea, eb); hint = listHint(val); }
-      else if (kind === 'mathWrong') { val = joinWrong(va, vb); hint = isObj(val) ? +val.at || 0 : 0; }
+      else if (kind === 'list') val = joinList(va, vb, ea, eb);
+      else if (kind === 'mathWrong') val = joinWrong(va, vb);
       else if (kind === 'mathProgress') val = joinMath(va, vb);
       else val = joinProg(va, vb);
+      const hint = itemHint(kind, val);
       const live = (ha || hb) && val !== undefined && (!x || Math.max(w.t, hint) > x);
       const e = {};
       if (w.t || w.by) { e.t = w.t; if (w.by) e.by = w.by; }
