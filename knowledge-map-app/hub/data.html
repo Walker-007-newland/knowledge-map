@@ -167,7 +167,8 @@
       $('pvList').innerHTML = listHtml(ch);
       $('pvList').hidden = !ch.length;
       $('pvTitle').textContent = ch.length ? '合并预览：' + ch.length + ' 类数据有变化' : '没有变化';
-      $('pvRest').hidden = false;
+      const allChanged = ch.length && ch.length >= (r.report.total || 0);   // 每一类都有变化时不再写“其余没有变化”
+      $('pvRest').hidden = !!allChanged;
       $('pvRest').textContent = ch.length ? '其余没有变化。' : '这个文件里的数据，这台设备上都已经有了，不用合并。';
       $('pvConflict').hidden = !r.report.conflicts;
       $('pvConflict').textContent = '草稿冲突 ' + r.report.conflicts + ' 篇：两台设备写的内容不一样，合并后正文是较新的那份，较旧的接在后面（标有「【另一台设备 … 保存的版本】」），可以自己再删改。';

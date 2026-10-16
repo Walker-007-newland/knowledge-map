@@ -386,6 +386,49 @@
       ok(fired && fired.keys.indexOf('km-narrate-rate') >= 0, 'meta 更新后发出 km-data-change 事件 {keys}');
     });
 
+    await test('再导入不误报：未排序数据、只一边有', () => {
+      // pet-core 领奖励、买装扮都是 push，真实数据里 claimed / owned 不是排好序的；听写 history、学习时长 days 也可能不规范
+      const day = '2026-10-18';
+      const raw = () => ({
+        'km-pet-v1': { breed: 'shiba', name: '旺财', born: 1000, tick: NOW, fullness: 60, xp: 4, bones: 0,
+          claimed: { 'fjzk-zh-progress-v1': ['z', 'b', 'a', 'b'], 'mathmap-progress-v1': ['m2', 'm1'] }, owned: ['party', 'collar'], equip: { neck: 'collar' }, spent: { A: 1 }, legacy: { A: 0 } },
+        'km-study-v1': { days: { [day]: { 'fjzk-zh-progress-v1': 300 } }, byDev: { A: { [day]: { 'fjzk-zh-progress-v1': 300 } } }, first: {}, totals: {} },
+        'fjzk-en-dictation-v1': { lists: [{ id: 'L1', name: '一单元', words: [{ en: 'cat' }], wrong: { cat: 1 }, history: [{ at: 30, ok: 1 }, { at: 10, ok: 0 }, { at: 30, ok: 1 }], created: 3 }], settings: { reps: '2' } },
+        'fjzk-zh-progress-v1': { b: { viewed: 1, last: 90, best: 90, attempts: 1, updated: 5 } }
+      });
+      const F = pk('A', raw(), { 'km-pet-v1': { '*': { t: 900, by: 'A' } }, 'fjzk-en-dictation-v1': { L1: { t: 40, by: 'A' } } });
+      const E = pk('N', {});
+      // 只一边有：输出与“自己和自己合并”完全相同（规范化）
+      eq(M(E, F).result, M(F, F).result, '只一边有时输出与两边都有时一样规范');
+      eq(M(E, F).result, M(F, E).result, '只一边有：对称');
+      const pet = M(E, F).result.keys['km-pet-v1'];
+      eq([pet.claimed, pet.owned, pet.xp], [{ 'fjzk-zh-progress-v1': ['a', 'b', 'z'], 'mathmap-progress-v1': ['m1', 'm2'] }, ['collar', 'party'], 5], '只一边有小狗：claimed 每科、owned 去重排序，xp 按去重后个数');
+      eq(M(E, F).result.keys['fjzk-en-dictation-v1'].lists[0].history.map(h => h.at), [10, 30], '只一边有词单：history 去重排序');
+      // 1. 新设备导入后再导入同一个文件
+      const R1 = M(E, F).result;
+      const r2 = M(pk('N', R1.keys, R1.meta), F).report;
+      ok(!r2.changed, '验收 4：新设备导入一次后再导入同一文件 → 没有变化：' + r2.items.map(x => x.name + x.text).join(' / '));
+      // 2. 导入自己刚导出的文件（本机数据就是未排序的）
+      const r3 = M(F, JSON.parse(JSON.stringify(F))).report;
+      ok(!r3.changed, '导入自己刚导出的文件 → 没有变化：' + r3.items.map(x => x.name + x.text).join(' / '));
+      // 3. 只有一边有小狗、另一边有别的数据
+      const G = pk('B', { 'fjzk-zh-progress-v1': { c: { viewed: 2, last: 80, best: 80, attempts: 1, updated: 6 } } });
+      const R4 = M(G, F).result;
+      ok(!M(pk('B', R4.keys, R4.meta), F).report.changed, '只一边有小狗：合并后再导入小狗那边的文件 → 没有变化');
+      ok(!M(pk('B', R4.keys, R4.meta), G).report.changed, '只一边有小狗：合并后再导入另一边的文件 → 没有变化');
+      // 报告文字：说清改了什么；类别总数
+      const F2 = JSON.parse(JSON.stringify(F));
+      F2.keys['km-pet-v1'].claimed['fjzk-zh-progress-v1'].push('c', 'd', 'e');
+      const it = M(F, F2).report.items.find(x => x.key === 'km-pet-v1');
+      ok(it && /已领知识点 \+3（共 8 个）/.test(it.text), '小狗变化写明「已领知识点 +3」：' + (it && it.text));
+      const rp = M(E, F).report;
+      eq([rp.items.length, rp.total], [4, 4], '报告给出类别总数（全部有变化时页面不写「其余没有变化」）');
+      const F3 = JSON.parse(JSON.stringify(F));
+      F3.keys['fjzk-zh-progress-v1'].b.viewed = 0;
+      const it3 = M(F, F3).report.items.find(x => x.key === 'fjzk-zh-progress-v1');
+      ok(it3 && /1 个知识点的最近成绩、浏览时间等有更新/.test(it3.text), '进度只改了浏览时间：不写含糊的「已更新」：' + (it3 && it3.text));
+    });
+
     await test('设备编号', () => {
       resetLS();
       const d = D.device();
@@ -511,6 +554,7 @@
       f.remove();
     });
   } finally {
+    D._resetDevice();       // 测试里换过设备编号：清掉缓存，还原后用回原来的编号
     localStorage.clear();
     Object.keys(saved).forEach(k => localStorage.setItem(k, saved[k]));
     D._flush();

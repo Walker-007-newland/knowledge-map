@@ -283,8 +283,9 @@
 
   // 听写词单：名称、单词表等取修改记录较新的；错词取并集、次数取大；history 按 at 去重、保留最近 50 条；created 取早
   function joinList(a, b, ea, eb) {
-    if (a === undefined) return clone(b);
-    if (b === undefined) return clone(a);
+    if (a === undefined && b === undefined) return undefined;
+    if (a === undefined) return joinList(b, b, eb, eb);     // 只一边有：和自己合并一次，同样去重排序，输出和两边都有时一样规范
+    if (b === undefined) return joinList(a, a, ea, ea);
     if (!isObj(a) || !isObj(b)) return clone(jCanon(a, b));
     const SPECIAL = ['wrong', 'history', 'created'];
     const rest = o => { const r = Object.assign({}, o); SPECIAL.forEach(f => delete r[f]); return r; };
@@ -419,6 +420,8 @@
     return days;
   }
   function joinStudy(a, b) {
+    if (a === undefined && isObj(b)) return joinStudy(b, b);    // 只一边有：同样按 byDev 重算 days，输出规范
+    if (b === undefined && isObj(a)) return joinStudy(a, a);
     if (!isObj(a) || !isObj(b)) return clone(a === undefined ? b : b === undefined ? a : jCanon(a, b));
     const SPECIAL = ['byDev', 'days', 'first', 'totals', 'migrated'];
     const strip = o => { const r = Object.assign({}, o); SPECIAL.forEach(f => delete r[f]); return r; };
@@ -483,8 +486,9 @@
   }
   function joinPet(a, b) {
     if (!isPet(a) || !isPet(b)) {
-      if (isPet(a)) return finishPet(clone(a));
-      if (isPet(b)) return finishPet(clone(b));
+      // 只一边有小狗：和自己合并一次，claimed 每科、owned 同样去重排序（pet-core 平时是 push 进去的，顺序不定）
+      if (isPet(a)) return joinPet(a, a);
+      if (isPet(b)) return joinPet(b, b);
       return clone(a === undefined ? b : b === undefined ? a : jCanon(a, b));
     }
     const SPECIAL = ['claimed', 'owned', 'spent', 'legacy', 'fullness', 'tick', 'equip', 'equipT', 'name', 'nameT', 'breed', 'born', 'petDay', 'petCount', 'lastStudy', 'xp', 'bones'];
@@ -591,16 +595,17 @@
   function merge(local, incoming) {
     const L = normalize(local), I = normalize(incoming);
     const all = Array.from(new Set(Object.keys(L.keys).concat(Object.keys(I.keys), Object.keys(L.meta), Object.keys(I.meta)))).filter(k => !INTERNAL.has(k)).sort();
-    const keys = {}, meta = {};
+    const keys = {}, meta = {}, before = {};
     all.forEach(k => {
-      const r = mergeKey(byKey[k],
-        { val: L.keys[k], meta: L.meta[k] || {}, dev: L.device.id },
-        { val: I.keys[k], meta: I.meta[k] || {}, dev: I.device.id });
+      const sa = { val: L.keys[k], meta: L.meta[k] || {}, dev: L.device.id };
+      const r = mergeKey(byKey[k], sa, { val: I.keys[k], meta: I.meta[k] || {}, dev: I.device.id });
       if (r.val !== undefined) keys[k] = r.val;
       if (r.meta && Object.keys(r.meta).length) meta[k] = r.meta;
+      // 报告拿“本机自己合并一次”的规范形式比较：只是顺序、重复、由别的字段算出的值不同，不算变化
+      if (L.keys[k] !== undefined) { const c = mergeKey(byKey[k], sa, sa).val; if (c !== undefined) before[k] = sortDeep(c); }
     });
     const result = sortDeep({ keys, meta });
-    return { result, report: makeReport(L, I, result) };
+    return { result, report: makeReport(before, I, result) };
   }
 
   /* ---------------- 合并报告（给学生看的变化清单） ---------------- */
@@ -626,12 +631,12 @@
     return n;
   }
   function petLevel(xp) { return window.KMPet ? KMPet.level(xp || 0) : 1; }
-  function makeReport(L, I, result) {
+  function makeReport(LK, I, result) {
     const items = [];
     let conflicts = 0;
     const order = k => { const i = KEYS.findIndex(s => s.key === k); return i < 0 ? KEYS.length : i; };
     Object.keys(result.keys).sort((x, y) => order(x) - order(y) || cmp(x, y)).forEach(k => {
-      const spec = byKey[k], before = L.keys[k], after = result.keys[k];
+      const spec = byKey[k], before = LK[k], after = result.keys[k];
       if (sameKey(spec, before, after)) return;
       const name = spec ? spec.name : k;
       const parts = [];
@@ -640,13 +645,19 @@
       if (kind === 'progress' || kind === 'mathProgress') {
         const added = Object.keys(a).filter(id => !hasOwn(b, id)).length;
         const better = Object.keys(a).filter(id => isObj(b[id]) && isObj(a[id]) && (+a[id].best || 0) > (+b[id].best || 0)).length;
+        const gone = Object.keys(b).filter(id => !hasOwn(a, id)).length;
+        const upd = Object.keys(a).filter(id => hasOwn(b, id) && !same(a[id], b[id])).length;
         if (added) parts.push('新增 ' + added + ' 个知识点记录');
         if (better) parts.push(better + ' 个最好成绩提高');
         const ok = okFn(k);
         if (ok) { const m0 = countIf(b, ok), m1 = countIf(a, ok); if (m0 !== m1) parts.push('已掌握 ' + m0 + ' → ' + m1); }
+        if (gone) parts.push('去掉 ' + gone + ' 个知识点记录（另一台设备上重置过）');
+        if (upd > better) parts.push((upd - better) + ' 个知识点的最近成绩、浏览时间等有更新');
       } else if (kind === 'mathWrong') {
         const plus = Object.keys(a).filter(id => !hasOwn(b, id)).length, minus = Object.keys(b).filter(id => !hasOwn(a, id)).length;
         if (plus || minus) parts.push('+' + plus + '、−' + minus + '（现在共 ' + Object.keys(a).length + ' 道）');
+        const upd = Object.keys(a).filter(id => hasOwn(b, id) && !same(a[id], b[id])).length;
+        if (upd) parts.push(upd + ' 道错题的做错次数或时间有更新');
       } else if (kind === 'drafts') {
         let c = 0;
         const m = (result.meta[k]) || {};
@@ -659,9 +670,16 @@
         const d0 = draftCount(before), d1 = draftCount(after);
         if (d1 > d0) parts.push('新增 ' + (d1 - d0) + ' 篇');
         if (c) parts.push(c + ' 篇两台设备写的不一样，两份都保留了');
+        let edited = 0;
+        Object.keys(a).forEach(id => Object.keys(isObj(a[id]) ? a[id] : {}).forEach(q => {
+          const o = isObj(b[id]) && isObj(b[id][q]) ? b[id][q] : undefined;
+          if (o && !same(o, a[id][q])) edited++;
+        }));
+        if (edited > c) parts.push((edited - c) + ' 篇换成了另一台设备上较新的版本');
       } else if (kind === 'study') {
         const m0 = studyMinutes(before), m1 = studyMinutes(after);
         if (m0 !== m1) parts.push('总时长 ' + m0 + ' → ' + m1 + ' 分钟');
+        else parts.push('补上了另一台设备的学习记录（总时长仍约 ' + m1 + ' 分钟）');
       } else if (kind === 'pet' && isPet(after)) {
         if (!isPet(before)) parts.push('恢复小狗「' + after.name + '」：Lv.' + petLevel(after.xp) + '，' + after.bones + ' 根骨头');
         else {
@@ -669,9 +687,14 @@
           if (isPet(other) && (other.born !== before.born)) parts.push('两只小狗合并为「' + after.name + '」');
           else if (before.name !== after.name) parts.push('名字改为「' + after.name + '」');
           if (before.bones !== after.bones) parts.push('骨头 ' + before.bones + ' → ' + after.bones);
-          if ((+before.xp || 0) !== after.xp) parts.push('已领奖励的知识点 ' + (+before.xp || 0) + ' → ' + after.xp);
-          const own0 = (before.owned || []).length, own1 = (after.owned || []).length;
+          const x0 = uniqClaimed(before), x1 = uniqClaimed(after);
+          if (x1 !== x0) parts.push('已领知识点 ' + (x1 > x0 ? '+' : '−') + Math.abs(x1 - x0) + '（共 ' + x1 + ' 个）');
+          const own0 = new Set(before.owned || []).size, own1 = new Set(after.owned || []).size;
           if (own1 !== own0) parts.push('装扮 ' + own0 + ' → ' + own1 + ' 件');
+          if (!same(before.equip || {}, after.equip || {})) parts.push('换上了另一台设备的穿戴');
+          if (before.breed !== after.breed && !(isPet(other) && other.born !== before.born)) parts.push('品种改为另一台设备上的');
+          if (before.petDay !== after.petDay || (+before.petCount || 0) !== (+after.petCount || 0)) parts.push('今天摸摸的次数有更新');
+          if (!parts.length) parts.push('补上了另一台设备的喂食、学习记录（骨头、等级不变）');
         }
       } else if (kind === 'dictation') {
         const bl = Array.isArray(b.lists) ? b.lists : [], al = Array.isArray(a.lists) ? a.lists : [];
@@ -682,11 +705,16 @@
         if (plus) parts.push('新增 ' + plus + ' 个词单');
         if (minus) parts.push('删除 ' + minus + ' 个词单');
         if (upd) parts.push(upd + ' 个词单有更新');
+        if (!same(b.settings, a.settings)) parts.push('听写设置换成较新的');
       }
-      if (!parts.length) parts.push(before === undefined ? '新增' : '已更新');
+      if (!parts.length) {
+        if (before === undefined) parts.push('新增');
+        else if (kind === 'whole') parts.push(typeof after === 'string' || typeof after === 'number' ? '改为 ' + after + '（另一台设备上较新的设置）' : '换成另一台设备上较新的结果');
+        else parts.push('有细节更新');
+      }
       items.push({ key: k, cat: spec ? spec.cat : 'other', name, text: parts.join('，') });
     });
-    return { changed: items.length > 0, items, conflicts };
+    return { changed: items.length > 0, items, conflicts, total: Object.keys(result.keys).length };
   }
 
   /* ---------------- 导出、导入、应用 ---------------- */
@@ -816,7 +844,7 @@
     // 草稿正文的算法（同步层显示用）
     computeDraft,
     // 测试和调试用
-    _flush: flush, _canon: canon, _itemsOf: (key, v) => itemsOf(byKey[key], v), _sharedRead: sharedRead
+    _flush: flush, _canon: canon, _resetDevice: () => { dev = null; }, _itemsOf: (key, v) => itemsOf(byKey[key], v), _sharedRead: sharedRead
   };
 
   syncShared();
