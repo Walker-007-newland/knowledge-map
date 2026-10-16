@@ -979,7 +979,9 @@ public final class SyncManager {
             if (j.host) {
                 List<byte[]> bs = nc.rdvGet(j.rid, "a");
                 if (bs.isEmpty()) return 3000;
-                Map<String, Object> c = j.openHello(bs.get(0), 2);
+                // 取第一条解得开的：路上的旁观者只知道转交点编号、不知道 s，往里塞的垃圾解不开，跳过；全都解不开才判篡改
+                Map<String, Object> c = null;
+                for (byte[] b : bs) { c = j.openHello(b, 2); if (c != null) break; }
                 if (c == null) {
                     j.phase = "bad";
                     j.msg = "收到的加入请求解不开（可能被篡改），这张加入码作废了，请重新生成";

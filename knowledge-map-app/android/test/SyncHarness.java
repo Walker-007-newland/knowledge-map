@@ -464,6 +464,22 @@ public class SyncHarness {
         d.m.joinPoll();
         check(!d.m.inGroup(), "D 拿不到组包");
 
+        // 旁观者只看到转交点编号（URL），抢先往 b 边塞垃圾、再原样重放 ①：A 跳过解不开的，照样认出真正的新设备
+        Dev q = new Dev("devQ", "学生的手机");
+        o = SyncJson.obj(a.m.joinOpen());
+        NodeClient raw = new NodeClient(node.host, node.port, (gg, at) -> at);
+        String rid0 = a.m.join.rid;
+        try {
+            raw.rdvPut(rid0, "b", SyncCrypto.rand(120));
+            for (byte[] x : raw.rdvGet(rid0, "b")) raw.rdvPut(rid0, "b", x);
+        } catch (NodeClient.NodeError ignored) { }
+        Map<String, Object> sq = SyncJson.obj(q.m.joinScan(SyncJson.s(o, "text")));
+        a.m.joinPoll();
+        hs = SyncJson.obj(a.m.joinState());
+        check("学生的手机".equals(SyncJson.s(hs, "name")) && SyncJson.s(hs, "code").equals(SyncJson.s(sq, "code")),
+            "转交点被旁观者塞了垃圾、重放了 ①：A 仍认出真正的新设备，确认码一致", hs);
+        a.m.joinConfirm(false);
+
         // 拍到二维码的陌生人抢先扫：A 弹窗里的名字和确认码对不上
         Dev e = new Dev("devE", "陌生人的手机"), f = new Dev("devF", "学生的新平板");
         o = SyncJson.obj(a.m.joinOpen());
