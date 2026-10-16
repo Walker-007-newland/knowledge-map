@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 同步探测包（#1 第一期第一步）：独立包名，可与知识图谱 App 同时安装。
+     故意不加 network_security_config：要测的就是 targetSdk 34 默认禁止明文时，
+     自写 Socket HTTP 和 HttpURLConnection 各自能不能连通。 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fjzk.syncprobe">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- NSD 发现期间持有 MulticastLock（普通权限，安装时自动授予） -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <application
+        android:label="同步探测"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:allowBackup="false">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

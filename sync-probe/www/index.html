@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同步探测</title>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#1d1d1f; --mute:#6b6b70; --line:#e2ded5; --acc:#2b5fa8; --ok:#1f7a4d; --bad:#b3261e; --warn:#9a6700; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17181b; --card:#222327; --ink:#ececee; --mute:#9d9da3; --line:#34353a; --acc:#7aa7ff; --ok:#5fcf95; --bad:#ff8a80; --warn:#e8c26a; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:16px 16px 48px; }
+  h1 { font-size:22px; margin:4px 0 4px; }
+  .lead { color:var(--mute); margin:0 0 14px; font-size:14px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:12px 0; }
+  h2 { font-size:17px; margin:0 0 8px; }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; margin:0; font-size:15px; }
+  dt { color:var(--mute); } dd { margin:0; word-break:break-all; }
+  .big { font-size:24px; font-weight:600; letter-spacing:.5px; }
+  button { font:inherit; font-size:16px; padding:10px 16px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--ink); margin:4px 6px 4px 0; min-height:44px; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button:disabled { opacity:.5; }
+  input { font:inherit; font-size:17px; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); width:100%; max-width:320px; margin-right:6px; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+  .peer { border-top:1px solid var(--line); padding:10px 0; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px; }
+  .peer:first-child { border-top:0; }
+  .muted { color:var(--mute); font-size:14px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
+  .result { border-top:1px solid var(--line); padding:10px 0; font-size:15px; }
+  .result:first-child { border-top:0; }
+  pre { white-space:pre-wrap; word-break:break-all; font-size:12px; background:var(--bg); padding:10px; border-radius:8px; max-height:260px; overflow:auto; margin:8px 0 0; }
+  ol { margin:4px 0 0; padding-left:22px; font-size:15px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>同步探测</h1>
+  <p class="lead">测试两台安卓设备在同一个 Wi-Fi 下能不能互相发现、能不能连通。测完点最下面的「复制结果」，把文字发回给开发。</p>
+
+  <section>
+    <h2>本机</h2>
+    <dl id="me"><dt>状态</dt><dd>读取中…</dd></dl>
+    <div class="row" style="margin-top:8px">
+      <button id="btnRefresh">刷新</button>
+      <button id="btnSelf">本机自测</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>1. 自动发现</h2>
+    <p class="muted" style="margin:0 0 6px">两台设备都打开本页，都点「开始发现」，等 30 秒左右。</p>
+    <div class="row"><button class="primary" id="btnDisc">开始发现</button><span id="discState" class="muted"></span></div>
+    <div id="peers" style="margin-top:6px"><p class="muted">还没有发现设备。</p></div>
+  </section>
+
+  <section>
+    <h2>2. 手动输入地址</h2>
+    <p class="muted" style="margin:0 0 6px">在这里输入<b>另一台</b>设备「本机」一栏显示的地址，例如 192.168.1.23:47811</p>
+    <div class="row"><input id="addr" inputmode="url" placeholder="192.168.1.23:47811" autocomplete="off"><button class="primary" id="btnAddr">测试连接</button></div>
+  </section>
+
+  <section>
+    <h2>测试结果</h2>
+    <div id="results"><p class="muted">还没有测试。</p></div>
+  </section>
+
+  <section>
+    <h2>收到的请求</h2>
+    <p class="muted" style="margin:0 0 6px">别的设备连到本机时会显示在这里。</p>
+    <div id="incoming"><p class="muted">暂无。</p></div>
+  </section>
+
+  <section>
+    <h2>3. 复制结果</h2>
+    <p class="muted" style="margin:0 0 6px">两台设备都复制一次，把两段文字都发回来。</p>
+    <button class="primary" id="btnCopy">复制结果</button>
+    <pre id="report"></pre>
+  </section>
+</main>
+<script>
+(function () {
+  'use strict';
+  var P = window.Probe;
+  var preview = !P;
+  if (preview) P = mockBridge();   // 电脑浏览器预览：用模拟数据，只为检查界面
+
+  var $ = function (id) { return document.getElementById(id); };
+  var t0 = Date.now();
+  var log = [];          // 发现与解析过程的事件，带时间
+  var peers = {};        // service -> peer
+  var results = [];
+  var incoming = [];
+  var info = {};
+
+  function now() { return ((Date.now() - t0) / 1000).toFixed(1) + 's'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function hm(t) { var d = new Date(t); return d.toLocaleTimeString('zh-CN', { hour12: false }); }
+
+  function refresh() {
+    try { info = JSON.parse(P.info()); } catch (e) { info = { infoError: String(e) }; }
+    var reg = info.nsdRegister || {};
+    var regText = reg.ok === true ? '<span class="ok">已广播</span>（' + esc(reg.name) + '）'
+      : reg.ok === false ? '<span class="bad">广播失败</span> ' + esc(reg.code != null ? '错误码 ' + reg.code : reg.error)
+      : '<span class="muted">广播中…</span>';
+    var addr = info.ip && info.serverPort ? info.ip + ':' + info.serverPort : '';
+    $('me').innerHTML =
+      '<dt>名称</dt><dd>' + esc(info.name) + '</dd>' +
+      '<dt>型号</dt><dd>' + esc(info.manufacturer + ' ' + info.model) + ' · Android ' + esc(info.android) + '（API ' + esc(info.sdk) + '）</dd>' +
+      '<dt>网络</dt><dd>' + esc(info.network) + '</dd>' +
+      '<dt>本机地址</dt><dd class="big">' + (addr ? esc(addr) : '<span class="bad">没有局域网地址</span>') + '</dd>' +
+      '<dt>局域网服务</dt><dd>' + (info.serverPort ? '<span class="ok">已开启</span>，端口 ' + info.serverPort : '<span class="bad">没开起来</span> ' + esc(info.serverError)) + '</dd>' +
+      '<dt>NSD 广播</dt><dd>' + regText + '</dd>' +
+      (preview ? '<dt>注意</dt><dd class="warn">浏览器预览，数据是模拟的</dd>' : '');
+    $('btnDisc').textContent = info.discovering ? '停止发现' : '开始发现';
+    renderReport();
+  }
+
+  function renderPeers() {
+    var keys = Object.keys(peers);
+    if (!keys.length) { $('peers').innerHTML = '<p class="muted">还没有发现设备。</p>'; return; }
+    $('peers').innerHTML = keys.map(function (k) {
+      var p = peers[k];
+      return '<div class="peer"><div><b>' + esc(p.name || p.service) + '</b>' + (p.lost ? ' <span class="warn">（已离开）</span>' : '') +
+        '<div class="muted">' + esc(p.host ? p.host + ':' + p.port : '正在解析地址…') + ' · ' + esc(p.service) + '</div></div>' +
+        (p.host ? '<button data-k="' + esc(k) + '">测试连接</button>' : '') + '</div>';
+    }).join('');
+  }
+
+  function verdict(r) {
+    var s = r.socket || {};
+    return s.ok ? '<span class="ok">Socket 明文连通</span>' : '<span class="bad">Socket 连不上</span>';
+  }
+
+  function renderResults() {
+    if (!results.length) { $('results').innerHTML = '<p class="muted">还没有测试。</p>'; return; }
+    $('results').innerHTML = results.slice().reverse().map(function (r) {
+      var s = r.socket || {}, b = r.socketPost, h = r.httpUrlConnection || {};
+      var rtt = (s.rttMs || []).join(' / ');
+      var lines = [];
+      lines.push('<b>' + esc(r.label || '') + ' ' + esc(r.host + ':' + r.port) + '</b> · ' + hm(r.t));
+      lines.push('Socket GET：' + (s.ok ? '<span class="ok">成功</span>，往返 ' + rtt + ' 毫秒（连接 ' + s.connectMs + ' 毫秒）' : '<span class="bad">失败</span> ' + esc(s.error)));
+      if (s.peer && s.peer.name) lines.push('对方：' + esc(s.peer.name) + '（' + esc(s.peer.model) + '）');
+      if (b) lines.push('Socket POST 256KB：' + (b.ok ? '<span class="ok">成功</span>，' + b.ms + ' 毫秒' : '<span class="bad">失败</span> ' + esc(b.error || '哈希不一致')));
+      lines.push('HttpURLConnection：' + (h.ok ? '<span class="warn">连通了</span>（' + h.ms + ' 毫秒，系统没拦明文）'
+        : h.cleartextBlocked ? '<span class="muted">被系统拦截（预期：Android 9+ 默认禁止明文）</span>'
+        : '<span class="bad">失败</span> ' + esc(h.error)));
+      return '<div class="result">' + lines.join('<br>') + '</div>';
+    }).join('');
+  }
+
+  function renderIncoming() {
+    if (!incoming.length) { $('incoming').innerHTML = '<p class="muted">暂无。</p>'; return; }
+    $('incoming').innerHTML = incoming.slice(-20).reverse().map(function (e) {
+      return '<div class="muted">' + hm(e.t) + ' 来自 ' + esc(e.from) + ' ' + esc(e.method + ' ' + e.path) + ' → ' + e.status + (e.len ? '（' + e.len + ' 字节）' : '') + '</div>';
+    }).join('');
+  }
+
+  function renderReport() {
+    var L = [];
+    L.push('【同步探测结果】' + new Date().toLocaleString('zh-CN', { hour12: false }));
+    L.push('设备：' + info.name + ' | ' + info.manufacturer + ' ' + info.model + ' | Android ' + info.android + ' API ' + info.sdk + ' | ROM ' + info.rom);
+    L.push('探测包版本：' + info.probeVersion + '，targetSdk ' + info.targetSdk + '，系统明文策略允许=' + info.cleartextPermittedBySystem);
+    L.push('网络：' + info.network + '，网卡 ' + (info.iface || '-') + '，地址 ' + (info.interfaces || []).join('；'));
+    L.push('局域网服务：' + (info.serverPort ? '端口 ' + info.serverPort : '失败 ' + info.serverError));
+    var reg = info.nsdRegister || {};
+    L.push('NSD 广播：' + (reg.ok === true ? '成功 ' + reg.name + '（' + reg.ms + 'ms）' : reg.ok === false ? '失败 ' + (reg.code != null ? 'code=' + reg.code : reg.error) : '未完成'));
+    var pk = Object.keys(peers);
+    L.push('NSD 发现：' + (pk.length ? pk.map(function (k) { var p = peers[k]; return (p.name || k) + '@' + (p.host || '?') + ':' + (p.port || '?') + '（发现 ' + p.foundMs + 'ms，解析 ' + p.via + ' ' + p.resolveMs + 'ms）'; }).join('；') : '没有发现其它设备'));
+    results.forEach(function (r) {
+      var s = r.socket || {}, b = r.socketPost || {}, h = r.httpUrlConnection || {};
+      L.push('测试 ' + (r.label || '') + ' ' + r.host + ':' + r.port + '：Socket GET ' + (s.ok ? '成功 RTT ' + (s.rttMs || []).join('/') + 'ms' : '失败 ' + s.error) +
+        (r.socketPost ? '；POST256K ' + (b.ok ? '成功 ' + b.ms + 'ms' : '失败 ' + (b.error || 'hash')) : '') +
+        '；HttpURLConnection ' + (h.ok ? '成功 ' + h.ms + 'ms' : (h.cleartextBlocked ? '被拦截' : '失败') + ' ' + h.error) +
+        (s.peer ? '；对方 ' + s.peer.name + ' API ' + s.peer.sdk : ''));
+    });
+    L.push('收到请求：' + (incoming.length ? incoming.length + ' 次，来自 ' + uniq(incoming.map(function (e) { return e.from; })).join('、') : '无'));
+    L.push('过程：' + log.slice(-30).join(' | '));
+    $('report').textContent = L.join('\n');
+  }
+  function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
+
+  window.__probe = function (type, d) {
+    if (type === 'reg') { log.push(now() + ' 广播' + (d.ok ? '成功' : '失败' + (d.code != null ? d.code : ''))); refresh(); return; }
+    if (type === 'disc') {
+      var m = { started: '正在发现…', stopped: '已停止', 'start-failed': '发现启动失败 ' + (d.code != null ? '错误码 ' + d.code : d.error || ''), 'stop-failed': '停止失败', 'lock-failed': '组播锁失败' };
+      $('discState').textContent = m[d.state] || d.state;
+      log.push(now() + ' 发现:' + d.state + (d.code != null ? '(' + d.code + ')' : ''));
+      refresh();
+      return;
+    }
+    if (type === 'found') {
+      log.push(now() + ' 找到 ' + d.service + '(' + d.ms + 'ms)');
+      if (!peers[d.service]) peers[d.service] = { service: d.service, foundMs: d.ms };
+      peers[d.service].lost = false;
+      renderPeers(); renderReport(); return;
+    }
+    if (type === 'peer') {
+      log.push(now() + ' 解析 ' + d.service + '→' + d.host + ':' + d.port + '(' + d.via + ' ' + d.resolveMs + 'ms)');
+      var p = peers[d.service] || (peers[d.service] = { service: d.service, foundMs: d.ms });
+      p.host = d.host; p.port = d.port; p.name = d.name; p.id = d.id; p.via = d.via; p.resolveMs = d.resolveMs; p.lost = false;
+      renderPeers(); renderReport(); return;
+    }
+    if (type === 'lost') { log.push(now() + ' 离开 ' + d.service); if (peers[d.service]) peers[d.service].lost = true; renderPeers(); renderReport(); return; }
+    if (type === 'resolve-failed') { log.push(now() + ' 解析失败 ' + d.service + ' ' + (d.code != null ? d.code : d.error)); renderReport(); return; }
+    if (type === 'test') { results.push(d); log.push(now() + ' 测试 ' + d.host + ' ' + ((d.socket || {}).ok ? 'ok' : 'fail')); renderResults(); renderReport(); return; }
+    if (type === 'incoming') { incoming.push(d); if (incoming.length > 200) incoming.shift(); renderIncoming(); renderReport(); return; }
+  };
+
+  $('btnRefresh').onclick = refresh;
+  $('btnSelf').onclick = function () { P.selfTest(); };
+  $('btnDisc').onclick = function () {
+    if (info.discovering) P.stopDiscovery(); else { P.startDiscovery(); $('discState').textContent = '正在启动…'; }
+    setTimeout(refresh, 300);
+  };
+  $('peers').onclick = function (e) {
+    var k = e.target.getAttribute && e.target.getAttribute('data-k');
+    if (!k || !peers[k]) return;
+    P.test(peers[k].host, peers[k].port, '发现的设备 ' + (peers[k].name || ''));
+  };
+  $('btnAddr').onclick = function () {
+    var v = $('addr').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    var m = v.match(/^([0-9.]+|\[[0-9a-fA-F:]+\])(?::(\d+))?$/);
+    if (!m) { alert('地址格式不对，例如 192.168.1.23:47811'); return; }
+    P.test(m[1].replace(/[\[\]]/g, ''), parseInt(m[2] || '47811', 10), '手动输入');
+  };
+  $('btnCopy').onclick = function () { renderReport(); P.copy($('report').textContent); };
+  window.onAppResume = refresh;
+  refresh();
+
+  function mockBridge() {
+    var discovering = false;
+    function fire(t, d, ms) { setTimeout(function () { window.__probe(t, d); }, ms || 0); }
+    return {
+      info: function () {
+        return JSON.stringify({ probeVersion: 'preview', id: 'abc123', name: '浏览器预览', manufacturer: 'Preview', model: 'Browser', android: '14', sdk: 34, rom: '-', targetSdk: 34,
+          cleartextPermittedBySystem: false, serverPort: 47811, serverError: '', nsdRegister: { ok: true, name: 'km-probe-abc1', ms: 120 }, discovering: discovering,
+          network: 'Wi-Fi', iface: 'wlan0', linkAddresses: ['192.168.1.23/24'], interfaces: ['wlan0 192.168.1.23'], ip: '192.168.1.23' });
+      },
+      startDiscovery: function () {
+        discovering = true;
+        fire('disc', { state: 'started' }, 100);
+        fire('found', { service: 'km-probe-9f2e', ms: 1800 }, 600);
+        fire('peer', { service: 'km-probe-9f2e', host: '192.168.1.42', port: 47811, id: 'x', name: '书房的平板', via: 'resolve', resolveMs: 90, ms: 1900 }, 900);
+      },
+      stopDiscovery: function () { discovering = false; fire('disc', { state: 'stopped' }, 100); },
+      reRegister: function () { },
+      test: function (h, p, label) {
+        fire('test', { host: h, port: p, label: label, t: Date.now(),
+          socket: { ok: true, rttMs: [18, 9, 8], connectMs: 6, peer: { name: '书房的平板', model: 'Xiaomi Pad', sdk: 34 } },
+          socketPost: { ok: true, ms: 120, bytes: 262144, hashMatch: true },
+          httpUrlConnection: { ok: false, error: 'UnknownServiceException: CLEARTEXT communication to ' + h + ' not permitted by network security policy', cleartextBlocked: true } }, 400);
+        fire('incoming', { from: '192.168.1.42', method: 'GET', path: '/hello', len: 0, status: 200, t: Date.now() }, 500);
+      },
+      selfTest: function () { this.test('127.0.0.1', 47811, '本机回环 127.0.0.1'); },
+      copy: function (t) { try { navigator.clipboard.writeText(t); } catch (e) { } }
+    };
+  }
+})();
+</script>
+</body>
+</html>
