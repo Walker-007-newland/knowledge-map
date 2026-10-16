@@ -46,7 +46,7 @@ try {
 & "$bt\zipalign.exe" -f -p 4 "$work\base.apk" "$work\aligned.apk"
 if ($LASTEXITCODE) { throw 'zipalign 失败' }
 
-$signDir = "$teach\knowledge-map-app\signing"
+$signDir = if ($env:KM_SIGNING_DIR) { $env:KM_SIGNING_DIR } else { "$teach\knowledge-map-app\signing" }
 $pw = [IO.File]::ReadAllText("$signDir\password.txt").Trim()
 $apk = "$out\team-admin.apk"
 & "$bt\apksigner.bat" sign --ks "$signDir\release.jks" --ks-pass "pass:$pw" --ks-key-alias km --out $apk "$work\aligned.apk"

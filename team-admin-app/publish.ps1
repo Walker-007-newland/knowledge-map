@@ -16,7 +16,8 @@ $bt = Get-ChildItem "$(if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env
 $ver = ((& "$bt\aapt2.exe" dump badging $apk.FullName | Select-String "versionName='([^']+)'").Matches[0].Groups[1].Value)
 if (-not $ver) { throw '读不到版本号' }
 
-$token = [IO.File]::ReadAllText("$teach\knowledge-map-app\signing\github-token.txt").Trim()
+$signDir = if ($env:KM_SIGNING_DIR) { $env:KM_SIGNING_DIR } else { "$teach\knowledge-map-app\signing" }
+$token = [IO.File]::ReadAllText("$signDir\github-token.txt").Trim()
 $basic = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$token"))
 $mirror = "$here\out\admin-branch"
 if (Test-Path $mirror) { Remove-Item $mirror -Recurse -Force }
