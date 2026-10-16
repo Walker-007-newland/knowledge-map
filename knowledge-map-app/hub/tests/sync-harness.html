@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三台设备经节点同步</title>
+<style>
+  :root { --bg: #f6f4ef; --text: #1f2328; --good: #2f8a4c; --bad: #c23f2e; --muted: #6b6f76; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #17181b; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; } }
+  :root[data-theme="dark"] { --bg: #17181b; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; }
+  body { margin: 0; padding: 20px 16px; background: var(--bg); color: var(--text); font: 15px/1.6 "Microsoft YaHei", system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  #sum { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+  .ok { color: var(--good); } .bad { color: var(--bad); }
+  li { margin: 2px 0; overflow-wrap: anywhere; } small { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>三台设备经同步节点同步（真 km-data.js 合并）</h1>
+<p><small>#1 第一期验收第 5 条：#2 验收第 5–9 条换成「三台经节点同步」再跑一遍，6 种先后顺序最终 cid 相同。
+本页要由 SyncHarness 的 <code>--serve</code> 后端打开（它起 3 个 Java 同步内核 A、B、C 和一个本地节点，或 <code>--remote</code> 连真实节点），
+地址形如 http://127.0.0.1:8790/hub/tests/sync-harness.html。不碰本页的 localStorage。结果也在 window.__results。</small></p>
+<div id="sum">运行中…</div>
+<ol id="out"></ol>
+<script src="../km-data.js"></script>
+<script src="../km-study.js"></script>
+<script src="../pet/pet-core.js"></script>
+<script src="../km-sync.js"></script>
+<script>
+(async function () {
+  const D = KMData, S = KMSync, canon = D._canon;
+  const out = document.getElementById('out');
+  const res = { pass: 0, fail: 0, failures: [], done: false };
+  window.__results = res;
+  let cur = '';
+  function log(ok, msg) {
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'bad';
+    li.textContent = (ok ? '✓ ' : '✗ ') + cur + '：' + msg;
+    out.appendChild(li);
+    if (ok) res.pass++; else { res.fail++; res.failures.push(cur + '：' + msg); }
+  }
+  const eq = (a, b, msg) => { const ok = canon(a) === canon(b); log(ok, msg + (ok ? '' : '　实际 ' + canon(a) + '　期望 ' + canon(b))); };
+  const ok = (v, msg) => log(!!v, msg);
+
+  async function api(op, d, body) {
+    const r = await fetch('/api/' + op + (d ? '?d=' + d : ''), { method: 'POST', body: body == null ? '' : (typeof body === 'string' ? body : JSON.stringify(body)) });
+    const j = await r.json();
+    if (j && j.error) throw new Error(op + '：' + j.error);
+    return j;
+  }
+
+  // 三台设备：页面里各自的一份数据包（相当于各自平板上的 localStorage），桥接到 Java 内核
+  let ids = {}, dev = {};
+  async function reset(init) {
+    const r = await api('reset');
+    if (!r.ok) throw new Error('建组失败 ' + JSON.stringify(r));
+    ids = r.ids;
+    dev = {};
+    ['A', 'B', 'C'].forEach(n => { dev[n] = { device: { id: ids[n], name: n }, keys: {}, meta: {} }; const x = init && init[n]; if (x) { dev[n].keys = x.keys || {}; dev[n].meta = x.meta || {}; } });
+  }
+  async function publish(n) { const p = dev[n]; return api('publish', n, { device: p.device, sections: S.sections(p) }); }
+  /** 回到总入口：发布 → 同步 → 合并收件箱 → 重新发布 → 确认 → 再同步一次 */
+  async function visit(n) {
+    await publish(n);
+    await api('sync', n);
+    const taken = await api('take', n);
+    if (taken.length) {
+      const m = S.mergeTaken(dev[n], taken);
+      dev[n] = { device: dev[n].device, keys: m.result.keys, meta: m.result.meta };
+      await publish(n);
+      await api('ack', n, m.acks);
+      await api('sync', n);
+      return m;
+    }
+    return null;
+  }
+  async function rounds(k, order) { for (let i = 0; i < k; i++) for (const n of (order || ['A', 'B', 'C'])) await visit(n); }
+  async function sameCids() {
+    const c = await api('cids');
+    return canon(c.A) === canon(c.B) && canon(c.B) === canon(c.C) && Object.keys(c.A).length > 1;
+  }
+  const sameData = () => canon(dev.A.keys) === canon(dev.B.keys) && canon(dev.B.keys) === canon(dev.C.keys) && canon(dev.A.meta) === canon(dev.B.meta) && canon(dev.B.meta) === canon(dev.C.meta);
+  async function test(name, fn) { cur = name; try { await fn(); } catch (e) { log(false, '抛出异常 ' + (e && e.stack || e)); } }
+  const ORDERS = [['A', 'B', 'C'], ['A', 'C', 'B'], ['B', 'A', 'C'], ['B', 'C', 'A'], ['C', 'A', 'B'], ['C', 'B', 'A']];
+  const NOW = Date.UTC(2026, 9, 20, 8, 0, 0);
+
+  // 各条测试数据（同 tests/test.html 里 #2 的验收 5–9，换成三台经节点同步）
+  function cases() {
+    const K = 'fjzk-zh-drafts-v1';
+    const tOld = new Date(2026, 9, 18, 21, 5).getTime(), tNew = new Date(2026, 9, 19, 8, 0).getTime();
+    const ver = (d, t, node) => { const v = {}; Object.keys(node).forEach(q => { v[q] = { [d]: Object.assign({ t, text: node[q].text, seen: {} }, node[q].checks ? { checks: node[q].checks } : {}) }; }); return { t, by: d, vers: v }; };
+    const a1 = { 2: { text: '新版本作文', checks: [true, true] } }, b1 = { 2: { text: '旧版本作文', checks: [false] } };
+    const day = '2026-10-18';
+    return {
+      A: {
+        keys: {
+          'fjzk-zh-progress-v1': { n1: { viewed: 100, best: 90, last: 60, attempts: 3, updated: 2000 } },
+          'mathmap-wrong-v1': { 'a#1': { n: 2, at: 100 } },
+          [K]: { w1: a1 },
+          'km-study-v1': { days: { [day]: { 'fjzk-zh-progress-v1': 1200 } }, byDev: { [ids.A]: { [day]: { 'fjzk-zh-progress-v1': 1200 } } }, first: {}, totals: {}, migrated: 1 },
+          'km-pet-v1': { breed: 'shiba', name: '旺财', born: 1000, tick: NOW - 10 * 3600000, fullness: 80, xp: 2, bones: 3 * 2 - 2,
+            claimed: { 'fjzk-zh-progress-v1': ['x', 'y'] }, owned: [], equip: {}, spent: { [ids.A]: 2 }, legacy: { [ids.A]: 0 }, petDay: '2026-10-9', petCount: 3, lastStudy: 50 }
+        },
+        meta: { 'mathmap-wrong-v1': { 'c#2': { x: 9000, v: { n: 2, at: 500 } } }, [K]: { w1: ver(ids.A, tNew, a1) }, 'km-pet-v1': { '*': { t: 900 } } }
+      },
+      B: {
+        keys: {
+          'fjzk-zh-progress-v1': { n1: { viewed: 50, best: 70, last: 85, attempts: 2, updated: 1000 } },
+          'mathmap-wrong-v1': { 'c#2': { n: 3, at: 2000 } },
+          [K]: { w1: b1 },
+          'km-study-v1': { days: { [day]: { 'fjzk-zh-progress-v1': 900 } }, byDev: { [ids.B]: { [day]: { 'fjzk-zh-progress-v1': 900 } } }, first: {}, totals: {}, migrated: 1 },
+          'km-pet-v1': { breed: 'husky', name: '二哈', born: 2000, tick: NOW, fullness: 40, xp: 2, bones: 3 * 2 - 1,
+            claimed: { 'fjzk-zh-progress-v1': ['x', 'z'] }, owned: [], equip: {}, spent: { [ids.B]: 1 }, legacy: { [ids.B]: 0 }, petDay: '2026-10-16', petCount: 1, lastStudy: 80 }
+        },
+        meta: { 'mathmap-wrong-v1': { 'c#2': { t: 2000 } }, [K]: { w1: ver(ids.B, tOld, b1) }, 'km-pet-v1': { '*': { t: 800 } } }
+      },
+      C: { keys: { 'fjzk-en-progress-v1': { e1: { viewed: 5, best: 100, last: 100, attempts: 1, updated: 3000 } } }, meta: {} }
+    };
+  }
+
+  function checkMerged(label) {
+    const k = dev.C.keys;
+    eq(k['fjzk-zh-progress-v1'].n1, { viewed: 50, best: 90, last: 60, attempts: 3, updated: 2000 }, label + '#2 验收 5：best=90、last=60（C 经节点拿到）');
+    const pet = k['km-pet-v1'];
+    eq(pet.claimed['fjzk-zh-progress-v1'], ['x', 'y', 'z'], label + '#2 验收 6：两边都领过的 x 只算一次');
+    eq(pet.bones, D.petBones(pet), label + '骨头等于公式值（' + pet.bones + '）');
+    ok(pet.bones >= 0 && pet.bones === 3 * 3 - 3, label + '骨头 = 3×3 − (2+1) = 6，不为负');
+    ok(!k['mathmap-wrong-v1']['c#2'] && k['mathmap-wrong-v1']['a#1'], label + '#2 验收 7：A 删掉的错题 c#2 没有回来');
+    const text = k['fjzk-zh-drafts-v1'].w1[2].text;
+    eq(text, '新版本作文\n\n【另一台设备 10-18 21:05 保存的版本】\n旧版本作文', label + '#2 验收 8：草稿正文为较新的，后面附较旧的');
+    eq(k['km-study-v1'].days['2026-10-18']['fjzk-zh-progress-v1'], 2100, label + '#2 验收 9：20 分钟 + 15 分钟 = 35 分钟');
+    ok(sameData(), label + '三台的学习数据完全一样');
+  }
+
+  try {
+    await test('#2 验收 5–9 经节点（顺序 A→B→C）', async () => {
+      await reset();
+      const c = cases();
+      ['A', 'B', 'C'].forEach(n => { dev[n].keys = c[n].keys; dev[n].meta = c[n].meta; });
+      await rounds(3);
+      checkMerged('');
+      ok(await sameCids(), '三台各分区 cid 相同');
+      await api('resetCounts');
+      await rounds(5);
+      const cnt = await api('counts');
+      ok(!cnt.push, '继续同步 5 轮：没有任何 push（增量为空）' + (cnt.push ? '；push ' + cnt.push + ' 次' : ''));
+      const pet = dev.A.keys['km-pet-v1'];
+      eq(pet.bones, 6, '继续同步 5 轮骨头不变');
+      eq(dev.A.keys['km-study-v1'].days['2026-10-18']['fjzk-zh-progress-v1'], 2100, '继续同步 5 轮学习时长仍是 35 分钟');
+      ok(dev.A.keys['fjzk-zh-drafts-v1'].w1[2].text.split('【另一台设备').length === 2, '继续同步草稿不会越接越长');
+    });
+
+    for (const order of ORDERS) {
+      await test('6 种先后顺序：' + order.join('→'), async () => {
+        await reset();
+        const c = cases();
+        ['A', 'B', 'C'].forEach(n => { dev[n].keys = c[n].keys; dev[n].meta = c[n].meta; });
+        await rounds(3, order);
+        checkMerged('');
+        ok(await sameCids(), '最终三台 cid 相同');
+      });
+    }
+
+    await test('收件箱重复 3 次结果不变', async () => {
+      await reset();
+      const c = cases();
+      ['A', 'B'].forEach(n => { dev[n].keys = c[n].keys; dev[n].meta = c[n].meta; });
+      await rounds(2);
+      const before = canon(dev.C);
+      await publish('A');
+      await api('sync', 'A');
+      const taken = await api('take', 'C');
+      const t3 = taken.concat(taken, taken);
+      const m = S.mergeTaken(dev.C, t3);
+      eq(canon({ device: dev.C.device, keys: m.result.keys, meta: m.result.meta }), before, '同一批分区重复 3 次合并，结果不变');
+    });
+  } catch (e) { log(false, '运行出错 ' + e); }
+  res.done = true;
+  document.getElementById('sum').innerHTML = '<span class="' + (res.fail ? 'bad' : 'ok') + '">通过 ' + res.pass + ' 项，失败 ' + res.fail + ' 项</span>';
+})();
+</script>
+</body>
+</html>
