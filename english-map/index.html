@@ -58,7 +58,7 @@
   </div>
   <p class="muted" id="backupMsg"></p>
   <p class="muted km-all-hint" hidden>要备份全部科目或合并导入，请到 总入口 → 我的数据</p>
-  <script>if (window.KMBridge) document.querySelectorAll('.km-all-hint').forEach(function (e) { e.hidden = false; });</script>
+  <script>if (window.KMApp) document.querySelectorAll('.km-all-hint').forEach(function (e) { e.hidden = false; });</script>
 </div>
 
 <script src="data/modules.js"></script>
@@ -79,7 +79,7 @@
 <script>
   // 单词听写：平板 App 里要走 https 虚拟地址（识别引擎在 file:// 下用不了），浏览器里直接打开
   document.getElementById('btnDictation').onclick = function () {
-    location.href = window.KMBridge && KMBridge.goBack
+    location.href = window.KMApp && KMApp.goBack
       ? 'https://appassets.androidplatform.net/english-map/dictation.html' : 'dictation.html';
   };
 </script>

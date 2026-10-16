@@ -570,7 +570,7 @@
   let snapAt = 0;
   const snapCam = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
   function requestSnap(delay) {
-    if (window.KMBridge && KMBridge.savePetImage) snapAt = performance.now() + (delay || 1500);
+    if (window.KMApp && KMApp.savePetImage) snapAt = performance.now() + (delay || 1500);
   }
   function takeSnap() {
     const W = renderer.domElement.width, H = renderer.domElement.height, aspect = W / H;
@@ -590,7 +590,7 @@
     out.width = out.height = 320;
     out.getContext('2d').drawImage(renderer.domElement, (W - side) / 2, (H - side) / 2, side, side, 0, 0, 320, 320);
     [ground.visible, shadowCatcher.visible, ball.visible] = vis;
-    try { KMBridge.savePetImage(out.toDataURL('image/png').split(',')[1]); } catch (e) { /* 忽略 */ }
+    try { KMApp.savePetImage(out.toDataURL('image/png').split(',')[1]); } catch (e) { /* 忽略 */ }
   }
 
   function loop() {
@@ -746,7 +746,7 @@
   /* ---------------- 桌面小部件（只在平板 App 里有） ---------------- */
   // 安卓不允许 App 自己把小部件放上桌面，只能请桌面弹“添加”窗口，或者让用户手动加。
   // 不少国产桌面“说支持”一键添加却什么也不弹（缺“桌面快捷方式”权限时静默失败），所以请求后要确认真的加上了
-  const B = window.KMBridge;
+  const B = window.KMApp;
   const widgetCount = () => { try { return B.widgetCount ? B.widgetCount() : -1; } catch (e) { return -1; } };
   function widgetInfo() { try { return JSON.parse(B.widgetInfo ? B.widgetInfo() : '{}'); } catch (e) { return {}; } }
   // 各品牌桌面里“小部件”的叫法和位置不一样

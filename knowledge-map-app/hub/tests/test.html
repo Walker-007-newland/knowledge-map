@@ -172,7 +172,7 @@
       B.keys['km-pet-v1'].bones = Math.max(0, B.keys['km-pet-v1'].bones);   // 6−1−8 < 0 → 0（B 的数据本身就是“负数”时公式也不出负）
       const r = law('小狗', A, B).keys['km-pet-v1'];
       eq(r.claimed, { 'fjzk-zh-progress-v1': ['x', 'y', 'z'], 'mathmap-progress-v1': ['m'] }, '验收 6：同一个知识点 x 两边都领过，只算一次');
-      eq(r.xp, 4, 'xp = 已领知识点并集个数');
+      eq(r.xp, 4, 'xp = max(已领知识点并集个数 4, A 的 xp 3, B 的 xp 2)');
       eq(r.bones, Math.max(0, 3 * 4 - (2 + 1) - 0 - shop), 'bones = 3×xp − Σspent − Σlegacy − 已购装扮总价');
       ok(r.bones >= 0, '骨头不为负');
       eq([r.name, r.breed], ['旺财', 'shiba'], '名字、品种取最早领养的那只（born 最小）');
@@ -244,7 +244,7 @@
         if (rnd(2)) keys['fjzk-x-v1'] = { r: rnd(5) };
         keys['km-study-v1'] = rnd(2) ? { days: { d1: { k: rnd(100) } }, first: { k: { a: 'd' + rnd(9) } }, totals: { k: rnd(9) } }
           : { days: {}, byDev: { [dev]: { d1: { k: rnd(100) } }, [pickOne(devs)]: { d2: { k: rnd(100) } } }, first: {}, totals: {}, migrated: 1 };
-        if (rnd(4)) keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙', '丙']), born: rnd(3), nameT: rnd(5), tick: rnd(1e6), fullness: rnd(100), xp: 0, bones: rnd(20),
+        if (rnd(4)) keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙', '丙']), born: rnd(3), nameT: rnd(5), tick: rnd(1e6), fullness: rnd(100), xp: rnd(7), bones: rnd(20),
           claimed: { k: ['a', 'b', 'c', 'd'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)), equip: { neck: pickOne(['collar', null]) }, equipT: rnd(5),
           ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}), petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
         const lists = [];
@@ -271,6 +271,112 @@
         if (JSON.stringify(M(P2(r1), a).result) !== s1) { bad++; if (!first) first = '第 ' + i + ' 组再合 a 变了'; }
       }
       ok(!bad, '追加验收 1：200 组随机三份数据，(a,b),c / a,(b,c) / (a,c),b / (c,b),a 四种顺序结果逐字节相同' + (bad ? '；失败 ' + bad + ' 次，' + first : ''));
+    });
+
+    await test('等级不倒退（#7）', () => {
+      const Z = 'fjzk-zh-progress-v1';
+      ok(P.level(5) === 2 && P.level(3) === 1, '前提：xp 5 是 Lv.2，去重数 3 是 Lv.1');
+      // #2 测试报告里的设备 B：claimed.语文 5 条去重 3 个，xp 5，骨头 5（3×3 − 喂食 4）
+      const devB = () => ({ breed: 'shiba', name: '小柴', born: 100, tick: NOW, fullness: 50, xp: 5, bones: 5,
+        claimed: { [Z]: ['a', 'b', 'a', 'c', 'b'] }, owned: [], equip: {}, spent: { B: 4 }, legacy: { B: 0 }, petDay: '', petCount: 0, lastStudy: 0 });
+      const B = pk('B', { 'km-pet-v1': devB(), [Z]: { a: { last: 90 }, b: { last: 90 }, c: { last: 90 } } });
+      const leg = D.parseFile(JSON.stringify({ app: 'fjzk-chinese-map', progress: { d: { last: 50, best: 50, updated: 9 } } })).pkg;
+      const r1 = M(B, leg).result.keys['km-pet-v1'];
+      eq([r1.xp, P.level(r1.xp), r1.bones], [5, 2, 5], '验收 1：设备 B 导入只含语文的旧单科文件 → 仍是 xp 5、Lv.2、骨头 5');
+      const E = pk('N', {});
+      const R2 = M(E, B).result;
+      eq([R2.keys['km-pet-v1'].xp, P.level(R2.keys['km-pet-v1'].xp), R2.keys['km-pet-v1'].bones], [5, 2, 5], '验收 2：空白设备导入 B 的全量文件 → Lv.2，骨头 5');
+      ok(!M(pk('N', R2.keys, R2.meta), B).report.changed, '验收 2：再导入同一文件 →「没有变化」');
+      // 验收 5：A（xp 7、无重复）导入 B：等级不变，不写「等级」行
+      const petA = (xp, ids) => pk('A', { 'km-pet-v1': { breed: 'husky', name: '阿黄', born: 100, tick: NOW, fullness: 50, xp, bones: 3 * ids.length - 2,
+        claimed: { [Z]: ids }, owned: [], equip: {}, spent: { A: 2 }, legacy: { A: 0 }, petDay: '', petCount: 0, lastStudy: 0 } });
+      const m7 = M(petA(7, ['a', 'b', 'c', 'd', 'e', 'f', 'g']), B);
+      const it7 = m7.report.items.find(x => x.key === 'km-pet-v1');
+      eq(m7.result.keys['km-pet-v1'].xp, 7, 'A（xp 7）导入 B（xp 5）→ xp 7');
+      ok(!it7 || !/等级/.test(it7.text), '验收 5：等级没变时没有「等级」行：' + (it7 && it7.text));
+      // A（xp 2，Lv.1）导入 B：并集 5 个、xp 5 → Lv.2
+      const m2 = M(petA(2, ['x', 'y']), B);
+      const it2 = m2.report.items.find(x => x.key === 'km-pet-v1');
+      const lvAfter = P.level(m2.result.keys['km-pet-v1'].xp);
+      ok(it2 && it2.text.indexOf('等级 Lv.1 → Lv.2') >= 0 && lvAfter === 2, '验收 5：等级变了写「等级 Lv.1 → Lv.2」：' + (it2 && it2.text));
+      // 随机：claimed 有重复、xp 比去重数大的小狗，和其它随机数据三方合并
+      let seed = (+new URLSearchParams(location.search).get('seed') || 20261016) + 7;
+      const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+      const pickOne = arr => arr[rnd(arr.length)];
+      function gen(dev) {
+        const keys = {}, meta = {};
+        keys[Z] = {};
+        ['a', 'b', 'c'].forEach(id => { if (rnd(2)) { keys[Z][id] = { last: rnd(100), best: rnd(100), updated: rnd(9) }; if (rnd(2)) (meta[Z] = meta[Z] || {})[id] = { t: rnd(20), by: dev }; } });
+        if (rnd(2)) keys['km-narrate-rate'] = pickOne(['0.8', '1', '1.2']);
+        if (rnd(2)) keys['km-study-v1'] = { days: { d1: { k: rnd(100) } }, first: {}, totals: {} };
+        if (rnd(5)) {
+          const cl = ['a', 'b', 'c', 'd', 'e'].filter(() => rnd(2));
+          const dup = rnd(3) ? cl.concat(cl.slice(0, 1 + rnd(3))) : cl;
+          keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙']), born: rnd(3), tick: rnd(1e6), fullness: rnd(100),
+            xp: new Set(cl).size + rnd(4), bones: rnd(15), claimed: { [Z]: dup, k: ['p', 'q'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)),
+            equip: rnd(2) ? { neck: 'collar' } : {}, ...(rnd(2) ? { equipT: rnd(5) } : {}), ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}),
+            petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
+        }
+        return pk(dev, keys, meta);
+      }
+      const P2 = r => pk('R', r.keys, r.meta);
+      const xpOf = p => { const v = p.keys['km-pet-v1']; return v && v.breed ? +v.xp || 0 : 0; };
+      let bad = 0, first = '';
+      const fail = m => { bad++; if (!first) first = m; };
+      for (let i = 0; i < 150; i++) {
+        const a = gen('A'), b = gen('B'), c = gen('C');
+        const orders = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]];
+        const rs = orders.map(o => M(P2(M(o[0], o[1]).result), o[2]).result);
+        const s0 = JSON.stringify(rs[0]);
+        if (rs.some(r => JSON.stringify(r) !== s0)) fail('第 ' + i + ' 组：6 种顺序结果不同');
+        if (JSON.stringify(M(a, P2(M(b, c).result)).result) !== s0) fail('第 ' + i + ' 组：a,(b,c) 结果不同');
+        if (JSON.stringify(M(P2(rs[0]), a).result) !== s0 || JSON.stringify(M(P2(rs[0]), P2(rs[0])).result) !== s0) fail('第 ' + i + ' 组：合并再合并变了');
+        const pet = rs[0].keys['km-pet-v1'];
+        if (pet) {
+          if (!(pet.xp >= xpOf(a) && pet.xp >= xpOf(b) && pet.xp >= xpOf(c))) fail('第 ' + i + ' 组：xp ' + pet.xp + ' 小于某一边');
+          if (pet.xp < D.uniqClaimed(pet)) fail('第 ' + i + ' 组：xp 小于去重数');
+          if (pet.bones !== D.petBones(pet)) fail('第 ' + i + ' 组：骨头 ' + pet.bones + ' ≠ 公式 ' + D.petBones(pet));
+        }
+        [a, c].forEach(x => { const r2 = M(x, b).result.keys['km-pet-v1']; if (r2 && P.level(r2.xp) < P.level(xpOf(x))) fail('第 ' + i + ' 组：导入后等级低于导入前'); });
+      }
+      ok(!bad, '150 组随机三份数据（含 claimed 重复、xp 比去重数大）：6 种顺序逐字节相同、幂等、xp ≥ 每一边、骨头等于公式值、等级不低于导入前' + (bad ? '；失败 ' + bad + ' 次，' + first : ''));
+    });
+
+    await test('预览文案（#7）', () => {
+      const Z = 'fjzk-zh-progress-v1', ZD = 'fjzk-zh-drafts-v1', K = 'fjzk-en-dictation-v1';
+      const local = pk('A', { [Z]: { a: { last: 50, best: 50, updated: 1 } } });
+      const item = (rep, key) => rep.items.find(x => x.key === key);
+      // 验收 6：空草稿
+      const f0 = D.parseFile(JSON.stringify({ app: 'fjzk-chinese-map', progress: { b: { last: 90, best: 90, updated: 5 } }, drafts: {} }));
+      ok(!(ZD in f0.pkg.keys), '旧单科文件 drafts: {} 不带草稿键');
+      ok(!item(M(local, f0.pkg).report, ZD), '验收 6：导入 drafts: {} 的旧文件 → 预览没有「语文草稿」一行');
+      const fE = D.parseFile(JSON.stringify({ app: 'fjzk-chinese-map', progress: { b: { last: 90 } }, drafts: { w1: { 0: { text: '  ' } } } }));
+      ok(!item(M(local, fE.pkg).report, ZD), '草稿只有空白文字 → 也没有「语文草稿」一行');
+      ok(!item(M(local, pk('B', { [ZD]: { w1: { 0: { text: '' } } } })).report, ZD), '全量文件里的空草稿 → 不落到兜底「新增」');
+      const f2 = D.parseFile(JSON.stringify({ app: 'fjzk-chinese-map', progress: { b: { last: 90 } }, drafts: { w1: { 0: { text: '作文一' } }, w2: { 0: { text: '作文二' } } } }));
+      const d2 = item(M(local, f2.pkg).report, ZD);
+      ok(d2 && d2.text === '新增 2 篇', '验收 6：drafts 里有 2 篇有文字 →「新增 2 篇」：' + (d2 && d2.text));
+      // 验收 7：听写设置
+      const dict = (dev, reps, t) => pk(dev, { [K]: { lists: [{ id: 'L1', name: '一', words: [], wrong: {}, history: [], created: 1 }, { id: 'L2', name: '二', words: [], wrong: {}, history: [], created: 2 }], settings: { reps } } },
+        t ? { [K]: { '@settings': { t, by: dev } } } : {});
+      const t7 = item(M(local, dict('B', '3', 50)).report, K);
+      ok(t7 && t7.text === '新增 2 个词单，加上另一台设备的听写设置', '验收 7：本机没有听写数据 →「新增 2 个词单，加上另一台设备的听写设置」：' + (t7 && t7.text));
+      const t7b = item(M(dict('A', '1', 10), dict('B', '3', 50)).report, K);
+      ok(t7b && t7b.text === '听写设置换成较新的', '验收 7：本机有不同设置 →「听写设置换成较新的」：' + (t7b && t7b.text));
+      // 验收 8：两边听写设置都没有修改时间
+      const x1 = dict('A', '1'), x2 = dict('B', '3');
+      const its = [item(M(x1, x2).report, K), item(M(x2, x1).report, K)].filter(Boolean);
+      ok(its.length === 1 && /分不出先后；可以在听写页改回来/.test(its[0].text), '验收 8：两边听写设置都没有修改时间 → 换了的那边写「分不出先后；可以在听写页改回来」：' + its.map(x => x.text).join(' / '));
+      const x3 = item(M(dict('A', '1', 10), dict('B', '3')).report, K) || item(M(dict('B', '3'), dict('A', '1', 10)).report, K);
+      ok(x3 && !/分不出先后/.test(x3.text), '验收 8：一边有修改时间 → 不写「分不出先后」：' + (x3 && x3.text));
+      // 验收 8：穿戴
+      const dog = (dev, equip, equipT) => pk(dev, { 'km-pet-v1': Object.assign({ breed: 'shiba', name: '小柴', born: 100, tick: NOW, fullness: 50, xp: 2, bones: 0,
+        claimed: { [Z]: ['a', 'b'] }, owned: ['collar', 'party'], equip, spent: {}, legacy: {}, petDay: '', petCount: 0, lastStudy: 0 }, equipT ? { equipT } : {}) });
+      const o1 = dog('A', { neck: 'collar' }), o2 = dog('B', { head: 'party' });
+      const pe = [item(M(o1, o2).report, 'km-pet-v1'), item(M(o2, o1).report, 'km-pet-v1')].filter(Boolean);
+      ok(pe.length === 1 && /换上了另一台设备的穿戴（两边都是升级前的记录，分不出先后；可以到宠物页换回来）/.test(pe[0].text), '验收 8：两边都没有 equipT、穿戴不同 → 带「分不出先后；可以到宠物页换回来」：' + pe.map(x => x.text).join(' / '));
+      const pt = item(M(o1, dog('B', { head: 'party' }, 5)).report, 'km-pet-v1');
+      ok(pt && /换上了另一台设备的穿戴/.test(pt.text) && !/分不出先后/.test(pt.text), '验收 8：一边有 equipT → 只写「换上了另一台设备的穿戴」：' + (pt && pt.text));
     });
 
     await test('单词听写', () => {
@@ -402,7 +508,7 @@
       eq(M(E, F).result, M(F, F).result, '只一边有时输出与两边都有时一样规范');
       eq(M(E, F).result, M(F, E).result, '只一边有：对称');
       const pet = M(E, F).result.keys['km-pet-v1'];
-      eq([pet.claimed, pet.owned, pet.xp], [{ 'fjzk-zh-progress-v1': ['a', 'b', 'z'], 'mathmap-progress-v1': ['m1', 'm2'] }, ['collar', 'party'], 5], '只一边有小狗：claimed 每科、owned 去重排序，xp 按去重后个数');
+      eq([pet.claimed, pet.owned, pet.xp], [{ 'fjzk-zh-progress-v1': ['a', 'b', 'z'], 'mathmap-progress-v1': ['m1', 'm2'] }, ['collar', 'party'], 5], '只一边有小狗：claimed 每科、owned 去重排序，xp = max(去重后个数 5, 原 xp 4)');
       eq(M(E, F).result.keys['fjzk-en-dictation-v1'].lists[0].history.map(h => h.at), [10, 30], '只一边有词单：history 去重排序');
       // 1. 新设备导入后再导入同一个文件
       const R1 = M(E, F).result;
@@ -461,6 +567,33 @@
       eq([sst.migrated, sst.byDev[me]['2026-10-15']['fjzk-zh-progress-v1'], S.secondsOn(sst, '2026-10-15')], [1, 1234.5, 1234.5], '学习时长迁移：byDev[本机] = 原 days，统计页读的 days 不变');
     });
 
+    await test('降过级的设备打开后等级恢复（#7）', () => {
+      resetLS();
+      const me = D.device().id, Z = 'fjzk-zh-progress-v1';
+      localStorage.setItem(Z, JSON.stringify({ a: { last: 90 }, b: { last: 90 }, c: { last: 90 } }));
+      localStorage.setItem('km-study-v1', JSON.stringify({ days: { '2026-10-15': { [Z]: 1234.5 } }, first: {}, totals: {} }));
+      // #2 升级时留的备份：claimed 有重复，xp 5（Lv.2），骨头 5
+      const orig = { breed: 'shiba', name: '小柴', born: 1, tick: Date.now(), fullness: 50, xp: 5, bones: 5, claimed: { [Z]: ['a', 'b', 'a', 'c', 'b'] }, owned: [], equip: {}, petDay: '', petCount: 0, lastStudy: 0 };
+      localStorage.setItem('km-pet-v1-backup', JSON.stringify(orig));
+      // #2 上线后做过一次写回的导入：claimed 去重、xp 按去重数变成 3（Lv.1），骨头仍是 5
+      const down = Object.assign({}, orig, { xp: 3, claimed: { [Z]: ['a', 'b', 'c'] }, spent: {}, legacy: { [me]: 4 } });
+      localStorage.setItem('km-pet-v1', JSON.stringify(down));
+      const st = P.load();
+      eq([st.xp, P.level(st.xp), st.bones, D.petBones(st)], [5, 2, 5, 5], '验收 3：备份是同一只狗、xp 更大 → 打开后 xp 5、Lv.2，骨头仍是 5');
+      eq([st.claimed, st.spent, st.legacy], [down.claimed, down.spent, down.legacy], '修复不碰 claimed、spent、legacy');
+      eq(JSON.parse(localStorage.getItem('km-pet-v1')).xp, 5, '恢复后的经验已保存');
+      eq(P.load().xp, 5, '再打开不再变（只做一次）');
+      eq(S.secondsOn(S.load(), '2026-10-15'), 1234.5, '学习时长不变');
+      ok(!P.pending(P.load()).length, '恢复后不会再为已领过的知识点发骨头');
+      localStorage.setItem('km-pet-v1', JSON.stringify(Object.assign({}, down, { born: 2 })));
+      eq([P.load().xp, P.load().bones], [3, 5], '验收 3：备份 born 不同（不是同一只狗）→ xp 不变');
+      localStorage.setItem('km-pet-v1', JSON.stringify(Object.assign({}, down, { xp: 8 })));
+      eq(P.load().xp, 8, '当前 xp 已比备份大 → 不动');
+      localStorage.removeItem('km-pet-v1-backup');
+      localStorage.setItem('km-pet-v1', JSON.stringify(down));
+      eq(P.load().xp, 3, '没有备份 → 不动');
+    });
+
     await test('导出 → 空白设备导入 → 一致；再导入一次没有变化', () => {
       resetLS();
       localStorage.setItem('mathmap-progress-v1', JSON.stringify({ m1: { best: 0.9, last: 0.9, at: 5 } }));
@@ -517,27 +650,38 @@
       eq(JSON.stringify(Object.assign({}, localStorage)), snap, '验收 11：只预览（merge）不写任何存储');
     });
 
-    await test('App 里两个存储空间互通（模拟 KMBridge.sharedGet/sharedPut）', async () => {
+    await test('App 里两个存储空间互通（模拟 KMBridge.sharedGet/sharedPut，带 #5 的每页令牌）', async () => {
       resetLS();
       const store = {};
-      const bridge = {
-        sharedGet: k => store[k] ? JSON.stringify(store[k]) : '',
-        sharedPut: (k, json, t) => { store[k] = { v: json, t }; return true; },
-        deviceName: () => 'Xiaomi Pad', saveFile: () => {}
-      };
-      // 在同源 iframe 里装一份带模拟原生桥的 km-data.js（相当于听写页）
+      // 模拟原生桥：hello() 隔一会儿把令牌送进主页面的 __kmTok（相当于 evaluateJavascript），其余方法第一个参数必须是当前令牌
+      function mkBridge(w) {
+        let tok = '';
+        const chk = t => t && t === tok;
+        return {
+          hello() { const t = Array.from(crypto.getRandomValues(new Uint8Array(16)), x => (x < 16 ? '0' : '') + x.toString(16)).join(''); setTimeout(() => { tok = t; w.__kmTok(t); }, 20); },
+          sharedGet: (t, k) => chk(t) && store[k] ? JSON.stringify(store[k]) : '',
+          sharedPut: (t, k, json, ts) => { if (!chk(t)) return false; store[k] = { v: json, t: ts }; return true; },
+          deviceName: t => chk(t) ? 'Xiaomi Pad' : '', saveFile: () => {}
+        };
+      }
+      // 在同源 iframe 里装一份带模拟原生桥的 km-shim.js + km-data.js（相当于听写页），等令牌到、对齐完
       async function frame() {
         const f = document.createElement('iframe');
         f.style.display = 'none';
         document.body.appendChild(f);
-        f.contentWindow.KMBridge = bridge;
-        await new Promise((ok, bad) => { const s = f.contentDocument.createElement('script'); s.src = new URL('../km-data.js', location.href).href; s.onload = ok; s.onerror = bad; f.contentDocument.head.appendChild(s); });
+        const w = f.contentWindow;
+        w.__kmShimTest = 1;
+        w.KMBridge = mkBridge(w);
+        for (const src of ['../km-shim.js', '../km-data.js'])
+          await new Promise((ok, bad) => { const s = f.contentDocument.createElement('script'); s.src = new URL(src, location.href).href; s.onload = ok; s.onerror = bad; f.contentDocument.head.appendChild(s); });
+        await w.KMData.ready();
         return f;
       }
       const K = 'fjzk-en-dictation-v1';
       // 1. 听写页新建词单 → 写进共享存储
       let f = await frame();
       const dev = f.contentWindow.KMData.device();
+      eq(dev.name, 'Xiaomi Pad', '令牌到了以后设备名来自原生桥（KMApp.deviceName 补上令牌）');
       eq(JSON.parse(JSON.parse(store['km-device-v1'].v).value.id ? store['km-device-v1'].v : '{}').value.id, dev.id, '设备编号存进共享存储（两边同一个编号）');
       f.contentWindow.localStorage.setItem(K, JSON.stringify({ lists: [{ id: 'L9', name: '新词单', words: [{ en: 'dog' }], wrong: {}, history: [], created: 99 }], settings: {} }));
       f.contentWindow.KMData._flush();

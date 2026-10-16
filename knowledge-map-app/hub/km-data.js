@@ -7,7 +7,9 @@
 //    修改记录写进 km-meta-v1：{ 键: { 条目id: { t: 修改时间, by: 设备, x: 删除时间, v: 删除前的内容, vers: 草稿各设备版本 } } }
 //    写完发 window 事件 'km-data-change'，detail = { keys: [...] }
 // 2. 设备编号：km-device-v1 = { id, name, created }（App 里同时存一份到原生共享存储，听写页和图谱页用同一个编号）
-// 3. 听写词单在 https 虚拟地址的另一份 localStorage 里：经 KMBridge.sharedGet / sharedPut 和图谱页互通
+// 3. 听写词单在 https 虚拟地址的另一份 localStorage 里：经 KMApp.sharedGet / sharedPut（km-shim.js 的门面，自动带令牌）和图谱页互通。
+//    令牌要等 KMApp.ready()：之前读不到共享存储，所以设备编号先用本空间的，ready 后再和共享存储对齐（共享里的为准）、
+//    听写页 ready 后才合并共享存储里的词单；ready 之前设备编号和听写页的自动同步都不写共享存储。KMData.ready() 在对齐完成后兑现
 // 4. merge(a, b) 是纯函数：不读写存储、不读当前时间；幂等、对称、满足结合律（三台设备按任意顺序合并结果都一样），
 //    输出的对象属性排好序，同样的输入在任何设备上得到一字不差的结果。
 //    做法：每种数据的合并都是“取上界”——数取大/取小、集合取并集、“取较新”按 (时间, 设备编号, JSON 文本) 的全序取最大
@@ -108,8 +110,10 @@
   /* ---------------- 本机存储 ---------------- */
   let ls = null;
   try { ls = window.localStorage; } catch (e) { ls = null; }
-  const B = window.KMBridge;
+  const B = window.KMApp;
   const hasShared = !!(B && B.sharedGet && B.sharedPut);
+  // 能读写原生共享存储了（拿到令牌）；不在 App 里时没有共享存储，视为一直就绪
+  const sharedReady = () => !hasShared || B.isReady();
   const nativeSet = Storage.prototype.setItem, nativeRemove = Storage.prototype.removeItem;
   function rawSet(k, v) { try { nativeSet.call(ls, k, v); } catch (e) { /* 存不了就算了 */ } }
   function parse(raw) { try { return JSON.parse(raw); } catch (e) { return raw; } }
@@ -150,6 +154,7 @@
       return isObj(v) ? v : null;
     } catch (e) { return null; }
   }
+  // 令牌没到时 KMApp.sharedPut 会排队，到了再写（导入写回不会丢）
   function sharedWrite(key, value, meta) {
     if (!hasShared) return;
     try { B.sharedPut(key, JSON.stringify({ value, meta: meta || {} }), Date.now()); } catch (e) { /* 忽略 */ }
@@ -168,6 +173,12 @@
   }
   /** 本机设备编号 { id: 16 位十六进制, name, created } */
   function device() {
+    if (!sharedReady()) {
+      // 令牌还没到：先用本空间的编号（没有就新建一个存下来），不缓存、不碰共享存储，ready 后再对齐
+      let d = readLocal(DEVICE);
+      if (!isObj(d) || !d.id) { d = { id: newId(), created: Date.now(), name: deviceName() }; rawSet(DEVICE, JSON.stringify(d)); }
+      return d;
+    }
     if (dev) { const cur = readLocal(DEVICE); if (!isObj(cur) || cur.id !== dev.id) rawSet(DEVICE, JSON.stringify(dev)); return dev; }
     let d = readLocal(DEVICE);
     if (!isObj(d) || !d.id) d = null;
@@ -251,7 +262,7 @@
     });
     saveMeta(prune(meta, now));
     // 听写页写了词单：同步到原生共享存储，图谱页那边的「我的数据」才能导出它
-    if (hasShared && location.protocol !== 'file:') keys.forEach(key => { if (byKey[key].store === 'shared') sharedWrite(key, readLocal(key), meta[key]); });
+    if (hasShared && B.isReady() && location.protocol !== 'file:') keys.forEach(key => { if (byKey[key].store === 'shared') sharedWrite(key, readLocal(key), meta[key]); });
     try { window.dispatchEvent(new CustomEvent('km-data-change', { detail: { keys } })); } catch (e) { /* 忽略 */ }
   }
 
@@ -479,8 +490,8 @@
     return m ? +m[1] * 10000 + +m[2] * 100 + +m[3] : 0;
   }
   const isPet = v => isObj(v) && !!v.breed;
+  // 经验 xp 不在这里重算（#7）：取「去重后的已领知识点数」和两边各自 xp 的最大值（见 joinPet），等级不会因合并倒退；骨头与 xp 无关
   function finishPet(r) {
-    r.xp = uniqClaimed(r);
     r.bones = petBones(r);
     return r;
   }
@@ -524,6 +535,8 @@
     r.petDay = pd.petDay; r.petCount = pd.petCount || 0;
     const ls2 = jMax(a.lastStudy, b.lastStudy);
     if (ls2 !== undefined) r.lastStudy = ls2;
+    // 经验：取上界（max 满足交换、结合、幂等）。旧数据 claimed 有重复时 xp 比去重数大，保留学生已经看到的等级
+    r.xp = Math.max(uniqClaimed(r), +a.xp || 0, +b.xp || 0);
     return finishPet(r);
   }
 
@@ -605,7 +618,7 @@
       if (L.keys[k] !== undefined) { const c = mergeKey(byKey[k], sa, sa).val; if (c !== undefined) before[k] = sortDeep(c); }
     });
     const result = sortDeep({ keys, meta });
-    return { result, report: makeReport(before, I, result) };
+    return { result, report: makeReport(before, I, result, L) };
   }
 
   /* ---------------- 合并报告（给学生看的变化清单） ---------------- */
@@ -631,7 +644,7 @@
     return n;
   }
   function petLevel(xp) { return window.KMPet ? KMPet.level(xp || 0) : 1; }
-  function makeReport(LK, I, result) {
+  function makeReport(LK, I, result, L) {
     const items = [];
     let conflicts = 0;
     const order = k => { const i = KEYS.findIndex(s => s.key === k); return i < 0 ? KEYS.length : i; };
@@ -668,13 +681,14 @@
         }));
         conflicts += c;
         const d0 = draftCount(before), d1 = draftCount(after);
-        if (d1 > d0) parts.push('新增 ' + (d1 - d0) + ' 篇');
-        if (c) parts.push(c + ' 篇两台设备写的不一样，两份都保留了');
         let edited = 0;
         Object.keys(a).forEach(id => Object.keys(isObj(a[id]) ? a[id] : {}).forEach(q => {
           const o = isObj(b[id]) && isObj(b[id][q]) ? b[id][q] : undefined;
           if (o && !same(o, a[id][q])) edited++;
         }));
+        if (!d0 && !d1 && !c && !edited) return;     // 前后都没有写了字的草稿：不报（不落到兜底的「新增」）
+        if (d1 > d0) parts.push('新增 ' + (d1 - d0) + ' 篇');
+        if (c) parts.push(c + ' 篇两台设备写的不一样，两份都保留了');
         if (edited > c) parts.push((edited - c) + ' 篇换成了另一台设备上较新的版本');
       } else if (kind === 'study') {
         const m0 = studyMinutes(before), m1 = studyMinutes(after);
@@ -687,11 +701,17 @@
           if (isPet(other) && (other.born !== before.born)) parts.push('两只小狗合并为「' + after.name + '」');
           else if (before.name !== after.name) parts.push('名字改为「' + after.name + '」');
           if (before.bones !== after.bones) parts.push('骨头 ' + before.bones + ' → ' + after.bones);
+          const lv0 = petLevel(before.xp), lv1 = petLevel(after.xp);
+          if (lv0 !== lv1) parts.push('等级 Lv.' + lv0 + ' → Lv.' + lv1);
           const x0 = uniqClaimed(before), x1 = uniqClaimed(after);
           if (x1 !== x0) parts.push('已领知识点 ' + (x1 > x0 ? '+' : '−') + Math.abs(x1 - x0) + '（共 ' + x1 + ' 个）');
           const own0 = new Set(before.owned || []).size, own1 = new Set(after.owned || []).size;
           if (own1 !== own0) parts.push('装扮 ' + own0 + ' → ' + own1 + ' 件');
-          if (!same(before.equip || {}, after.equip || {})) parts.push('换上了另一台设备的穿戴');
+          if (!same(before.equip || {}, after.equip || {})) {
+            // 两边都没有换装时间（升级前的记录）：只能按固定次序选一边（保证合并顺序无关），说明一下
+            const noT = !(+before.equipT) && !(isPet(other) && +other.equipT);
+            parts.push(noT ? '换上了另一台设备的穿戴（两边都是升级前的记录，分不出先后；可以到宠物页换回来）' : '换上了另一台设备的穿戴');
+          }
           if (before.breed !== after.breed && !(isPet(other) && other.born !== before.born)) parts.push('品种改为另一台设备上的');
           if (before.petDay !== after.petDay || (+before.petCount || 0) !== (+after.petCount || 0)) parts.push('今天摸摸的次数有更新');
           if (!parts.length) parts.push('补上了另一台设备的喂食、学习记录（骨头、等级不变）');
@@ -705,7 +725,12 @@
         if (plus) parts.push('新增 ' + plus + ' 个词单');
         if (minus) parts.push('删除 ' + minus + ' 个词单');
         if (upd) parts.push(upd + ' 个词单有更新');
-        if (!same(b.settings, a.settings)) parts.push('听写设置换成较新的');
+        if (!same(b.settings, a.settings)) {
+          const noT = !entryOf(L && L.meta[k], '@settings').t && !entryOf(I.meta[k], '@settings').t;
+          if (b.settings === undefined) parts.push('加上另一台设备的听写设置');
+          else if (noT) parts.push('听写设置用了另一台设备的（两边都是升级前的记录，分不出先后；可以在听写页改回来）');
+          else parts.push('听写设置换成较新的');
+        }
       }
       if (!parts.length) {
         if (before === undefined) parts.push('新增');
@@ -783,7 +808,7 @@
     if (prefix && isObj(data.progress)) {
       const keys = {};
       keys[prefix + '-progress-v1'] = data.progress;
-      if (isObj(data.drafts)) keys[prefix + '-drafts-v1'] = data.drafts;
+      if (isObj(data.drafts) && draftCount(data.drafts) > 0) keys[prefix + '-drafts-v1'] = data.drafts;     // 空草稿不带（#7）
       return { ok: true, legacy: byKey[prefix + '-progress-v1'].name, pkg: { device: { id: 'legacy-' + data.app, name: '旧的单科备份' }, keys, meta: {}, exported: data.exported } };
     }
     return bad;
@@ -836,8 +861,12 @@
   const fileName = () => '知识图谱-全部学习数据-' + stamp() + '.json';
   const backupName = () => '知识图谱-导入前备份-' + stamp(true) + '.json';
 
+  // App 里：拿到令牌后对齐设备编号（共享存储里的为准）、听写页合并共享存储里的词单；浏览器里立即就绪
+  const ready = hasShared ? B.ready().then(() => { try { dev = null; device(); syncShared(); } catch (e) { /* 忽略 */ } }) : Promise.resolve();
+
   window.KMData = {
     SCHEMA, KEYS, META, DEVICE,
+    ready: () => ready,
     device, collect, merge, apply, parseFile, summary, fileName, backupName,
     // 小狗和学习时长用：骨头公式、迁移
     petBones, normPet, normStudy, ownedPrice, uniqClaimed,
@@ -847,5 +876,4 @@
     _flush: flush, _canon: canon, _resetDevice: () => { dev = null; }, _itemsOf: (key, v) => itemsOf(byKey[key], v), _sharedRead: sharedRead
   };
 
-  syncShared();
 })();

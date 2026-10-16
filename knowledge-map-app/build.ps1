@@ -1,6 +1,9 @@
 ﻿# 一键打包“知识图谱”APK（不用 Gradle，直接调 Android SDK 工具）
 # 用法：在 knowledge-map-app 目录下运行  powershell -ExecutionPolicy Bypass -File build.ps1
 # 产物：out\知识图谱-<版本>.apk
+# -SelfTest：真机自检测试包（需求 #5），多打进 selftest/ 自检页、总入口加一个入口按钮，产物是 out\selftest-<版本>.apk，
+#            不覆盖 knowledge-map.apk，也不叫「知识图谱-*.apk」（publish.ps1 只认那个名字，不会把测试包发成正式版）
+param([switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $teach = Split-Path $here -Parent
@@ -45,6 +48,14 @@ Copy-Item "$here\hub\data.html" "$work\assets\www\data.html"
 Copy-Item "$here\hub\km-study.js" "$work\assets\www\km-study.js"
 Copy-Item "$here\hub\km-narrate.js" "$work\assets\www\km-narrate.js"
 Copy-Item "$here\hub\km-reward.js" "$work\assets\www\km-reward.js"
+if ($SelfTest) {
+  New-Item -ItemType Directory -Force "$work\assets\www\selftest" | Out-Null
+  Copy-Item "$here\selftest\*.html" "$work\assets\www\selftest\"
+  $idx = [IO.File]::ReadAllText("$work\assets\www\index.html", [Text.Encoding]::UTF8)
+  $btn = '<a href="selftest/bridge.html" style="position:fixed;right:12px;bottom:12px;z-index:99;padding:10px 14px;border-radius:10px;background:#e8893b;color:#fff;font-weight:700;text-decoration:none">原生接口自检（测试包）</a>'
+  $idx = ([regex]'</body>').Replace($idx, "$btn`n</body>", 1)
+  [IO.File]::WriteAllText("$work\assets\www\index.html", $idx, (New-Object Text.UTF8Encoding $false))
+}
 # 宠物狗页面（three.js + 狗模型），模型转换脚本不打包
 $petSrc = "$here\hub\pet"
 Get-ChildItem $petSrc -Recurse -File | Where-Object { $_.Extension -ne '.py' } | ForEach-Object {
@@ -117,10 +128,10 @@ if (-not (Test-Path $ks)) {
   Write-Host "已生成签名密钥 $ks（请备份 signing 目录）"
 }
 $pw = [IO.File]::ReadAllText($pwFile).Trim()
-$apk = "$out\知识图谱-$versionName.apk"
+$apk = if ($SelfTest) { "$out\selftest-$versionName.apk" } else { "$out\知识图谱-$versionName.apk" }
 & "$bt\apksigner.bat" sign --ks $ks --ks-pass "pass:$pw" --ks-key-alias km --out $apk "$work\aligned.apk"
 if ($LASTEXITCODE) { throw 'apksigner 失败' }
-Copy-Item $apk "$out\knowledge-map.apk" -Force
+if (-not $SelfTest) { Copy-Item $apk "$out\knowledge-map.apk" -Force }
 
 # 自检：直接查 zip 原始目录里的文件名（Python 等工具读取时会自动纠正斜杠，不能用来查），确认首页在、路径里没有反斜杠
 $zip = [IO.Compression.ZipFile]::OpenRead($apk)
@@ -131,6 +142,11 @@ try {
   foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
+  # 自检页只在 -SelfTest 包里（正式包里没有 selftest/，也就不会注入 KMSelfTest）
+  $st = @($names | Where-Object { $_.StartsWith('assets/www/selftest/') })
+  if ($SelfTest) {
+    foreach ($must in 'assets/www/selftest/bridge.html', 'assets/www/selftest/frame.html') { if ($names -notcontains $must) { throw "测试包里缺少 $must" } }
+  } elseif ($st.Count) { throw "正式包里不能有 selftest/：$($st[0])" }
   $arsc = $zip.GetEntry('resources.arsc')
   if ($arsc.CompressedLength -ne $arsc.Length) { throw 'resources.arsc 被压缩了，Android 11+ 会拒绝安装' }
 } finally { $zip.Dispose() }
