@@ -85,6 +85,29 @@
     padding: 8px 16px; border-radius: 10px; z-index: 20; font-size: 14px; max-width: 90vw; }
   .hint { color: var(--muted); font-size: 14px; }
   .hint ol { padding-left: 20px; }
+  /* 节点页（node.js） */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-left: 5px; vertical-align: middle; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .seg button { padding: 5px 12px; border-radius: 8px; font-size: 14px; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin-top: 8px; font-size: 15px; }
+  .kv span { color: var(--muted); } .kv b { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .nok { color: var(--accent); } .nbad { color: var(--bad); } .nwarn { color: var(--warn); }
+  .chip.nok { background: var(--accent); color: var(--accent-ink); } .chip.nbad { background: var(--bad); color: #fff; } .chip.nwarn { background: var(--warn); color: #fff; }
+  .ngray { opacity: .55; }
+  .nsec { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+  label.btn { display: inline-flex; align-items: center; justify-content: center; flex: 1; min-width: 96px; border: 1px solid var(--line); background: var(--card);
+    color: var(--ink); border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 400; margin: 0; }
+  label.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .ncode-msg { margin-top: 8px; font-size: 14px; }
+  .nform2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0 12px; }
+  .form select { width: 100%; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .ncheck { display: flex !important; gap: 8px; align-items: flex-start; font-weight: 400 !important; margin: 4px 0 8px !important; }
+  .ncheck input { width: auto !important; margin-top: 5px; }
+  .nmodal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .nmodal-in { background: var(--card); border-radius: 14px; padding: 16px; width: 100%; max-width: 520px; max-height: 100%; overflow-y: auto; text-align: center; }
+  .nmodal-in canvas { width: 100%; max-width: 420px; height: auto; image-rendering: pixelated; margin: 10px auto; display: block; border-radius: 6px; }
+  .nmodal-in textarea { width: 100%; font: 13px/1.4 monospace; color: var(--ink); background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 6px; height: 64px; resize: none; }
 </style>
 </head>
 <body>
@@ -101,6 +124,7 @@
 <main id="main"></main>
 <div class="actions" id="actions" hidden><div class="in" id="actionsIn"></div></div>
 
+<script src="node.js"></script>
 <script>
 // ---------- 网络：App 里走原生桥；浏览器里 ?mock 用假数据预览界面 ----------
 const MOCK = !window.Native && /[?&]mock/.test(location.search);
@@ -125,6 +149,7 @@ const hasToken = () => MOCK || (window.Native && Native.hasToken());
 // ---------- 状态 ----------
 const TABS = [
   { key: 'office', name: '办公室', office: true },
+  { key: 'node', name: '节点', node: true },
   { key: 'approve', name: '待审批', states: ['待审批', '阻塞'] },
   { key: 'doing', name: '进行中', states: ['已批准', '开发中', '待测试', '返工', '需修改'] },
   { key: 'review', name: '待评审', states: ['待评审'] },
@@ -183,8 +208,9 @@ function md(src) {
 // ---------- 列表 ----------
 function renderTabs() {
   $('tabs').innerHTML = TABS.map(t => {
-    const n = t.closed || t.office ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
-    const badge = t.key === 'approve' && n ? `<span class="badge">${n}</span>` : (n && !t.closed ? ` ${n}` : '');
+    const n = t.closed || t.office || t.node ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
+    const badge = t.node ? (window.nodeAlert ? '<span class="dot" title="节点需要注意"></span>' : '')
+      : t.key === 'approve' && n ? `<span class="badge">${n}</span>` : (n && !t.closed ? ` ${n}` : '');
     return `<button data-k="${t.key}" class="${t.key === tab ? 'on' : ''}">${t.name}${badge}</button>`;
   }).join('');
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.k; renderList(); });
@@ -196,6 +222,7 @@ function renderList() {
   const t = TABS.find(x => x.key === tab);
   if (t.office) return renderOffice();
   stopOffice();
+  if (t.node) return renderNode();
   const list = t.closed ? closed : issues.filter(i => t.states.includes(stateOf(i)));
   $('main').innerHTML = list.length ? list.map(i => `
     <div class="card item" data-n="${i.number}">
@@ -226,12 +253,16 @@ async function load(quiet) {
 }
 
 // ---------- 办公室（像素风，看每个成员在做什么） ----------
-const W = 224, H = 136;
+const W = 224, H = 176;
+// desk：工位桌子左上角；seat：空闲时去休息区沙发的位置；fixed：不去休息区（CEO 空闲时在办公室喝茶）
 const MEMBERS = [
-  { role: '需求员', name: '小需', hair: '#6b3e1f', shirt: '#e8833a', desk: [14, 60], seat: [164, 90], look: 'short', queue: [] },
-  { role: '产品', name: '小品', hair: '#1c1c22', shirt: '#8a5cd1', desk: [80, 60], seat: [176, 90], look: 'long', queue: ['待评审', '需修改', '已驳回'] },
-  { role: '开发', name: '小开', hair: '#22232a', shirt: '#2f6fde', desk: [14, 104], seat: [188, 90], look: 'phones', queue: ['已批准', '返工', '开发中'] },
-  { role: '测试', name: '小测', hair: '#9a3b22', shirt: '#2e9e6a', desk: [80, 104], seat: [200, 90], look: 'glasses', queue: ['待测试'] },
+  { role: '需求员', name: '小需', hair: '#6b3e1f', shirt: '#e8833a', desk: [14, 60], seat: [100, 130], look: 'short', queue: [] },
+  { role: '产品', name: '小品', hair: '#1c1c22', shirt: '#8a5cd1', desk: [80, 60], seat: [114, 130], look: 'long', queue: ['待评审', '需修改', '已驳回'] },
+  { role: '开发', name: '小开', hair: '#22232a', shirt: '#2f6fde', desk: [14, 104], seat: [128, 130], look: 'phones', queue: ['已批准', '返工', '开发中'] },
+  { role: '开发2', name: '小发', hair: '#3a2a1a', shirt: '#1f9bb3', desk: [80, 104], seat: [142, 130], look: 'cap', queue: [] },
+  { role: '开发3', name: '小码', hair: '#141414', shirt: '#5c6bc0', desk: [146, 104], seat: [156, 130], look: 'short', queue: [] },
+  { role: '测试', name: '小测', hair: '#9a3b22', shirt: '#2e9e6a', desk: [14, 148], seat: [170, 130], look: 'glasses', queue: ['待测试'] },
+  { role: 'CEO', name: 'CEO', hair: '#6f6f6f', shirt: '#2b3a55', desk: [162, 66], dw: 54, fixed: true, look: 'suit', queue: ['待审批'] },
 ];
 const MS = { working: '工作中', idle: '空闲', blocked: '阻塞', stale: '可能已中断' };
 const STALE_MS = 3 * 3600e3;
@@ -252,13 +283,13 @@ function memberState(m) {
   return s;
 }
 const atDesk = st => st === 'working' || st === 'blocked';
-const seatOf = (m, st) => atDesk(st) ? [m.desk[0] + 8, m.desk[1] - 15] : m.seat;
+const seatOf = (m, st) => atDesk(st) || m.fixed ? [m.desk[0] + (m.fixed ? 14 : 8), m.desk[1] - 15] : m.seat;
 
 function renderOffice() {
   const counts = s => issues.filter(i => s.includes(stateOf(i))).length;
   $('main').innerHTML = `
     <div class="office card">
-      <div class="room" id="room"><canvas id="oc" width="${W}" height="${H}"></canvas><div id="tags"></div></div>
+      <div class="room" id="room" style="aspect-ratio:${W} / ${H}"><canvas id="oc" width="${W}" height="${H}"></canvas><div id="tags"></div></div>
       <button class="board" id="board" title="看待审批"></button>
     </div>
     <div id="mcards"></div>
@@ -286,7 +317,7 @@ function updateOffice() {
     return `<div class="card mcard ${iss ? 'item' : ''}" ${iss ? `data-n="${iss.number}"` : ''}>
       <canvas class="ava" width="10" height="17" data-k="${k}"></canvas>
       <div style="flex:1;min-width:0">
-        <div><b>${m.name}</b> <span class="hint">${m.role}</span> <span class="chip ms-${s.state}">${MS[s.state]}</span></div>
+        <div><b>${m.name}</b> <span class="hint">${m.fixed ? '审批（AI 代审）' : m.role}</span> <span class="chip ms-${s.state}">${MS[s.state]}</span></div>
         <div class="mtext">${esc(s.text || '')}</div>
         <div class="meta">${iss ? `<span>#${iss.number} ${esc(iss.title)}</span>` : ''}${s.at ? `<span>${ago(s.at)}</span>` : ''}${q ? `<span>队列 ${q} 个</span>` : ''}</div>
       </div></div>`;
@@ -322,6 +353,8 @@ function drawPerson(g, m, x, y, o) {
   if (!blink) { R('#222', 2, 4, 1, 1); R('#222', 5, 4, 1, 1); } else { R('#c49a78', 2, 4, 1, 1); R('#c49a78', 5, 4, 1, 1); }
   if (m.look === 'glasses') { R('#333', 1, 4, 3, 1); R('#333', 4, 4, 3, 1); R('#9fd3f5', 2, 4, 1, 1); R('#9fd3f5', 5, 4, 1, 1); }
   if (m.look === 'phones') { R('#e04848', 0, 3, 1, 3); R('#e04848', 7, 3, 1, 3); R('#555', 1, -1, 6, 1); }
+  if (m.look === 'cap') { R('#e67e22', 1, -1, 6, 2); R('#e67e22', 6, 1, 3, 1); }
+  if (m.look === 'suit') { R('#fff', 3, 7, 2, 1); R('#c0392b', 3, 8, 2, 3); }
   R('#d9776b', 3, 6, 2, 1);                        // 嘴
   if (o.cup) { R('#fff', 8, 9, 2, 3); R('#7a4a2a', 8, 9, 2, 1); }
 }
@@ -339,24 +372,27 @@ function drawOffice() {
   else { const cx = 12 + ((f / 20) % 50) - 6; R('#fff', cx, 12, 8, 3); R('#fff', cx + 2, 10, 4, 2); }
   R('#fff', 31, 7, 2, 20); R('#fff', 12, 16, 40, 2);
   // 看板：便利贴数量 = 各状态需求单数
-  R('#8d8d8d', 68, 4, 66, 26); R('#fbfbfb', 69, 5, 64, 24);
+  R('#8d8d8d', 62, 4, 66, 26); R('#fbfbfb', 63, 5, 64, 24);
   const cols = [['待评审', '#c5def5'], ['待审批', '#fbca04'], ['已批准', '#7ed6a5'], ['开发中', '#8fb6ff'], ['待测试', '#c3a6ff'], ['阻塞', '#ff8a80']];
   cols.forEach(([st, c], k) => {
     const n = Math.min(4, issues.filter(i => stateOf(i) === st || (st === '开发中' && stateOf(i) === '返工')).length);
-    R('#e3e3e3', 72 + k * 10, 8, 8, 1);
-    for (let j = 0; j < n; j++) R(c, 72 + k * 10, 11 + j * 4, 7, 3);
+    R('#e3e3e3', 66 + k * 10, 8, 8, 1);
+    for (let j = 0; j < n; j++) R(c, 66 + k * 10, 11 + j * 4, 7, 3);
   });
   // 时钟
-  const now = new Date(), cx = 152, cy = 15;
+  const now = new Date(), cx = 140, cy = 15;
   g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill(); g.strokeStyle = '#555'; g.lineWidth = 1; g.stroke();
   const hand = (a, l, c) => { g.strokeStyle = c; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(a) * l, cy - Math.cos(a) * l); g.stroke(); };
   hand((now.getHours() % 12 + now.getMinutes() / 60) / 12 * 6.283, 4, '#333'); hand(now.getMinutes() / 60 * 6.283, 6, '#777');
-  // 咖啡机、植物
-  R('#555', 196, 14, 14, 22); R('#333', 198, 17, 10, 6); R(f % 60 < 30 ? '#4cc38a' : '#2a7a55', 206, 26, 2, 2); R('#fff', 200, 30, 4, 4);
-  R('#8b5a2b', 214, 28, 8, 8); R('#3f9b4f', 213, 18, 4, 10); R('#4fb35f', 217, 14, 4, 14); R('#3f9b4f', 220, 20, 3, 8);
-  // 休息区：地毯 + 沙发靠背
-  R('#c98b7a', 152, 84, 66, 44); R('#d9a090', 154, 86, 62, 40);
-  R('#5a8f7b', 158, 88, 58, 10);
+  // CEO 室：墙上金色门牌、植物，玻璃隔断（下方留门）
+  R('#9c7a12', 170, 12, 34, 13); R('#d4a72c', 171, 13, 32, 11);
+  g.fillStyle = '#4a3500'; g.font = 'bold 8px monospace'; g.fillText('CEO', 175, 22);
+  R('#8b5a2b', 212, 28, 8, 8); R('#3f9b4f', 211, 18, 4, 10); R('#4fb35f', 215, 14, 4, 14); R('#3f9b4f', 218, 20, 3, 8);
+  R('#cfe3ef', 151, 38, 73, 50); R('#c4d8e6', 153, 40, 69, 46);   // 室内地毯
+  // 休息区：地毯 + 沙发靠背 + 咖啡机
+  R('#c98b7a', 86, 128, 136, 46); R('#d9a090', 88, 130, 132, 42);
+  R('#5a8f7b', 94, 132, 92, 10);
+  R('#555', 202, 140, 14, 26); R('#333', 204, 143, 10, 6); R(f % 60 < 30 ? '#4cc38a' : '#2a7a55', 212, 152, 2, 2); R('#fff', 206, 156, 4, 4);
   // 人：先移动，再按 y 排序画
   o.people.forEach(p => {
     const st = memberState(p.m).state, [tx, ty] = seatOf(p.m, st);
@@ -367,27 +403,32 @@ function drawOffice() {
   });
   // 桌子、显示器（画在人前面，挡住腿）
   const drawDesk = (p) => {
-    const [x, y] = p.m.desk, on = atDesk(p.st) && !p.walking;
-    R('#5b5b66', x + 4, y - 18, 16, 2);  // 椅背
+    const [x, y] = p.m.desk, on = atDesk(p.st) && !p.walking, dw = p.m.dw || 46, mx = x + dw - 20;
+    R(p.m.ceo || p.m.fixed ? '#3d2b1f' : '#5b5b66', x + (p.m.fixed ? 10 : 4), y - 18, 16, 2);  // 椅背（CEO 是皮椅）
     return () => {
-      R('#a5713f', x, y, 46, 4); R('#8a5a30', x, y + 4, 46, 2); R('#6d4524', x + 2, y + 6, 2, 8); R('#6d4524', x + 42, y + 6, 2, 8);
-      R('#333', x + 26, y - 12, 16, 11); R('#555', x + 32, y - 1, 4, 1);
+      R(p.m.fixed ? '#7a4a24' : '#a5713f', x, y, dw, 4); R(p.m.fixed ? '#5e3818' : '#8a5a30', x, y + 4, dw, 2); R('#6d4524', x + 2, y + 6, 2, 8); R('#6d4524', x + dw - 4, y + 6, 2, 8);
+      R('#333', mx, y - 12, 16, 11); R('#555', mx + 6, y - 1, 4, 1);
       const scr = !on ? '#20242b' : p.st === 'blocked' ? (f % 40 < 20 ? '#b3261e' : '#7a1a14') : '#1f3b5c';
-      R(scr, x + 27, y - 11, 14, 9);
-      if (on && p.st === 'working') for (let k = 0; k < 4; k++) { const w = 3 + ((k * 5 + Math.floor(f / 10)) % 8); R(k % 2 ? '#7ee0a1' : '#9fd3f5', x + 28, y - 10 + k * 2, w, 1); }
-      R('#ddd', x + 12, y + 1, 10, 2);   // 键盘
-      R('#f0e6d0', x + 2, y - 2, 6, 2);  // 文件
+      R(scr, mx + 1, y - 11, 14, 9);
+      if (on && p.st === 'working') for (let k = 0; k < 4; k++) { const w = 3 + ((k * 5 + Math.floor(f / 10)) % 8); R(k % 2 ? '#7ee0a1' : '#9fd3f5', mx + 2, y - 10 + k * 2, w, 1); }
+      R('#ddd', x + (p.m.fixed ? 18 : 12), y + 1, 10, 2);   // 键盘
+      if (p.m.fixed) {   // CEO：待审批文件堆（一份一张，最多 6 张），工作时盖章
+        for (let k = 0; k < Math.min(6, pending); k++) R(k % 2 ? '#fffdf5' : '#f0e6d0', x + 3, y - 2 - k, 9, 1);
+        if (on && p.st === 'working') { const up = f % 30 < 15; R('#5e3818', x + 5, y - 9 - (up ? 3 : 0), 2, 4); R('#c0392b', x + 4, y - 5 - (up ? 3 : 0), 4, 2); if (!up) R('#e57373', x + 13, y - 1, 3, 1); }
+      } else R('#f0e6d0', x + 2, y - 2, 6, 2);  // 文件
     };
   };
+  const pending = issues.filter(i => stateOf(i) === '待审批').length;
   const fronts = o.people.map(drawDesk);
   o.people.slice().sort((a, b) => a.y - b.y).forEach(p => {
     const seated = !p.walking, desk = atDesk(p.st);
-    drawPerson(g, p.m, Math.round(p.x), Math.round(p.y), { frame: f, walking: p.walking, seated, typing: seated && desk && p.st === 'working', cup: seated && !desk });
+    drawPerson(g, p.m, Math.round(p.x), Math.round(p.y), { frame: f, walking: p.walking, seated, typing: seated && desk && p.st === 'working' && !p.m.fixed, cup: seated && !desk });
   });
   fronts.forEach(fn => fn());
+  g.fillStyle = 'rgba(150,200,230,.55)'; g.fillRect(150, 38, 2, 50); g.fillRect(150, 87, 30, 2); g.fillRect(198, 87, 26, 2);
   // 沙发坐垫（挡住坐着的人的腿）+ 扶手 + 茶几
-  R('#6fa894', 156, 102, 62, 8); R('#4b7a68', 154, 92, 4, 18); R('#4b7a68', 216, 92, 4, 18);
-  R('#8a5a30', 170, 116, 32, 4); R('#6d4524', 172, 120, 2, 5); R('#6d4524', 198, 120, 2, 5);
+  R('#6fa894', 92, 144, 96, 8); R('#4b7a68', 90, 134, 4, 18); R('#4b7a68', 186, 134, 4, 18);
+  R('#8a5a30', 116, 158, 48, 4); R('#6d4524', 118, 162, 2, 5); R('#6d4524', 160, 162, 2, 5);
   // 头顶特效
   o.people.forEach((p, k) => {
     const x = Math.round(p.x), y = Math.round(p.y);
@@ -401,7 +442,8 @@ function drawOffice() {
     tag.style.left = ((x + 4) / W * 100) + '%'; tag.style.top = ((y + 17) / H * 100) + '%';
     const bub = $('bub' + k), s = memberState(p.m);
     bub.style.top = ((y - 3) / H * 100) + '%';
-    const txt = (p.st === 'working' || p.st === 'blocked') && !p.walking ? (s.issue ? `#${s.issue} ` : '') + String(s.text || '').replace(/#\d+[：:\s]*/g, '').slice(0, 6) : '';
+    let txt = (p.st === 'working' || p.st === 'blocked') && !p.walking ? (s.issue ? `#${s.issue} ` : '') + String(s.text || '').replace(/#\d+[：:\s]*/g, '').slice(0, 5) : '';
+    if (p.m.fixed && !txt && pending) txt = `待审 ${pending} 份`;
     if (bub.textContent !== txt) bub.textContent = txt;
     bub.hidden = !txt; bub.className = 'bub' + (p.st === 'blocked' ? ' bad' : '');
     if (txt) {   // 气泡别超出房间
@@ -523,7 +565,9 @@ function renderSetup() {
       <li>Permissions → Repository permissions → <b>Issues: Read and write</b>（Metadata 自动只读）</li>
       <li>生成后复制，粘贴到下面</li></ol></div>
     <label for="tk">Token</label><input id="tk" type="password" autocomplete="off" placeholder="github_pat_…">
-    <div class="row"><button class="primary" id="tks">保存并检查</button></div></div>`;
+    <div class="row"><button class="primary" id="tks">保存并检查</button></div></div>
+    <div id="nodeSettings"></div>`;
+  renderNodeSettings($('nodeSettings'));
   $('upd').onclick = () => window.Native && Native.checkUpdate ? Native.checkUpdate() : toast('只有在 App 里才能更新');
   $('tks').onclick = async () => {
     const v = $('tk').value.trim(); if (!v) return toast('请粘贴 token');
@@ -553,7 +597,9 @@ function mockApi(method, path, body) {
           需求员: { state: 'idle', text: '今天提了 #3 浮力实验题', at: new Date(Date.now() - 2 * 3600e3).toISOString(), issue: 3 },
           产品: { state: 'working', text: '评审 #3 浮力实验题', issue: 3, at: now },
           开发: { state: 'working', text: '开发 #2：改听写选词界面', issue: 2, at: now },
-          测试: { state: 'blocked', text: '#4 打包失败，等管理员', issue: 4, at: now } },
+          测试: { state: 'blocked', text: '#4 打包失败，等管理员', issue: 4, at: now },
+          开发2: { state: 'working', text: '开发 #3：补浮力实验题', issue: 3, at: now },
+          CEO: { state: 'working', text: '审批 #3 浮力实验题', issue: 3, at: now } },
           log: [{ role: '开发', text: '开发 #2：改听写选词界面', issue: 2, at: now }, { role: '测试', text: '#4 打包失败，等管理员', issue: 4, at: now }, { role: '产品', text: '评审 #3 浮力实验题', issue: 3, at: now }] }) + '\n```' },
       { number: 3, title: '物理浮力章节缺少阿基米德原理实验题', state: 'open', labels: L('待审批'), comments: 1, created_at: now, updated_at: now,
         body: '## 背景\n福建中考物理实验题占比高。\n\n## 问题或机会\n`science-map/data/phys-g8b.js` 浮力一节只有概念题，没有实验探究题。\n\n## 期望效果\n补 3–5 道实验题。\n\n## 优先级\n高：中考必考' },
@@ -578,6 +624,7 @@ function mockApi(method, path, body) {
 }
 
 load();
+nodeCheck();   // 打开 App 时取一次节点状态（节点标签红点）
 </script>
 </body>
 </html>

@@ -1,0 +1,23 @@
+[Unit]
+Description=km-sync 同步节点（知识图谱 App，只存密文）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kmsync
+Group=kmsync
+ExecStart=/usr/bin/python3 /opt/km-sync/km_sync_node.py --config /etc/km-sync/config.json
+Restart=always
+RestartSec=1
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/km-sync
+MemoryMax=200M
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

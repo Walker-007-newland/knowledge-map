@@ -55,9 +55,23 @@
     return out;
   }
 
+  // 骨头可推算（为了导入合并时不重复发、不重复扣，见 km-data.js）：
+  //   bones = 3 × 已领知识点数 − Σspent − Σlegacy − 已购装扮总价
+  //   spent: { 设备编号: 喂食花掉的骨头 }；legacy: { 设备编号: 升级前的差额（以前喂食花掉的） }；装扮花费由 owned 推算
+  // 升级后第一次读到小狗时迁移一次：先把原数据备份到 km-pet-v1-backup，再算出 legacy，骨头数不变
   function load() {
     const st = readJSON(STORE);
-    return st && st.breed ? st : null;
+    if (!st || !st.breed) return null;
+    const D = window.KMData;
+    if (D && (!st.legacy || typeof st.legacy !== 'object')) {
+      try {
+        if (localStorage.getItem(STORE + '-backup') == null) localStorage.setItem(STORE + '-backup', localStorage.getItem(STORE));
+      } catch (e) { /* 忽略 */ }
+      const m = D.normPet(st, D.device().id);
+      st.spent = m.spent; st.legacy = m.legacy;
+      try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) { /* 忽略 */ }
+    }
+    return st;
   }
   function save(st) {
     try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) { /* 存不了就只在本次有效 */ }
@@ -87,7 +101,7 @@
     const st = {
       breed, name: (name || '').trim().slice(0, 8) || BREEDS[breed].name,
       born: now, tick: now, fullness: 70, bones: 0, xp: 0,
-      claimed: {}, owned: [], equip: {}, petDay: '', petCount: 0, lastStudy: 0
+      claimed: {}, owned: [], equip: {}, petDay: '', petCount: 0, lastStudy: 0, spent: {}, legacy: {}, nameT: now, equipT: now
     };
     save(st);
     return st;
@@ -150,6 +164,8 @@
     if (st.bones < FEED_COST) return 'nobone';
     if (st.fullness >= 98) return 'full';
     st.bones -= FEED_COST;
+    const D = window.KMData;
+    if (D && st.legacy) { st.spent = st.spent || {}; const me = D.device().id; st.spent[me] = (st.spent[me] || 0) + FEED_COST; }
     st.fullness = Math.min(100, st.fullness + FEED_GAIN);
     save(st);
     return 'ok';
@@ -183,6 +199,7 @@
     st.bones -= it.price;
     st.owned.push(id);
     st.equip[it.slot] = id;
+    st.equipT = Date.now();   // 换装时间：导入合并时穿戴取较新的
     save(st);
     return 'ok';
   }
@@ -190,6 +207,7 @@
     const it = ITEMS.find(x => x.id === id);
     if (!it || !st.owned.includes(id)) return;
     st.equip[it.slot] = st.equip[it.slot] === id ? null : id;
+    st.equipT = Date.now();
     save(st);
   }
 
@@ -199,7 +217,7 @@
   }
 
   window.KMPet = {
-    BREEDS, ITEMS, SLOTS, STAGES, HUNGRY, FEED_COST, BONES_PER_NODE,
+    BREEDS, ITEMS, SLOTS, STAGES, HUNGRY, FEED_COST, BONES_PER_NODE, DECAY_PER_HOUR,
     load, save, adopt, tick, pending, claim, level, levelInfo, stage, feed, petOnce, mood, buy, toggleEquip, bySubject, syncWidget
   };
 })();

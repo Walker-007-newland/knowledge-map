@@ -28,6 +28,8 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -363,6 +365,36 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String appVersion() { return updater.currentVersion(); }
 
+        /** 设备名称（如 Xiaomi 23043RP34C），「我的数据」页显示、导出文件里记下来自哪台设备 */
+        @JavascriptInterface
+        public String deviceName() { return (Build.MANUFACTURER + " " + Build.MODEL).trim(); }
+
+        /**
+         * 原生共享存储：file:// 图谱页和 https 虚拟地址的听写页各有一份 localStorage，互相读不到，
+         * 听写词单和设备编号经这里互通（见 km-data.js）。返回 {"v": 值字符串, "t": 写入时间} 的 JSON，没有就返回空字符串
+         */
+        @JavascriptInterface
+        public String sharedGet(String key) {
+            File f = sharedFile(key);
+            if (f == null || !f.isFile()) return "";
+            try { return new String(readAll(f), StandardCharsets.UTF_8); } catch (IOException e) { return ""; }
+        }
+
+        @JavascriptInterface
+        public boolean sharedPut(String key, String json, double t) {
+            File f = sharedFile(key);
+            if (f == null || json == null) return false;
+            try {
+                JSONObject o = new JSONObject();
+                o.put("v", json);
+                o.put("t", (long) t);
+                File tmp = new File(f.getPath() + ".tmp");
+                FileOutputStream out = new FileOutputStream(tmp);
+                try { out.write(o.toString().getBytes(StandardCharsets.UTF_8)); } finally { out.close(); }
+                return tmp.renameTo(f) || (f.delete() && tmp.renameTo(f));
+            } catch (Exception e) { return false; }
+        }
+
         @JavascriptInterface
         public void checkUpdate() {
             runOnUiThread(new Runnable() {
@@ -397,6 +429,30 @@ public class MainActivity extends Activity {
                 public void run() { Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show(); }
             });
         }
+    }
+
+    /** 共享存储只允许这几个键（文件名就是键名，防路径穿越） */
+    static final String[] SHARED_KEYS = { "fjzk-en-dictation-v1", "km-device-v1" };
+
+    File sharedFile(String key) {
+        if (key == null || !key.matches("[a-z0-9-]{1,64}")) return null;
+        boolean ok = false;
+        for (String k : SHARED_KEYS) if (k.equals(key)) ok = true;
+        if (!ok) return null;
+        File dir = new File(getFilesDir(), "kmshared");
+        if (!dir.isDirectory() && !dir.mkdirs()) return null;
+        return new File(dir, key + ".json");
+    }
+
+    static byte[] readAll(File f) throws IOException {
+        InputStream in = new java.io.FileInputStream(f);
+        try {
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] b = new byte[8192];
+            int n;
+            while ((n = in.read(b)) > 0) buf.write(b, 0, n);
+            return buf.toByteArray();
+        } finally { in.close(); }
     }
 
     String save(String name, byte[] data) throws IOException {

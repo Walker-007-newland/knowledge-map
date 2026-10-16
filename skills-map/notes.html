@@ -71,6 +71,8 @@
     <label class="btn">导入进度文件<input type="file" id="fileImport" accept=".json,application/json" hidden></label>
   </div>
   <p class="muted" id="backupMsg"></p>
+  <p class="muted km-all-hint" hidden>要备份全部科目或合并导入，请到 总入口 → 我的数据</p>
+  <script>if (window.KMBridge) document.querySelectorAll('.km-all-hint').forEach(function (e) { e.hidden = false; });</script>
 </div>
 
 <script src="notes/modules.js"></script>
