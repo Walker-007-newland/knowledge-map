@@ -61,9 +61,10 @@ public final class SyncManager {
         loadDevice();
         g = Group.load(st);
         if (g == null && st.json("group.json") != null) {
-            // Keystore 钥匙丢了：当作没加入组，学习数据不受影响
-            st.wipeGroup();
-            notice = "这台设备的同步钥匙丢失了（系统重置过锁屏或钥匙库），需要重新加入同步组；本机学习数据不受影响";
+            // Keystore 钥匙读不出来（个别机型刷机、换锁屏后会这样，也可能只是暂时的）：当作没加入组，先不删文件，
+            // 学生重新建组 / 加入时再清掉。学习数据不受影响
+            keyLost = true;
+            notice = "这台设备的同步钥匙读不出来了（系统重置过锁屏或钥匙库），需要重新加入同步组；本机学习数据不受影响";
         }
         Map<String, Object> ns = st.json("node.json");
         if (ns != null) {
@@ -93,21 +94,36 @@ public final class SyncManager {
             notice = SyncJson.s(d, "notice") == null ? "" : SyncJson.s(d, "notice");
             String box = SyncJson.s(d, "sk");
             if (box != null) {
-                byte[] p = st.open(b64d(box));
-                if (p != null) {
-                    try { sk = privateKey(p); pk = SyncJson.s(d, "pk"); } catch (RuntimeException e) { sk = null; }
-                }
+                try {
+                    byte[] p = st.open(b64d(box));
+                    if (p != null) { sk = privateKey(p); pk = SyncJson.s(d, "pk"); }
+                } catch (RuntimeException e) { sk = null; }       // 文件坏了 / 钥匙读不出来：下次建组时重新生成
             }
-        }
-        if (sk == null) {
-            KeyPair kp = newKeyPair();
-            sk = kp.getPrivate();
-            pk = b64e(kp.getPublic().getEncoded());
-            saveDevice();
         }
     }
 
+    boolean keyLost;
+
+    /**
+     * 设备长期密钥：第一次建组 / 加入时才生成（没加入组的设备不碰 Keystore、不写 files/kmsync/）。
+     * 旧的同步文件解不开时先清掉。
+     */
+    void ensureKey() {
+        if (keyLost) { st.wipeGroup(); keyLost = false; }
+        if (sk != null) return;
+        KeyPair kp = newKeyPair();
+        sk = kp.getPrivate();
+        pk = b64e(kp.getPublic().getEncoded());
+        saveDevice();
+    }
+
     void saveDevice() {
+        if (sk == null) return;            // 还没建组 / 加入过：编号和名字只放内存，不写文件
+        writeDevice();
+        localErr = "";
+    }
+
+    void writeDevice() {
         st.putJson("device.json", SyncJson.of("dev", dev, "name", devName, "pk", pk, "sk", b64e(st.seal(sk.getEncoded())), "notice", notice));
     }
 
@@ -168,6 +184,7 @@ public final class SyncManager {
             long rev = Math.max(cur == null ? 0 : SyncJson.n(cur, "rev", 0) + 1, now());
             st.putJson(rel, SyncJson.of("name", name, "rev", rev, "hash", hash, "t", now(), "pushed", SyncJson.map(),
                 "box", b64e(st.seal(gzip(utf8(content))))));
+            localErr = "";
             return true;
         }
     }
@@ -747,6 +764,7 @@ public final class SyncManager {
         NodeClient.Invite inv = NodeClient.parseInvite(text);
         if (inv == null) return res(false, "这不是同步节点的邀请码（应以 kmnode:1? 开头）");
         if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
+        ensureKey();
         boolean fresh = g == null;
         Group ng = fresh ? Group.create(now()) : g.copy();
         if (fresh) ng.addMember(dev, devName, pk, now());
@@ -851,6 +869,7 @@ public final class SyncManager {
     /** A：生成加入码，往转交点 a 边放 ① */
     public synchronized String joinOpen() {
         if (g == null) return res(false, "还没加入同步组");
+        ensureKey();
         NodeClient nc = client();
         if (nc == null) return res(false, "没有可用的同步节点，请先扫邀请码");
         Join j = Join.newHost(nc.host, nc.port, now());
@@ -884,6 +903,7 @@ public final class SyncManager {
         if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
         Join j = Join.parseGuest(text, now());
         if (j == null) return res(false, "这不是加入码（应以 kmjoin:1? 开头，或「地址:端口 · 26 位码」）");
+        ensureKey();
         NodeClient nc = new NodeClient(j.nodeHost, j.nodePort, ctr);
         try {
             Map<String, Object> a = null;
@@ -1014,6 +1034,18 @@ public final class SyncManager {
         emit("join-result", SyncJson.of("ok", true, "role", "guest", "first", true, "name", j.peerName, "msg", j.msg));
     }
 
+    /** 本机出错（写不了盘、Keystore 出错）：只让设备同步显示出错，不影响别的 */
+    public void noteError(String what, Throwable e) {
+        try {
+            localErr = "设备同步出错（" + what + "）：" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "。不影响学习，可以稍后再试";
+            busy = false;
+            refreshState();
+        } catch (Throwable ignored) { }
+    }
+
+    /** 本机写文件 / Keystore 出过错：一直显示到下一次本机写成功（网络同步成功也不清掉，否则改动没存下来却显示「已同步」） */
+    volatile String localErr = "";
+
     // ================================================================ 状态
 
     public String state() { return stateCache; }
@@ -1042,10 +1074,12 @@ public final class SyncManager {
         s.put("members", ms);
         s.put("inbox", (long) inbox);
         s.put("pending", (long) pending);
-        String status = g == null ? "none" : busy ? "syncing" : !errCode.isEmpty() ? (errCode.equals("offline") ? "offline" : "error")
+        String eMsg = errMsg;
+        if (!localErr.isEmpty() && (errCode.isEmpty() || errCode.equals("offline"))) eMsg = localErr;
+        String status = g == null ? "none" : busy ? "syncing" : !localErr.isEmpty() && errCode.isEmpty() ? "error" : !errCode.isEmpty() ? (errCode.equals("offline") ? "offline" : "error")
             : pending > 0 || inbox > 0 ? "pending" : lastOk > 0 ? "ok" : "pending";
         s.put("status", status);
-        s.put("error", errMsg);
+        s.put("error", eMsg);
         s.put("lastOk", lastOk);
         String old = stateCache;
         stateCache = SyncJson.stringify(s);

@@ -32,8 +32,7 @@ public final class SyncStore {
     public SyncStore(File dir, KeyWrap kw) {
         this.dir = dir;
         this.kw = kw;
-        new File(dir, "out").mkdirs();
-        new File(dir, "inbox").mkdirs();
+        // 目录在第一次写文件时才建：没加入同步组的设备不留下 files/kmsync/
     }
 
     // ------------------------------------------------------------ JSON 文件

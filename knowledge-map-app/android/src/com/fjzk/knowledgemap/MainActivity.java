@@ -32,6 +32,7 @@ import android.widget.Toast;
 import org.json.JSONObject;
 
 import com.fjzk.knowledgemap.sync.SyncAndroid;
+import com.fjzk.knowledgemap.sync.SyncService;
 import com.fjzk.knowledgemap.sync.SyncJson;
 
 import java.io.File;
@@ -76,7 +77,7 @@ public class MainActivity extends Activity {
     Updater updater;
     String pendingOpen;    // 总入口加载完后要接着打开的页面
     final BridgeGate gate = new BridgeGate();
-    SyncAndroid sync;      // 设备同步（需求 #1），事件只送主页面
+    SyncService sync;      // 设备同步（需求 #1），事件只送主页面；建不出来时为 null，各接口返回空（不影响学习）
 
     @Override
     protected void onCreate(Bundle state) {
@@ -102,15 +103,22 @@ public class MainActivity extends Activity {
         gate.setLog(new BridgeGate.Log() {
             public void denied(String method, String page) { Log.w("KMBridge", "KMBridge denied " + method + " on " + page); }
         });
-        sync = new SyncAndroid(this, new SyncAndroid.Sink() {
-            public void event(final String type, final String json) {
-                runOnUiThread(new Runnable() {
-                    public void run() {
-                        web.evaluateJavascript("window.__kmSyncEvent&&__kmSyncEvent(" + SyncJson.quote(type) + "," + SyncJson.quote(json) + ")", null);
-                    }
-                });
-            }
-        });
+        try {
+            // 只建后台线程：设备密钥、Keystore 钥匙要到第一次建组 / 加入时才生成，同步出任何错都不影响打开 App
+            sync = SyncAndroid.create(this, new SyncService.Sink() {
+                public void event(final String type, final String json) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            try { web.evaluateJavascript("window.__kmSyncEvent&&__kmSyncEvent(" + SyncJson.quote(type) + "," + SyncJson.quote(json) + ")", null); }
+                            catch (Throwable e) { Log.w(SyncAndroid.TAG, "sync event", e); }
+                        }
+                    });
+                }
+            });
+        } catch (Throwable e) {
+            sync = null;
+            Log.w(SyncAndroid.TAG, "设备同步不可用", e);
+        }
         syncDevice();
         web.addJavascriptInterface(new Bridge(), "KMBridge");
         // 真机自检包（build.ps1 -SelfTest）才有 selftest/ 页面和 KMSelfTest；正式包里两者都没有
@@ -159,25 +167,26 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (sync != null) sync.onResume();
+        try { if (sync != null) sync.onResume(); } catch (Throwable e) { Log.w(SyncAndroid.TAG, "onResume", e); }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         if (tts != null) tts.stop();
-        if (sync != null) sync.onPause();
+        try { if (sync != null) sync.onPause(); } catch (Throwable e) { Log.w(SyncAndroid.TAG, "onPause", e); }
     }
 
     /** 同步用的设备编号 = #2 的 km-device-v1（共享存储里那份，图谱页和听写页同一个） */
     void syncDevice() {
+        if (sync == null) return;
         File f = sharedFile("km-device-v1");
         if (f == null || !f.isFile()) return;
         try {
             JSONObject o = new JSONObject(new String(readAll(f), StandardCharsets.UTF_8));
             JSONObject v = new JSONObject(o.optString("v", "{}")).optJSONObject("value");
             if (v != null) sync.setDevice(v.optString("id", ""), v.optString("name", ""));
-        } catch (Exception ignored) { }
+        } catch (Throwable e) { Log.w(SyncAndroid.TAG, "syncDevice", e); }
     }
 
     @Override
@@ -516,90 +525,105 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String syncState(String token) {
             if (!gate.check(token, "syncState", now())) return "";
+            if (sync == null) return "{\"inGroup\":false,\"unavailable\":true,\"status\":\"none\",\"members\":[],\"notice\":\"设备同步暂时不可用，不影响学习；可以重启 App 再试\"}";
             return sync.state();
         }
 
         @JavascriptInterface
         public void syncNow(String token) {
             if (!gate.check(token, "syncNow", now())) return;
+            if (sync == null) return;
             sync.syncNow();
         }
 
         @JavascriptInterface
         public void syncPublish(String token, String json) {
             if (!gate.check(token, "syncPublish", now()) || json == null) return;
+            if (sync == null) return;
             sync.publish(json);
         }
 
         @JavascriptInterface
         public String syncTake(String token) {
             if (!gate.check(token, "syncTake", now())) return "";
+            if (sync == null) return "";
             return sync.take();
         }
 
         @JavascriptInterface
         public void syncAck(String token, String json) {
             if (!gate.check(token, "syncAck", now()) || json == null) return;
+            if (sync == null) return;
             sync.ack(json);
         }
 
         @JavascriptInterface
         public void nodeJoin(String token, String text) {
             if (!gate.check(token, "nodeJoin", now()) || text == null) return;
+            if (sync == null) return;
             sync.nodeJoin(text);
         }
 
         @JavascriptInterface
         public void nodeRemove(String token) {
             if (!gate.check(token, "nodeRemove", now())) return;
+            if (sync == null) return;
             sync.nodeRemove();
         }
 
         @JavascriptInterface
         public void joinOpen(String token) {
             if (!gate.check(token, "joinOpen", now())) return;
+            if (sync == null) return;
             sync.joinOpen();
         }
 
         @JavascriptInterface
         public void joinClose(String token) {
             if (!gate.check(token, "joinClose", now())) return;
+            if (sync == null) return;
             sync.joinClose();
         }
 
         @JavascriptInterface
         public String joinState(String token) {
             if (!gate.check(token, "joinState", now())) return "";
+            if (sync == null) return "";
             return sync.joinState();
         }
 
         @JavascriptInterface
         public void joinScan(String token, String text) {
             if (!gate.check(token, "joinScan", now()) || text == null) return;
+            if (sync == null) return;
             sync.joinScan(text);
         }
 
         @JavascriptInterface
         public void joinConfirm(String token, boolean ok) {
             if (!gate.check(token, "joinConfirm", now())) return;
+            if (sync == null) return;
             sync.joinConfirm(ok);
         }
 
         @JavascriptInterface
         public void syncRename(String token, String dev, String name) {
             if (!gate.check(token, "syncRename", now()) || dev == null || name == null) return;
+            if (sync == null) return;
             sync.rename(dev, name);
         }
 
         @JavascriptInterface
         public void syncRemove(String token, String dev) {
             if (!gate.check(token, "syncRemove", now()) || dev == null) return;
+            if (sync == null) return;
             sync.remove(dev);
         }
 
         @JavascriptInterface
         public void syncLeave(String token) {
             if (!gate.check(token, "syncLeave", now())) return;
+            if (sync == null) return;
             sync.leave();
         }
     }

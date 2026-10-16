@@ -193,8 +193,11 @@
       const w = fr.contentWindow, d = fr.contentDocument;
       target = w;
       const $ = id => d.getElementById(id);
+      // 真的看得见：computed display 不是 none、而且占了位置（只查 .hidden 会漏掉被 CSS display 盖掉的 hidden）
+      const vis = el => !!el && w.getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
       await until(() => !$('statusCard').hidden);
-      ok(!$('start').hidden && $('group').hidden, '没加入组：显示「扫邀请码，开始同步」「扫加入码」');
+      ok(vis($('start')) && !vis($('group')), '没加入组：显示「扫邀请码，开始同步」「扫加入码」');
+      ok(!vis($('btnRejoin')) && !vis($('noApp')) && !vis($('joinWait')) && !vis($('more')), '没加入组：看不到「退出同步组，重新加入」「其它」和等待确认（按实际显示判断）');
       ok(/扫邀请码/.test($('start').textContent) && /扫加入码/.test($('start').textContent), '两个大按钮都在');
       // 手动输入：格式错
       $('manual').value = 'hello';
@@ -208,15 +211,16 @@
       $('btnManual').click();
       ok(called('joinScan').length === 1, '手输「地址 · 26 位码」→ joinScan');
       emit('join-request', { role: 'guest', name: '家里的平板', code: '0427' });
-      ok(!$('joinWait').hidden && $('joinWaitCode').textContent === '0427' && /家里的平板/.test($('joinWaitText').textContent), '新设备显示「请在『家里的平板』上确认」和确认码');
+      ok(vis($('joinWait')) && $('joinWaitCode').textContent === '0427' && /家里的平板/.test($('joinWaitText').textContent), '新设备显示「请在『家里的平板』上确认」和确认码');
       emit('join-result', { role: 'guest', ok: false, msg: '「家里的平板」上点了拒绝' });
-      ok($('joinWait').hidden && /拒绝/.test($('startMsg').textContent), '被拒绝：中文提示');
+      ok(!vis($('joinWait')) && /拒绝/.test($('startMsg').textContent), '被拒绝：中文提示');
       // 已加入组
       mockState = { inGroup: true, notice: '', me: { dev: 'devA', name: '家里的平板' }, status: 'ok', error: '', lastOk: Date.now() - 60000, inbox: 0, pending: 0,
         members: [{ dev: 'devA', name: '家里的平板', me: true, last: 0, via: '节点' }, { dev: 'devB', name: '学校的平板', me: false, last: Date.now() - 120000, via: '节点' }],
         node: { h: '43.142.41.27', p: 8787, off: false, last: Date.now() - 60000, error: '', msg: '' } };
       emit('state', mockState);
-      ok($('start').hidden && !$('group').hidden, '已加入：显示「我的设备」');
+      ok(!vis($('start')) && vis($('group')), '已加入：显示「我的设备」');
+      ok(!vis($('btnRejoin')) && !vis($('addBox')) && vis($('btnAdd')), '已同步：看不到「退出同步组，重新加入」，加入码框收着');
       ok(/学校的平板/.test($('devices').textContent) && /本机/.test($('devices').textContent) && /同步节点 43\.142\.41\.27:8787/.test($('devices').textContent), '列出本机、组员、同步节点一行');
       ok(/已同步/.test($('status').textContent), '顶部状态：' + $('status').textContent);
       ok(d.querySelectorAll('[data-remove]').length === 1, '只有别的设备才有「移除」按钮');
@@ -228,6 +232,7 @@
       const cv = await until(() => $('qrCanvas'));
       const r = cv && jsQR(cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
       eq(r && r.data, text, '页面上显示的加入码二维码能被 jsQR 解回原文');
+      ok(vis($('addBox')) && !vis($('btnAdd')), '显示加入码时「添加设备」按钮真的藏起来');
       ok(/还剩 9 分/.test($('joinLeft').textContent), '10 分钟倒计时：' + $('joinLeft').textContent);
       emit('join-request', { role: 'host', name: '妈妈的手机', code: '1234' });
       const modal = await until(() => d.querySelector('.modal'));
@@ -235,7 +240,7 @@
       modal.querySelector('#mYes').click();
       ok(called('joinConfirm').length === 1 && called('joinConfirm')[0][1] === true, '点「数字一样，加入」→ joinConfirm(true)');
       emit('join-result', { role: 'host', ok: true, name: '妈妈的手机', msg: '「妈妈的手机」已加入' });
-      ok($('addBox').hidden && /已加入/.test($('groupMsg').textContent), '加入成功：收起加入码，提示已加入');
+      ok(!vis($('addBox')) && /已加入/.test($('groupMsg').textContent), '加入成功：收起加入码，提示已加入');
       // 各种错误状态
       for (const [status, error, re] of [['offline', '同步节点连不上', /连不上/], ['error', '同步节点拒绝了这个同步组', /拒绝/], ['error', '邀请码已失效，请向管理员要新的', /邀请码已失效/], ['syncing', '', /正在同步/]]) {
         mockState = Object.assign({}, mockState, { status, error });
@@ -246,14 +251,14 @@
       mockState = Object.assign({}, mockState, { status: 'error', error: '同步组已过期，请重新加入：这台设备超过 60 天没同步，你的其它设备可能已经换了同步钥匙。请点下面的「退出同步组」……',
         node: Object.assign({}, mockState.node, { error: 'expired', msg: '同步组已过期，请重新加入' }) });
       emit('state', mockState);
-      ok(/同步组已过期，请重新加入/.test($('status').textContent) && !$('btnRejoin').hidden, '同步组已过期：顶部明确提示，并显示「退出同步组，重新加入」按钮');
+      ok(/同步组已过期，请重新加入/.test($('status').textContent) && vis($('btnRejoin')), '同步组已过期：顶部明确提示，并显示「退出同步组，重新加入」按钮');
       w.confirm = () => true;
       $('btnRejoin').click();
       ok(called('syncLeave').length === 1, '点「退出同步组，重新加入」→ syncLeave');
       calls.length = 0;
       mockState = Object.assign({}, mockState, { status: 'ok', error: '', node: Object.assign({}, mockState.node, { error: '', msg: '' }) });
       emit('state', mockState);
-      ok($('btnRejoin').hidden, '恢复正常后不再显示重新加入按钮');
+      ok(!vis($('btnRejoin')), '恢复正常后不再显示重新加入按钮');
       // 移除 / 改名 / 退出（confirm 由测试替换成同意）
       w.confirm = () => true;
       d.querySelector('[data-remove="devB"]').click();
@@ -268,7 +273,11 @@
       // 被移出
       mockState = { inGroup: false, notice: '这台设备已被移出同步组，本机数据还在', me: { dev: 'devA', name: '家里的平板' }, members: [], status: 'none', error: '', lastOk: 0, inbox: 0, pending: 0 };
       emit('state', mockState);
-      ok(/已被移出/.test($('notice').textContent) && !$('start').hidden, '被移出：显示提示，回到「开始同步」');
+      ok(/已被移出/.test($('notice').textContent) && vis($('start')), '被移出：显示提示，回到「开始同步」');
+      // 同步内核建不出来（Keystore、写盘出错）：只显示原因，不给建组按钮
+      mockState = { inGroup: false, unavailable: true, status: 'none', members: [], notice: '设备同步暂时不可用（Keystore 加密失败：模拟），不影响学习；可以重启 App 再试' };
+      emit('state', mockState);
+      ok(vis($('notice')) && /暂时不可用/.test($('notice').textContent) && !vis($('start')) && !vis($('group')) && !vis($('btnRejoin')), '同步不可用：显示原因，看不到建组、加入按钮');
       const errs = w.__errs || [];
       ok(!errs.length, '同步页没有脚本错误');
       target = null;
@@ -279,7 +288,7 @@
       fr.src = '../index.html?t=' + Date.now();
       await new Promise(r => { fr.onload = r; });
       const tag = fr.contentDocument.getElementById('syncTag');
-      ok(tag && tag.hidden, '状态标签默认隐藏（浏览器里、没加入同步组时都不显示）');
+      ok(tag && tag.hidden && fr.contentWindow.getComputedStyle(tag).display === 'none', '状态标签默认隐藏（浏览器里、没加入同步组时都不显示）');
       ok(/设备同步/.test(fr.contentDocument.querySelector('footer').textContent), '底部有「设备同步」按钮');
     });
   } catch (e) { log(false, '运行出错 ' + e); }

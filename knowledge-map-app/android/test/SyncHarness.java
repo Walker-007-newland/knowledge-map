@@ -273,7 +273,9 @@ public class SyncHarness {
     static String invite(NodeCtl node) { return SyncJson.s(node.cmdM("cmd", "invite"), "qr"); }
 
     static String fixPort(String qr, NodeCtl node) {
-        return node.remote ? qr : qr.replaceAll("h=[^&]*&p=\\d+", "h=127.0.0.1&p=" + node.port);
+        // 本地节点、或经 SSH 隧道连真实节点（127.0.0.1:端口）：邀请码里的公网地址换成实际连的地址，设备流量也走隧道
+        if (node.remote && !node.host.equals("127.0.0.1")) return qr;
+        return qr.replaceAll("h=[^&]*&p=\\d+", "h=" + node.host + "&p=" + node.port);
     }
 
     // ================================================================ 场景
@@ -288,9 +290,136 @@ public class SyncHarness {
         x.mergeInbox();
         check(n == 0 && REQS.get() == 0, "发布、同步、取收件箱都不发请求", REQS.get() + " 个请求");
         File[] outs = new File(x.dir, "out").listFiles();
-        check(outs != null && outs.length == 0, "out/ 里没有文件");
+        check(!x.dir.exists(), "同步目录 files/kmsync/ 都没建（不写任何文件、不生成设备密钥）");
         check("none".equals(SyncJson.s(x.state(), "status")) && !SyncJson.b(x.state(), "inGroup"), "状态是「没加入」", x.m.state());
         check(!SyncJson.b(SyncJson.obj(x.m.joinOpen()), "ok") && REQS.get() == 0, "没加入时不能生成加入码，也不发请求");
+    }
+
+    /** 会出错的 KeyWrap：fail=true 时 seal 抛异常（模拟 Keystore 出错）、open 返回 null */
+    static final class FlakyWrap implements SyncStore.KeyWrap {
+        volatile boolean fail;
+        final byte[] key = SyncCrypto.rand(32);
+        public byte[] seal(byte[] p) { if (fail) throw new IllegalStateException("Keystore 加密失败：模拟"); return SyncCrypto.seal(key, p, "w"); }
+        public byte[] open(byte[] b) { return fail ? null : SyncCrypto.open(key, b, "w"); }
+    }
+
+    static final class Rec implements SyncService.Sink, SyncService.Log {
+        final List<String[]> events = new ArrayList<>();
+        final List<String> warns = new ArrayList<>();
+        public synchronized void event(String t, String j) { events.add(new String[]{t, j}); }
+        public synchronized void warn(String m, Throwable e) { warns.add(m + "：" + e); }
+        synchronized String last(String t) { for (int i = events.size() - 1; i >= 0; i--) if (events.get(i)[0].equals(t)) return events.get(i)[1]; return null; }
+    }
+
+    /** 调一下，返回有没有抛出 */
+    static String noThrow(Runnable r) {
+        try { r.run(); return null; } catch (Throwable t) { return String.valueOf(t); }
+    }
+
+    static void scenarioFaults(NodeCtl node) throws IOException {
+        section("0. 同步出任何错都不抛给 App：没加入组不写文件、不碰 Keystore；Keystore / 写盘出错只让设备同步不可用");
+        // 没加入组：构造、设备编号、发布、同步、取收件箱都不写 files/kmsync/、不调 KeyWrap
+        File d0 = new File(tmp, "svc-none");
+        FlakyWrap w0 = new FlakyWrap();
+        w0.fail = true;                         // 一碰 Keystore 就抛：证明没加入组时根本不碰
+        Rec r0 = new Rec();
+        SyncService s0 = new SyncService(d0, w0, System::currentTimeMillis, r0, r0);
+        s0.drain();
+        s0.setDevice("devN0", "没加入的平板");
+        s0.publish("{\"device\":{\"id\":\"devN0\",\"name\":\"x\"},\"sections\":[{\"name\":\"s1\",\"content\":\"{}\"}]}");
+        s0.ack("[{\"id\":\"inbox/00000000000000000000.json\",\"rev\":1}]");
+        s0.syncNow();
+        s0.onResume();
+        s0.onPause();
+        String st0 = s0.state(), tk0 = s0.take();
+        s0.drain();
+        check(!d0.exists(), "没加入组：构造、setDevice、publish、ack、syncNow 之后 files/kmsync/ 目录都不存在");
+        check(r0.warns.isEmpty() && st0.contains("\"inGroup\":false") && tk0.equals("[]"), "没加入组：Keystore 坏了也不碰它，状态正常、收件箱为空", r0.warns);
+
+        // 构造时就坏：同步目录是个文件（写不了盘）+ Keystore 坏 + 文件内容是乱码
+        File d1 = new File(tmp, "svc-broken");
+        d1.mkdirs();
+        Files.write(new File(d1, "device.json").toPath(), "{坏的".getBytes(StandardCharsets.UTF_8));
+        Files.write(new File(d1, "group.json").toPath(), "{\"v\":1,\"box\":\"!!!\"}".getBytes(StandardCharsets.UTF_8));
+        Files.write(new File(d1, "out").toPath(), new byte[]{1});                 // out 是文件，不是目录：写分区必失败
+        Rec r1 = new Rec();
+        String thrown = noThrow(() -> {
+            SyncService s1 = new SyncService(d1, w0, System::currentTimeMillis, r1, r1);
+            s1.drain();
+            s1.setDevice("devB1", "坏掉的平板");
+            s1.publish("{坏的 json");
+            s1.ack("{坏的");
+            s1.syncNow();
+            s1.nodeJoin(fixPort(invite(node), node));
+            s1.joinScan("kmjoin:1?h=127.0.0.1&p=1&s=ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+            s1.joinOpen();
+            s1.joinConfirm(true);
+            s1.rename("x", "y");
+            s1.remove("x");
+            s1.leave();
+            s1.drain();
+            String st = s1.state();
+            SyncJson.obj(st);
+            s1.take();
+            s1.joinState();
+        });
+        String nj = null;
+        synchronized (r1) { for (String[] e : r1.events) if (e[0].equals("action-result") && e[1].contains("nodeJoin")) nj = e[1]; }
+        check(thrown == null, "构造时 Keystore 坏、文件是乱码、写不了盘：构造和全部接口都不抛出", thrown);
+        check(nj != null && nj.contains("\"ok\":false") && !r1.warns.isEmpty(), "建组失败只回一句中文原因（" + (nj == null ? "" : SyncJson.s(SyncJson.obj(nj), "msg")) + "），出错记了日志（" + r1.warns.size() + " 条）", r1.warns);
+
+        // 已加入组后才坏：Keystore 出错 / 写盘出错
+        File d2 = new File(tmp, "svc-later");
+        FlakyWrap w2 = new FlakyWrap();
+        Rec r2 = new Rec();
+        SyncService s2 = new SyncService(d2, w2, System::currentTimeMillis, r2, r2);
+        s2.setDevice("devL2", "后来坏的平板");
+        s2.nodeJoin(fixPort(invite(node), node));
+        s2.drain();
+        s2.publish("{\"device\":{\"id\":\"devL2\",\"name\":\"后来坏的平板\"},\"sections\":[{\"name\":\"s1\",\"content\":\"{\\\"a\\\":1}\"}]}");
+        s2.syncNow();
+        s2.drain();
+        boolean joined = SyncJson.b(SyncJson.obj(s2.state()), "inGroup");
+        track2(s2);
+        w2.fail = true;
+        thrown = noThrow(() -> {
+            s2.setDevice("devL2", "改了名字");                     // saveDevice → seal 抛
+            s2.publish("{\"device\":{\"id\":\"devL2\"},\"sections\":[{\"name\":\"s1\",\"content\":\"{\\\"a\\\":2}\"}]}");   // putOut → seal 抛
+            s2.ack("[{\"id\":\"inbox/00000000000000000000.json\",\"rev\":1}]");
+            s2.syncNow();
+            s2.drain();
+        });
+        Map<String, Object> st2 = SyncJson.obj(s2.state());
+        check(joined && thrown == null && !r2.warns.isEmpty(), "加入组后 Keystore 出错：setDevice、publish、ack、syncNow 都不抛出，记了日志", thrown + " " + r2.warns);
+        check("error".equals(SyncJson.s(st2, "status")) && SyncJson.s(st2, "error").contains("不影响学习"), "状态显示「设备同步出错……不影响学习」", st2);
+        w2.fail = false;
+        File out = new File(d2, "out");
+        for (File f : out.listFiles()) f.delete();
+        out.delete();
+        Files.write(out.toPath(), new byte[]{1});                                  // 写盘失败
+        thrown = noThrow(() -> {
+            s2.publish("{\"device\":{\"id\":\"devL2\"},\"sections\":[{\"name\":\"s1\",\"content\":\"{\\\"a\\\":3}\"}]}");
+            s2.ack("[]");
+            s2.syncNow();
+            s2.drain();
+            s2.state();
+            s2.take();
+        });
+        check(thrown == null, "加入组后写盘失败：publish、ack、syncNow 都不抛出", thrown);
+        // hello：节点连不上时建组 / 同步只回中文提示
+        File d3 = new File(tmp, "svc-offline");
+        Rec r3 = new Rec();
+        SyncService s3 = new SyncService(d3, new FlakyWrap(), System::currentTimeMillis, r3, r3);
+        s3.setDevice("devO3", "连不上的平板");
+        thrown = noThrow(() -> { s3.nodeJoin("kmnode:1?h=127.0.0.1&p=1&i=abcd2345&s=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"); s3.drain(); });
+        String r3e = r3.last("action-result");
+        check(thrown == null && r3e != null && r3e.contains("连不上"), "节点连不上（hello 不通）：建组回「同步节点连不上…」，不抛出", r3e);
+        new File(d2, "out").delete();
+    }
+
+    static void track2(SyncService s) {
+        SyncManager x = s.manager();
+        if (x != null && x.g != null) GIDS.put(x.g.gid(), x.g.nodeKey());
     }
 
     static Dev[] scenarioCreateJoin(NodeCtl node, String tag) throws IOException {
@@ -546,6 +675,19 @@ public class SyncHarness {
             if (sec.contains("s1") || sec.contains("s2") || sec.contains("group") || sec.length() != 22) secOk = false;
         }
         check(secOk, "分区编号看不出分区名（22 位 HMAC 编号）");
+        // 有人对看到过的明文 URL 发 GET 回访：一律 405，正文和组存不存在无关，拿不到任何组信息
+        Map<String, Object> o = SyncJson.obj(a.m.joinOpen());
+        String rid = a.m.join.rid;
+        String realGid = a.m.g.gid(), fakeGid = SyncCrypto.hex(SyncCrypto.rand(16));
+        boolean all405 = true;
+        StringBuilder got = new StringBuilder();
+        for (String path : new String[]{"/v1/g/" + realGid + "/push", "/v1/g/" + realGid + "/pull", "/v1/g/" + realGid + "/mail/get", "/v1/g/" + fakeGid + "/pull",
+                "/v1/rdv/" + rid, "/v1/rdv/" + SyncCrypto.b64e(SyncCrypto.rand(16)), "/v1/g/" + realGid + "/pull?since=0", "/v1/create"}) {
+            MiniHttp.Resp rr = MiniHttp.request(node.host, node.port, "GET", path, null, null);
+            if (rr.status != 405 || !rr.text().equals("{\"err\":\"method\"}")) { all405 = false; got.append(path).append(" → ").append(rr.status).append(' ').append(rr.text()).append("; "); }
+        }
+        check(all405, "GET /v1/g/*、/v1/rdv/*、/v1/create 一律 405 {\"err\":\"method\"}，真组和假组、真转交点和假转交点回的一字不差", got);
+        a.m.joinClose();
         Group g = a.m.g;
         List<String> needles = Arrays.asList(SyncCrypto.b64e(g.gk), SyncCrypto.hex(g.gk), SyncCrypto.b64e(g.encKey()), SyncCrypto.b64e(g.nodeKey()), SyncCrypto.b64e(g.idKey()));
         boolean clean = true;
@@ -674,6 +816,7 @@ public class SyncHarness {
         NodeCtl node = new NodeCtl(remote);
         try {
             if (remote == null) {
+                scenarioFaults(node);
                 scenarioNoGroup();
                 Dev[] d = scenarioCreateJoin(node, "dev");
                 scenarioJoinSecurity(node, d[0], d[1]);

@@ -24,6 +24,7 @@
     --shadow: 0 6px 24px rgba(0, 0, 0, .5);
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* .btn、.synctag 等设了 display 的元素，hidden 也要真的藏起来 */
   html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
   body { min-height: 100vh; padding: 20px 16px 40px; }
   main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
@@ -159,7 +160,7 @@
     show($('notice'), st.inGroup ? '' : st.notice, 'bad');
     // 同步组已过期（超过 60 天没同步、节点上的组也没了）：明确提示，给一个直接的按钮
     $('btnRejoin').hidden = !(st.inGroup && st.node && st.node.error === 'expired');
-    $('start').hidden = st.inGroup || joinRole === 'guest';
+    $('start').hidden = st.inGroup || joinRole === 'guest' || !!st.unavailable;   // 内核建不出来：只显示原因
     $('group').hidden = !st.inGroup;
     $('more').hidden = !st.inGroup;
     if (!st.inGroup) return;

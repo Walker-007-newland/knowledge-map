@@ -217,9 +217,11 @@ public final class Group {
     public static Group load(SyncStore st) {
         Map<String, Object> f = st.json("group.json");
         if (f == null || SyncJson.s(f, "box") == null) return null;
-        byte[] plain = st.open(b64d(SyncJson.s(f, "box")));
-        if (plain == null) return null;
-        try { return from(SyncJson.obj(str(plain))); } catch (RuntimeException e) { return null; }
+        try {
+            byte[] plain = st.open(b64d(SyncJson.s(f, "box")));
+            if (plain == null) return null;
+            return from(SyncJson.obj(str(plain)));
+        } catch (RuntimeException e) { return null; }       // 文件坏了：当作钥匙读不出来
     }
 
     // ------------------------------------------------------------ 组包（加入时交给新设备）、钥匙包（换钥后经信箱交给组员）
