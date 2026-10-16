@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自检 iframe</title>
+<style>body { margin: 0; padding: 8px; font: 13px/1.5 system-ui, sans-serif; background: #fff3e0; color: #5d3a00; }</style>
+</head>
+<body>
+<b>我是「第三方」iframe</b>（https://appassets.androidplatform.net，和主页面不同来源），正在尝试调用 KMBridge…
+<script>
+// 真机自检（需求 #5）：扮演 B 站播放器这样的第三方 iframe，把每个需要令牌的 KMBridge 方法都调一遍，结果用 postMessage 报给主页面。
+// 门卫正常时这些调用都不会执行（不会存文件、不会返回、不会打开设置）；主页面用 KMSelfTest.denied() 核对被拒次数。
+(function () {
+  const B = window.KMBridge, S = window.KMSelfTest;
+  const report = { hasBridge: !!B, shim: !!window.KMApp, calls: [], gateCalls: 0, stolen: '', parentKMApp: '' };
+  const send = () => parent.postMessage({ kmSelfTest: 1, report }, '*');
+  if (!B) { send(); return; }
+  const rand = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), x => (x < 16 ? '0' : '') + x.toString(16)).join('');
+  // 需要令牌的方法和一组「无害但能看出来有没有执行」的参数（不带令牌）
+  const METHODS = {
+    speak: ['9001', '如果你听到这句话，说明自检失败', 'zh-CN', 1, 1],
+    stopSpeak: [],
+    saveFile: ['自检失败-iframe写入.json', '{"iframe":1}'],
+    updatePet: ['{"name":"自检失败","breed":"柴犬","level":1,"stage":"","fullness":0,"tick":0,"decay":1,"hungry":30,"bones":0,"todayMin":0,"streak":0}'],
+    savePetImage: ['iVBORw0KGgo='],
+    pinWidget: [],
+    openAppSettings: [],
+    keepScreenOn: [true],
+    goBack: [],
+    checkUpdate: [],
+    deviceName: [],
+    sharedGet: ['km-device-v1'],
+    sharedPut: ['km-device-v1', '{"value":{"id":"self-test-fail"}}', 1]
+  };
+  function attempt(m, args, how) {
+    let r, err = '';
+    try { r = B[m].apply(B, args); } catch (e) { err = String(e && e.message || e).slice(0, 60); }
+    report.calls.push({ m, how, threw: !!err, err, ret: r === undefined ? 'undefined' : JSON.stringify(r) });
+  }
+  // 1. 试着偷令牌：自己定义 __kmTok，然后 hello()。令牌只会送进主页面，这里收不到
+  window.__kmTok = t => { report.stolen = String(t); };
+  try { B.hello(); B.hello(); } catch (e) { /* 忽略 */ }
+  try { report.parentKMApp = typeof parent.KMApp; } catch (e) { report.parentKMApp = '读不到（跨来源）'; }
+  setTimeout(() => {
+    Object.keys(METHODS).forEach(m => {
+      const args = METHODS[m];
+      attempt(m, args, '不带令牌（旧签名）');                 // 参数个数不对，JS 桥直接报 Method not found，到不了 Java
+      attempt(m, [rand()].concat(args), '猜的令牌'); report.gateCalls++;
+      attempt(m, [report.stolen || ''].concat(args), report.stolen ? '偷到的令牌' : '空令牌'); report.gateCalls++;
+      if (S) { let r; try { r = S.check(rand(), m); } catch (e) { r = 'err'; } report.calls.push({ m, how: '自检接口问门卫（猜的令牌）', threw: false, err: '', ret: JSON.stringify(r) }); report.gateCalls++; }
+    });
+    send();
+  }, 1500);
+})();
+</script>
+</body>
+</html>

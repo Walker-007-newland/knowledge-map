@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原生接口自检</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #fff; --text: #1f2328; --good: #2f8a4c; --bad: #c23f2e; --muted: #6b6f76; --line: #e3dfd6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #17181b; --card: #222327; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; --line: #34363b; } }
+  :root[data-theme="dark"] { --bg: #17181b; --card: #222327; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; --line: #34363b; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 16px/1.6 "Microsoft YaHei", system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .big { font-size: 20px; font-weight: 700; margin: 10px 0; padding: 12px 14px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
+  .ok { color: var(--good); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+  iframe { width: 100%; height: 70px; border: 2px dashed #e8893b; border-radius: 8px; }
+  details { margin-top: 12px; } summary { cursor: pointer; }
+  li { font-size: 13px; overflow-wrap: anywhere; }
+  a.btn, button { display: inline-block; margin: 6px 8px 0 0; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 15px; text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>原生接口 KMBridge 自检（需求 #5，测试包专用）</h1>
+  <p class="muted">下面的橙色框是一个「第三方」iframe，相当于学做笔记里的 B 站播放器。它会把每个需要令牌的接口都调一遍，应该全部被拒；本页（App 自己的页面）用正常方式调，应该全部成功。整个过程约 5 秒，不会存文件、不会跳页。</p>
+  <div id="r1" class="big">iframe 调用：检测中…</div>
+  <div id="r2" class="big">主页面调用：检测中…</div>
+  <iframe id="third" src="https://appassets.androidplatform.net/selftest/frame.html" title="第三方 iframe"></iframe>
+  <p>
+    <a class="btn" href="../skills-map/notes.html">去学做笔记看 B 站视频（验收 9）</a>
+    <a class="btn" href="../index.html">回总入口</a>
+    <button id="again">重新检测</button>
+  </p>
+  <details open><summary>明细</summary><ol id="log"></ol></details>
+</main>
+<script>
+(function () {
+  const $ = id => document.getElementById(id), log = $('log');
+  const line = (ok, msg) => { const li = document.createElement('li'); li.className = ok ? 'ok' : 'bad'; li.textContent = (ok ? '✓ ' : '✗ ') + msg; log.appendChild(li); };
+  $('again').onclick = () => location.reload();
+  const A = window.KMApp, S = window.KMSelfTest;
+  if (!A || !S) {
+    $('r1').innerHTML = '<span class="bad">不在 App 测试包里：没有 KMApp 或 KMSelfTest</span>';
+    $('r2').textContent = '';
+    return;
+  }
+  const TOKEN_METHODS = ['speak', 'stopSpeak', 'saveFile', 'updatePet', 'savePetImage', 'pinWidget', 'openAppSettings',
+    'keepScreenOn', 'goBack', 'checkUpdate', 'deviceName', 'sharedGet', 'sharedPut'];
+  let before = -1, gotFrame = false;
+
+  // 第一步：主页面拿到令牌后，用 KMApp 正常调。会打断自检的（返回、打开设置、检查更新、放到桌面、存文件、改共享存储）只问门卫不执行
+  function mainChecks(tag) {
+    let n = 0, bad = 0;
+    const d0 = S.denied();
+    const ck = (ok, msg) => { n++; if (!ok) bad++; line(ok, tag + msg); };
+    TOKEN_METHODS.forEach(m => ck(A.selfCheck(m) === true, '门卫放行主页面的 ' + m));
+    const name = A.deviceName();
+    ck(!!name, 'deviceName 真调用：' + name);
+    const sh = A.sharedGet('km-device-v1');
+    ck(!!sh && !!JSON.parse(sh).v, 'sharedGet 真调用：读到共享存储里的设备编号');
+    ck(A.widgetCount() >= 0, 'widgetCount（不需令牌）：桌面上 ' + A.widgetCount() + ' 个小狗');
+    ck(!!A.appVersion(), 'appVersion（不需令牌）：' + A.appVersion());
+    A.keepScreenOn(false); A.stopSpeak();
+    try { if (window.KMPet) KMPet.syncWidget(); } catch (e) { /* 忽略 */ }
+    ck(S.denied() === d0, 'keepScreenOn、stopSpeak、updatePet 真调用，没有一个被拒');
+    return { n, bad };
+  }
+
+  function finish(rep) {
+    gotFrame = true;
+    let n = 0, bad = 0;
+    line(rep.hasBridge, 'iframe 里能看到 KMBridge（所以才需要令牌）');
+    line(!rep.shim, 'iframe 里没有建 KMApp 门面');
+    line(!rep.stolen, rep.stolen ? 'iframe 偷到了令牌：' + rep.stolen : 'iframe 自己定义 __kmTok 再 hello()，什么也没收到');
+    line(rep.parentKMApp !== 'object', 'iframe 读主页面的 KMApp：' + rep.parentKMApp);
+    rep.calls.forEach(c => {
+      const empty = c.threw || c.ret === 'undefined' || c.ret === '""' || c.ret === 'false' || c.ret === '-1';
+      n++; if (!empty) bad++;
+      line(empty, 'iframe ' + c.m + '（' + c.how + '）→ ' + (c.threw ? '报错 ' + c.err : '返回 ' + c.ret));
+    });
+    const denied = S.denied() - before;
+    const allDenied = denied === rep.gateCalls;
+    line(allDenied, '门卫记下的被拒次数 ' + denied + '，iframe 带令牌参数的调用 ' + rep.gateCalls + ' 次');
+    if (!allDenied || rep.stolen) bad++;
+    $('r1').innerHTML = bad ? '<span class="bad">iframe 调用：' + bad + ' 处没被拒 ✗（见明细）</span>'
+      : '<span class="ok">iframe 调用：' + n + ' 个全部被拒 ✓</span>';
+    // iframe 的 hello() 让主页面换了令牌，主页面再调一遍确认照常可用
+    const again = mainChecks('（iframe 之后）');
+    const m = first.n + again.n, mb = first.bad + again.bad;
+    $('r2').innerHTML = mb ? '<span class="bad">主页面调用：' + mb + ' / ' + m + ' 个失败 ✗（见明细）</span>'
+      : '<span class="ok">主页面调用：' + m + ' 个全部成功 ✓</span>';
+    if (!bad && !mb) try { const u = new SpeechSynthesisUtterance('自检通过'); u.lang = 'zh-CN'; speechSynthesis.speak(u); } catch (e) { /* 忽略 */ }
+  }
+
+  let first = { n: 0, bad: 0 };
+  // 等主页面拿到令牌、学习数据对齐完，再记下被拒次数基线（iframe 1.5 秒后才开始调用）
+  const base = (window.KMData ? KMData.ready() : A.ready()).then(() => {
+    first = mainChecks('');
+    before = S.denied();
+  });
+  window.addEventListener('message', e => {
+    if (e.origin !== 'https://appassets.androidplatform.net' || !e.data || !e.data.kmSelfTest || gotFrame) return;
+    const rep = e.data.report;
+    base.then(() => finish(rep));
+  });
+  setTimeout(() => { if (!gotFrame) $('r1').innerHTML = '<span class="bad">iframe 15 秒没有回报：https 虚拟地址没加载出来？</span>'; }, 15000);
+})();
+</script>
+</body>
+</html>

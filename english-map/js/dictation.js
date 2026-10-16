@@ -7,7 +7,7 @@
   const STORE = 'fjzk-en-dictation-v1';
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const inApp = !!(window.KMBridge && KMBridge.goBack);
+  const inApp = !!(window.KMApp && KMApp.goBack);
 
   /* ---------------- 数据 ---------------- */
   const DEFAULTS = { scope: 'all', mode: 'paper', read: 'en', reps: '2', pace: 'normal', order: 'random', someN: 10 };
@@ -49,7 +49,7 @@
   });
   $('#btnBack').onclick = () => {
     if (current !== 'vList') { history.back(); return; }
-    if (inApp) KMBridge.goBack();
+    if (inApp) KMApp.goBack();
     else if (history.length > 1) history.back();
     else location.href = 'index.html';
   };
@@ -57,7 +57,7 @@
   // 听写时保持屏幕常亮
   let wakeLock = null;
   function keepAwake(on) {
-    if (inApp && KMBridge.keepScreenOn) { KMBridge.keepScreenOn(!!on); return; }
+    if (inApp && KMApp.keepScreenOn) { KMApp.keepScreenOn(!!on); return; }
     if (!('wakeLock' in navigator)) return;
     if (on && !wakeLock) navigator.wakeLock.request('screen').then(l => { wakeLock = l; }).catch(() => {});
     if (!on && wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }

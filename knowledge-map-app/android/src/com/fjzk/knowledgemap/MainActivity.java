@@ -12,6 +12,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -45,6 +46,7 @@ import java.util.Map;
 /**
  * 全屏 WebView 外壳。网页打包在 assets/www 里，直接从 file:///android_asset/ 读取，完全离线。
  * 下载备份、朗读这些 WebView 不支持的功能由 km-shim.js 转给这里的 KMBridge；联网只用于检查更新（见 Updater）。
+ * KMBridge 对页面里所有 frame（包括 B 站播放器 iframe）都可见，敏感方法第一个参数是每页令牌，先过 BridgeGate（需求 #5）。
  * 例外：英语单词听写页要用 Web Worker 和 fetch 加载离线识别引擎，file:// 下不行，
  * 所以同一批文件也通过虚拟地址 https://appassets.androidplatform.net/ 提供（不联网，见 serveAsset）。
  */
@@ -70,6 +72,7 @@ public class MainActivity extends Activity {
     boolean ttsReady;
     Updater updater;
     String pendingOpen;    // 总入口加载完后要接着打开的页面
+    final BridgeGate gate = new BridgeGate();
 
     @Override
     protected void onCreate(Bundle state) {
@@ -92,7 +95,12 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(true);
         s.setDisplayZoomControls(false);
 
+        gate.setLog(new BridgeGate.Log() {
+            public void denied(String method, String page) { Log.w("KMBridge", "KMBridge denied " + method + " on " + page); }
+        });
         web.addJavascriptInterface(new Bridge(), "KMBridge");
+        // 真机自检包（build.ps1 -SelfTest）才有 selftest/ 页面和 KMSelfTest；正式包里两者都没有
+        if (hasAsset("www/selftest/bridge.html")) web.addJavascriptInterface(new SelfTest(), "KMSelfTest");
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
 
@@ -308,18 +316,46 @@ public class MainActivity extends Activity {
         }
     }
 
+    static long now() { return System.currentTimeMillis(); }
+
+    boolean hasAsset(String path) {
+        try { getAssets().open(path).close(); return true; } catch (IOException e) { return false; }
+    }
+
+    /**
+     * 网页的原生接口。除 hello、appVersion、widgetCount、widgetInfo 外，每个方法第一个参数都是令牌（见 BridgeGate），
+     * 没有不带令牌的旧签名（JS 桥按参数个数匹配，留着旧签名等于没防）。被拒的调用不执行，返回空字符串 / false / -1。
+     */
     class Bridge {
+        /** 主页面的 km-shim.js 来要令牌：在 UI 线程读主页面地址、签发，再用 evaluateJavascript 只送进主页面（iframe 收不到） */
+        @JavascriptInterface
+        public void hello() {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    String tok = gate.issue(web.getUrl(), now());
+                    if (tok != null) web.evaluateJavascript("window.__kmTok&&__kmTok('" + tok + "')", null);
+                }
+            });
+        }
+
         /** 桌面小狗：网页推来小狗概况（JSON，空字符串表示还没领养） */
         @JavascriptInterface
-        public void updatePet(String json) { PetWidget.saveState(MainActivity.this, json == null ? "" : json); }
+        public void updatePet(String token, String json) {
+            if (!gate.check(token, "updatePet", now())) return;
+            PetWidget.saveState(MainActivity.this, json == null ? "" : json);
+        }
 
         /** 桌面小狗：宠物页拍的小狗照片（PNG 的 base64） */
         @JavascriptInterface
-        public void savePetImage(String base64) { if (base64 != null) PetWidget.saveImage(MainActivity.this, base64); }
+        public void savePetImage(String token, String base64) {
+            if (!gate.check(token, "savePetImage", now())) return;
+            if (base64 != null) PetWidget.saveImage(MainActivity.this, base64);
+        }
 
         /** 桌面小狗：请系统弹出“添加到桌面”；桌面不支持时返回 false，网页会改为提示手动添加 */
         @JavascriptInterface
-        public boolean pinWidget() {
+        public boolean pinWidget(String token) {
+            if (!gate.check(token, "pinWidget", now())) return false;
             try { return PetWidget.pin(MainActivity.this); } catch (Exception e) { return false; }
         }
 
@@ -335,7 +371,8 @@ public class MainActivity extends Activity {
 
         /** 打开本应用的系统设置页（去开“桌面快捷方式”权限） */
         @JavascriptInterface
-        public void openAppSettings() {
+        public void openAppSettings(String token) {
+            if (!gate.check(token, "openAppSettings", now())) return;
             runOnUiThread(new Runnable() {
                 public void run() {
                     try {
@@ -348,7 +385,8 @@ public class MainActivity extends Activity {
 
         /** 听写时保持屏幕常亮 */
         @JavascriptInterface
-        public void keepScreenOn(final boolean on) {
+        public void keepScreenOn(String token, final boolean on) {
+            if (!gate.check(token, "keepScreenOn", now())) return;
             runOnUiThread(new Runnable() {
                 public void run() { web.setKeepScreenOn(on); }
             });
@@ -356,7 +394,8 @@ public class MainActivity extends Activity {
 
         /** 网页里的“返回”：https 页面不能自己跳回 file:// 页面，交给 WebView 后退 */
         @JavascriptInterface
-        public void goBack() {
+        public void goBack(String token) {
+            if (!gate.check(token, "goBack", now())) return;
             runOnUiThread(new Runnable() {
                 public void run() { if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME); }
             });
@@ -367,21 +406,26 @@ public class MainActivity extends Activity {
 
         /** 设备名称（如 Xiaomi 23043RP34C），「我的数据」页显示、导出文件里记下来自哪台设备 */
         @JavascriptInterface
-        public String deviceName() { return (Build.MANUFACTURER + " " + Build.MODEL).trim(); }
+        public String deviceName(String token) {
+            if (!gate.check(token, "deviceName", now())) return "";
+            return (Build.MANUFACTURER + " " + Build.MODEL).trim();
+        }
 
         /**
          * 原生共享存储：file:// 图谱页和 https 虚拟地址的听写页各有一份 localStorage，互相读不到，
          * 听写词单和设备编号经这里互通（见 km-data.js）。返回 {"v": 值字符串, "t": 写入时间} 的 JSON，没有就返回空字符串
          */
         @JavascriptInterface
-        public String sharedGet(String key) {
+        public String sharedGet(String token, String key) {
+            if (!gate.check(token, "sharedGet", now())) return "";
             File f = sharedFile(key);
             if (f == null || !f.isFile()) return "";
             try { return new String(readAll(f), StandardCharsets.UTF_8); } catch (IOException e) { return ""; }
         }
 
         @JavascriptInterface
-        public boolean sharedPut(String key, String json, double t) {
+        public boolean sharedPut(String token, String key, String json, double t) {
+            if (!gate.check(token, "sharedPut", now())) return false;
             File f = sharedFile(key);
             if (f == null || json == null) return false;
             try {
@@ -396,14 +440,16 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void checkUpdate() {
+        public void checkUpdate(String token) {
+            if (!gate.check(token, "checkUpdate", now())) return;
             runOnUiThread(new Runnable() {
                 public void run() { updater.check(true); }
             });
         }
 
         @JavascriptInterface
-        public void speak(String id, String text, String lang, float rate, float pitch) {
+        public void speak(String token, String id, String text, String lang, float rate, float pitch) {
+            if (!gate.check(token, "speak", now())) return;
             if (!ttsReady) { ttsDone(id, false); return; }
             if (lang != null && !lang.isEmpty()) tts.setLanguage(Locale.forLanguageTag(lang));
             tts.setSpeechRate(rate);
@@ -412,12 +458,14 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void stopSpeak() {
+        public void stopSpeak(String token) {
+            if (!gate.check(token, "stopSpeak", now())) return;
             if (tts != null) tts.stop();
         }
 
         @JavascriptInterface
-        public void saveFile(final String name, final String text) {
+        public void saveFile(String token, final String name, final String text) {
+            if (!gate.check(token, "saveFile", now())) return;
             String where;
             try {
                 where = save(name, text.getBytes(StandardCharsets.UTF_8));
@@ -429,6 +477,18 @@ public class MainActivity extends Activity {
                 public void run() { Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show(); }
             });
         }
+    }
+
+    /**
+     * 真机自检（只在 -SelfTest 包里注入）：selftest/bridge.html 用它确认 iframe 的调用全部被拒、主页面的调用全部通过。
+     * check 只问门卫、不执行方法，用来覆盖返回、打开设置、检查更新这类一执行就会打断自检的方法
+     */
+    class SelfTest {
+        @JavascriptInterface
+        public boolean check(String token, String method) { return gate.check(token, method, now()); }
+
+        @JavascriptInterface
+        public int denied() { return gate.deniedCount(); }
     }
 
     /** 共享存储只允许这几个键（文件名就是键名，防路径穿越） */

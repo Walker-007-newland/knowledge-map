@@ -78,10 +78,10 @@
     syncWidget(st);
   }
 
-  // 把小狗的概况交给安卓桌面小部件（只在 App 里有 KMBridge.updatePet）。
+  // 把小狗的概况交给安卓桌面小部件（只在 App 里有 KMApp.updatePet，令牌没到时会排队）。
   // 小部件自己按 tick 和每小时掉多少算当前饱食度，所以不用一直推
   function syncWidget(st) {
-    const B = window.KMBridge;
+    const B = window.KMApp;
     if (!B || !B.updatePet) return;
     st = st || load();
     // 读不到小狗就不推：可能是还没领养，也可能是 https 虚拟地址上的页面（单词听写），那里的 localStorage 是另一份

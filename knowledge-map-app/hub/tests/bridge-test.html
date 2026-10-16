@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KMApp 门面测试</title>
+<style>
+  :root { --bg: #f6f4ef; --text: #1f2328; --good: #2f8a4c; --bad: #c23f2e; --muted: #6b6f76; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #17181b; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; } }
+  :root[data-theme="dark"] { --bg: #17181b; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; }
+  body { margin: 0; padding: 20px 16px; background: var(--bg); color: var(--text); font: 15px/1.6 "Microsoft YaHei", system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  #sum { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+  .ok { color: var(--good); } .bad { color: var(--bad); }
+  li { margin: 2px 0; overflow-wrap: anywhere; } small { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>km-shim.js 门面 KMApp 测试（需求 #5）</h1>
+<p><small>用本地服务器打开本页（如 http://localhost:8781/issue-5/knowledge-map-app/hub/tests/bridge-test.html）。每项在一个同源 iframe 里装模拟的 KMBridge 和 km-shim.js，hello() 用 setTimeout 回调 __kmTok（模拟 evaluateJavascript）。约 5 秒跑完，结果也在 window.__results。会临时改本页网址的 localStorage，跑完还原。</small></p>
+<div id="sum">运行中…</div>
+<ol id="out"></ol>
+<script>
+(async function () {
+  const out = document.getElementById('out');
+  const res = { pass: 0, fail: 0, failures: [] };
+  window.__results = res;
+  let cur = '';
+  function log(ok, msg) {
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'bad';
+    li.textContent = (ok ? '✓ ' : '✗ ') + cur + '：' + msg;
+    out.appendChild(li);
+    if (ok) res.pass++; else { res.fail++; res.failures.push(cur + '：' + msg); }
+  }
+  const ok = (c, msg) => log(!!c, msg);
+  const eq = (a, b, msg) => { const A = JSON.stringify(a), B = JSON.stringify(b); log(A === B, msg + (A === B ? '' : '　实际 ' + A + '　期望 ' + B)); };
+  async function test(name, fn) {
+    cur = name;
+    try { await fn(); } catch (e) { log(false, '异常 ' + (e && e.stack || e)); }
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const randTok = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), x => (x < 16 ? '0' : '') + x.toString(16)).join('');
+
+  // 模拟原生桥：记下每次调用；auto 时 hello() 隔 delay 毫秒把新令牌送进 __kmTok，否则由测试手动送
+  function mkBridge(w, opt) {
+    const m = { calls: [], hellos: 0, tok: '', store: {} };
+    const rec = name => function () { m.calls.push([name].concat(Array.from(arguments))); };
+    const chk = t => t && t === m.tok;
+    m.send = t => { m.tok = t; w.__kmTok(t); };
+    m.bridge = {
+      hello() { m.hellos++; if (opt.auto && !(opt.ignoreFirst && m.hellos === 1)) setTimeout(() => m.send(randTok()), opt.delay || 30); },
+      speak: rec('speak'), stopSpeak: rec('stopSpeak'), saveFile: rec('saveFile'), updatePet: rec('updatePet'),
+      savePetImage: rec('savePetImage'), keepScreenOn: rec('keepScreenOn'), goBack: rec('goBack'), checkUpdate: rec('checkUpdate'),
+      openAppSettings: rec('openAppSettings'),
+      pinWidget(t) { m.calls.push(['pinWidget', t]); return chk(t); },
+      deviceName(t) { m.calls.push(['deviceName', t]); return chk(t) ? 'Xiaomi Pad' : ''; },
+      sharedGet(t, k) { m.calls.push(['sharedGet', t, k]); return chk(t) && m.store[k] ? JSON.stringify(m.store[k]) : ''; },
+      sharedPut(t, k, json, ts) { m.calls.push(['sharedPut', t, k]); if (!chk(t)) return false; m.store[k] = { v: json, t: ts }; return true; },
+      appVersion() { m.calls.push(['appVersion'].concat(Array.from(arguments))); return '2026.10.16.1700'; },
+      widgetCount() { m.calls.push(['widgetCount'].concat(Array.from(arguments))); return 0; },
+      widgetInfo() { m.calls.push(['widgetInfo'].concat(Array.from(arguments))); return '{"brand":"xiaomi"}'; }
+    };
+    if (opt.store) m.store = opt.store;
+    return m;
+  }
+  function load(f, src) {
+    return new Promise((ok, bad) => { const s = f.contentDocument.createElement('script'); s.src = new URL(src, location.href).href; s.onload = ok; s.onerror = bad; f.contentDocument.head.appendChild(s); });
+  }
+  const frames = [];
+  // 在同源 iframe 里模拟一个 App 页面；opt.noBridge：普通浏览器；opt.notTop：被嵌在别人页面里
+  async function page(opt = {}) {
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    document.body.appendChild(f);
+    frames.push(f);
+    const w = f.contentWindow;
+    if (!opt.notTop) w.__kmShimTest = 1;
+    const m = mkBridge(w, opt);
+    if (!opt.noBridge) w.KMBridge = m.bridge;
+    for (const s of opt.scripts || ['../km-shim.js']) await load(f, s);
+    return { f, w, m };
+  }
+
+  const saved = Object.assign({}, localStorage);
+  try {
+    await test('没有 KMBridge（普通浏览器）', async () => {
+      const { w } = await page({ noBridge: true });
+      ok(w.KMApp === undefined, '不定义 KMApp');
+      ok(w.__kmTok === undefined, '不定义 __kmTok');
+      ok(String(w.SpeechSynthesisUtterance).indexOf('[native code]') > 0, '不替换浏览器自己的朗读');
+    });
+
+    await test('页面被嵌在 iframe 里（不是主页面）', async () => {
+      const { w, m } = await page({ notTop: true, auto: true });
+      ok(w.KMApp === undefined, '不建门面');
+      eq(m.hellos, 0, '不调 hello');
+    });
+
+    await test('令牌到达前：没有返回值的方法排队，到达后按顺序发出且都带令牌', async () => {
+      const { w, m } = await page({ auto: false });
+      const A = w.KMApp;
+      ok(A && typeof A.ready === 'function', '定义了 KMApp');
+      eq(m.hellos, 1, '加载时调了一次 hello()');
+      ok(!A.isReady(), '令牌还没到');
+      A.speak('1', '你好', 'zh-CN', 1, 1);
+      A.saveFile('a.json', '{"x":1}');
+      A.updatePet('{"name":"小柴"}');
+      A.keepScreenOn(true);
+      A.sharedPut('km-device-v1', '{}', 5);
+      eq(m.calls.length, 0, '令牌到之前一个也没发给原生');
+      let readyAt = -1;
+      A.ready().then(() => { readyAt = m.calls.length; });
+      const t = randTok();
+      m.send(t);
+      eq(m.calls.map(c => c[0]), ['speak', 'saveFile', 'updatePet', 'keepScreenOn', 'sharedPut'], '令牌一到按调用顺序发出');
+      ok(m.calls.every(c => c[1] === t), '每个调用第一个参数都是令牌');
+      eq(m.calls[0], ['speak', t, '1', '你好', 'zh-CN', 1, 1], 'speak 参数原样跟在令牌后面');
+      eq(m.calls[1], ['saveFile', t, 'a.json', '{"x":1}'], 'saveFile 参数原样跟在令牌后面');
+      await sleep(0);
+      eq(readyAt, 5, 'ready() 在排队的调用发完后兑现');
+      ok(A.isReady(), 'isReady() 为 true');
+      A.goBack();
+      eq(m.calls[5], ['goBack', t], '之后的调用直接带令牌发出');
+    });
+
+    await test('有返回值的方法：令牌到达前返回空值，ready 后返回正确值', async () => {
+      const { w, m } = await page({ auto: true, delay: 40, store: { 'km-device-v1': { v: '{"value":{"id":"abc"}}', t: 1 } } });
+      const A = w.KMApp;
+      eq(A.sharedGet('km-device-v1'), '', '令牌到之前 sharedGet 返回空字符串');
+      eq(A.deviceName(), '', '令牌到之前 deviceName 返回空字符串');
+      eq(A.pinWidget(), false, '令牌到之前 pinWidget 返回 false');
+      eq(m.calls.length, 0, '令牌到之前没有发给原生');
+      await A.ready();
+      eq(JSON.parse(A.sharedGet('km-device-v1')).v, '{"value":{"id":"abc"}}', 'ready 后 sharedGet 返回共享存储里的值');
+      eq(A.deviceName(), 'Xiaomi Pad', 'ready 后 deviceName 正确');
+      eq(A.pinWidget(), true, 'ready 后 pinWidget 返回原生结果');
+    });
+
+    await test('不需要令牌的方法直接转发', async () => {
+      const { w, m } = await page({ auto: false });
+      const A = w.KMApp;
+      eq([A.appVersion(), A.widgetCount(), A.widgetInfo()], ['2026.10.16.1700', 0, '{"brand":"xiaomi"}'], '令牌没到也能拿到结果');
+      eq(m.calls, [['appVersion'], ['widgetCount'], ['widgetInfo']], '不补令牌');
+    });
+
+    await test('令牌轮换', async () => {
+      const { w, m } = await page({ auto: false });
+      const A = w.KMApp;
+      const t1 = randTok(), t2 = randTok();
+      m.send(t1);
+      A.speak('1', 'a', '', 1, 1);
+      m.send(t2);                       // 比如 iframe 也调了 hello()，原生换了新令牌送给主页面
+      A.speak('2', 'b', '', 1, 1);
+      eq(m.calls.map(c => c[1]), [t1, t2], '换令牌后的新调用用新令牌');
+      w.__kmTok('not-a-token');
+      A.stopSpeak();
+      eq(m.calls[2][1], t2, '格式不对的「令牌」被忽略');
+      let threw = false;
+      try { w.__kmTok = () => {}; } catch (e) { threw = true; }
+      w.__kmTok(t1);
+      A.stopSpeak();
+      eq(m.calls[3][1], t1, '__kmTok 不能被改写（改写无效，令牌照常更新）');
+      ok(Object.isFrozen(A), 'KMApp 被冻结，不能替换方法');
+    });
+
+    await test('3 秒还没拿到令牌就再要一次', async () => {
+      const { w, m } = await page({ auto: true, ignoreFirst: true, delay: 10 });
+      w.KMApp.saveFile('b.json', 'x');
+      eq(m.hellos, 1, '先 hello 一次（模拟没回应）');
+      await sleep(3200);
+      eq(m.hellos, 2, '3 秒后又 hello 了一次');
+      await sleep(100);
+      ok(w.KMApp.isReady(), '第二次拿到令牌');
+      eq(m.calls.map(c => c[0]), ['saveFile'], '排队的 saveFile 没有丢');
+      await sleep(3100);
+      eq(m.hellos, 2, '拿到令牌后不再重试');
+    });
+
+    await test('km-shim 自己的补丁走门面（朗读、blob 下载）', async () => {
+      const { w, m } = await page({ auto: false });
+      const u = new w.SpeechSynthesisUtterance('早上好');
+      u.lang = 'zh-CN';
+      w.speechSynthesis.speak(u);
+      const a = w.document.createElement('a');
+      a.href = w.URL.createObjectURL(new w.Blob(['{"p":1}'], { type: 'application/json' }));
+      a.download = '备份.json';
+      a.click();
+      await sleep(50);
+      eq(m.calls.length, 0, '令牌没到时朗读、保存都在排队');
+      const t = randTok();
+      m.send(t);
+      eq(m.calls.map(c => [c[0], c[1]]), [['speak', t], ['saveFile', t]], '令牌到后朗读、保存带令牌发出');
+      eq(m.calls[1].slice(2), ['备份.json', '{"p":1}'], '保存的文件名和内容不变');
+      w.speechSynthesis.cancel();
+      eq(m.calls[2], ['stopSpeak', t], 'cancel → stopSpeak 带令牌');
+    });
+
+    await test('km-data：令牌到之前不写共享存储，ready 后设备编号以共享存储为准', async () => {
+      localStorage.clear();
+      const store = { 'km-device-v1': { v: JSON.stringify({ value: { id: '1122334455667788', created: 1, name: 'x' }, meta: {} }), t: 1 } };
+      const { w, m } = await page({ auto: false, store, scripts: ['../km-shim.js', '../km-data.js'] });
+      const D = w.KMData;
+      const pre = D.device();
+      ok(/^[0-9a-f]{16}$/.test(pre.id) && pre.id !== '1122334455667788', '令牌到之前先用本空间新建的编号');
+      eq(m.calls.filter(c => c[0] === 'sharedPut').length, 0, '令牌到之前没有往共享存储写（不会盖掉共享里的编号）');
+      m.send(randTok());
+      await D.ready();
+      eq(D.device().id, '1122334455667788', 'ready 后对齐成共享存储里的编号');
+      eq(D.device().name, 'Xiaomi Pad', 'ready 后设备名来自原生');
+      eq(JSON.parse(localStorage.getItem('km-device-v1')).id, '1122334455667788', '本空间存的编号也改成共享的');
+      eq(JSON.parse(JSON.parse(store['km-device-v1'].v).value.id ? store['km-device-v1'].v : '{}').value.id, '1122334455667788', '共享存储里的编号没被改');
+      ok(m.calls.filter(c => c[0] === 'sharedGet' || c[0] === 'sharedPut').every(c => c[1] === m.tok), 'km-data 的共享存储调用都带令牌');
+    });
+
+    await test('km-data：浏览器里（没有 KMBridge）ready 立即兑现', async () => {
+      const { w } = await page({ noBridge: true, scripts: ['../km-shim.js', '../km-data.js'] });
+      let done = false;
+      w.KMData.ready().then(() => { done = true; });
+      await sleep(0);
+      ok(done, 'KMData.ready() 立即兑现');
+      eq(w.KMData.device().name, '浏览器', '设备名仍是「浏览器」');
+    });
+  } finally {
+    frames.forEach(f => f.remove());
+    localStorage.clear();
+    Object.keys(saved).forEach(k => localStorage.setItem(k, saved[k]));
+  }
+  document.getElementById('sum').innerHTML = res.fail ? `<span class="bad">${res.fail} 项失败</span>，${res.pass} 项通过` : `<span class="ok">全部 ${res.pass} 项通过</span>`;
+  res.done = true;
+})();
+</script>
+</body>
+</html>

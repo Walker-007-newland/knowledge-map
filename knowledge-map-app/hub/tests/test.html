@@ -517,27 +517,38 @@
       eq(JSON.stringify(Object.assign({}, localStorage)), snap, '验收 11：只预览（merge）不写任何存储');
     });
 
-    await test('App 里两个存储空间互通（模拟 KMBridge.sharedGet/sharedPut）', async () => {
+    await test('App 里两个存储空间互通（模拟 KMBridge.sharedGet/sharedPut，带 #5 的每页令牌）', async () => {
       resetLS();
       const store = {};
-      const bridge = {
-        sharedGet: k => store[k] ? JSON.stringify(store[k]) : '',
-        sharedPut: (k, json, t) => { store[k] = { v: json, t }; return true; },
-        deviceName: () => 'Xiaomi Pad', saveFile: () => {}
-      };
-      // 在同源 iframe 里装一份带模拟原生桥的 km-data.js（相当于听写页）
+      // 模拟原生桥：hello() 隔一会儿把令牌送进主页面的 __kmTok（相当于 evaluateJavascript），其余方法第一个参数必须是当前令牌
+      function mkBridge(w) {
+        let tok = '';
+        const chk = t => t && t === tok;
+        return {
+          hello() { const t = Array.from(crypto.getRandomValues(new Uint8Array(16)), x => (x < 16 ? '0' : '') + x.toString(16)).join(''); setTimeout(() => { tok = t; w.__kmTok(t); }, 20); },
+          sharedGet: (t, k) => chk(t) && store[k] ? JSON.stringify(store[k]) : '',
+          sharedPut: (t, k, json, ts) => { if (!chk(t)) return false; store[k] = { v: json, t: ts }; return true; },
+          deviceName: t => chk(t) ? 'Xiaomi Pad' : '', saveFile: () => {}
+        };
+      }
+      // 在同源 iframe 里装一份带模拟原生桥的 km-shim.js + km-data.js（相当于听写页），等令牌到、对齐完
       async function frame() {
         const f = document.createElement('iframe');
         f.style.display = 'none';
         document.body.appendChild(f);
-        f.contentWindow.KMBridge = bridge;
-        await new Promise((ok, bad) => { const s = f.contentDocument.createElement('script'); s.src = new URL('../km-data.js', location.href).href; s.onload = ok; s.onerror = bad; f.contentDocument.head.appendChild(s); });
+        const w = f.contentWindow;
+        w.__kmShimTest = 1;
+        w.KMBridge = mkBridge(w);
+        for (const src of ['../km-shim.js', '../km-data.js'])
+          await new Promise((ok, bad) => { const s = f.contentDocument.createElement('script'); s.src = new URL(src, location.href).href; s.onload = ok; s.onerror = bad; f.contentDocument.head.appendChild(s); });
+        await w.KMData.ready();
         return f;
       }
       const K = 'fjzk-en-dictation-v1';
       // 1. 听写页新建词单 → 写进共享存储
       let f = await frame();
       const dev = f.contentWindow.KMData.device();
+      eq(dev.name, 'Xiaomi Pad', '令牌到了以后设备名来自原生桥（KMApp.deviceName 补上令牌）');
       eq(JSON.parse(JSON.parse(store['km-device-v1'].v).value.id ? store['km-device-v1'].v : '{}').value.id, dev.id, '设备编号存进共享存储（两边同一个编号）');
       f.contentWindow.localStorage.setItem(K, JSON.stringify({ lists: [{ id: 'L9', name: '新词单', words: [{ en: 'dog' }], wrong: {}, history: [], created: 99 }], settings: {} }));
       f.contentWindow.KMData._flush();
