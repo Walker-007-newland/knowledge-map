@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""km-sync 同步节点：设备协议 /v1（只存密文）+ 管理接口 /admin/v1（只给元数据）。
+"""km-sync 同步节点：设备协议 /v1（只存密文）+ 管理接口 /admin/v1（只给元数据）+ 网页后台（1.1.0 起）。
 
 协议见同目录 PROTOCOL.md，部署见 README.md。单文件、单进程，跑在 Python 3.10+：
 - 设备协议只用标准库；
 - 管理接口用系统自带的 python3-cryptography（AESGCM），导入不了时管理接口整体关闭（回 403），设备接口照常。
 
 运行：python3 km_sync_node.py --config /etc/km-sync/config.json
+监听（端口都可在 config.json 里改，0 = 不开）：
+  8787            设备协议 + 审批 App 管理接口（明文 HTTP + 整包加密）
+  443  (TLS)      网页后台：静态页面、/admin/web/login、/admin/v1（会话密钥或管理密钥）；证书 /etc/km-sync/tls/，60 秒内热更新
+  80              只有 Let's Encrypt 验证文件 /.well-known/acme-challenge/ 和跳转 https
+  127.0.0.1:8788  网页后台的明文版，只给 SSH 隧道用（localhost 是浏览器的安全上下文）
+  80/443/8788 起不来或证书有问题时只影响网页后台，8787 照常。
 其它命令（部署脚本经 SSH 调用，以 kmsync 身份运行）：
   --init             建库；没有管理密钥就生成一把，没有邀请码就生成一张「初始」邀请码（30 天、10 次），结果以 KMJSON 行输出
   --new-admin-key    换管理密钥（旧的立即失效），输出新的
-  --reset-access     清空 IP 封禁、熔断和 IP 名单，打开外网管理
+  --reset-access     清空 IP 封禁、熔断和 IP 名单，打开外网管理（同时清空网页登录的失败计数）
+  --reset-web-login  清空网页用户名、密码、二次验证和所有网页会话，网页登录关闭（要在审批 App 里重新设密码）
   --version          只打印版本号
 """
 import argparse
@@ -24,14 +31,16 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import sqlite3
+import ssl
 import sys
 import threading
 import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 PROTO = 1
 MB = 1024 * 1024
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
@@ -55,6 +64,32 @@ RDV_TOTAL = 500
 ADMIN_BODY_MAX = 64 * 1024
 LOG_KEEP_DAYS = 90
 SUPERSEDED_DAYS = 60
+
+# 网页后台（1.1.0）
+WEB_IDLE = 30 * 60            # 会话空闲 30 分钟过期
+WEB_MAX_AGE = 12 * 3600       # 会话最长 12 小时
+WEB_MAX_SESSIONS = 5
+WEB_ACCOUNT_FAILS = 10        # 账号 1 小时内失败 10 次 → 网页登录暂停 1 小时
+LOGIN_BODY_MAX = 4096
+LOGIN_FAIL_MSG = '用户名、密码或验证码不对'
+LOGIN_DENIED_MSG = '暂时不能登录：这个网络被限制，或失败次数过多被暂时封禁（1 小时后自动恢复）'
+LOGIN_PAUSED_MSG = '网页登录因失败次数过多暂停 1 小时。可以在审批 App「节点 → 限额与访问 → 网页登录」里处理'
+RE_USER = re.compile(r'^[A-Za-z0-9]{3,32}$')
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 15, 8, 1
+# 只发这些文件（相对 web_dir）；其它路径一律 404
+WEB_FILES = {
+    '/': ('index.html', 'text/html; charset=utf-8'),
+    '/index.html': ('index.html', 'text/html; charset=utf-8'),
+    '/web.js': ('web.js', 'application/javascript; charset=utf-8'),
+    '/web.css': ('web.css', 'text/css; charset=utf-8'),
+    '/node.js': ('node.js', 'application/javascript; charset=utf-8'),
+    '/node.css': ('node.css', 'text/css; charset=utf-8'),
+    '/vendor/qrcode.js': ('vendor/qrcode.js', 'application/javascript; charset=utf-8'),
+    '/vendor/jsQR.js': ('vendor/jsQR.js', 'application/javascript; charset=utf-8'),
+}
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+       "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+RE_ACME = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
 
 RE_GID = re.compile(r'^[0-9a-f]{32}$')
 RE_DEV = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
@@ -236,6 +271,160 @@ def is_local(ip):
     return ip in ('127.0.0.1', '::1')
 
 
+# ---------------------------------------------------------------- 网页密码、二次验证
+
+_scrypt_lock = threading.Lock()     # 同一时间只算一个 scrypt（约 32MB 内存），防止狂发登录把内存吃满
+_DUMMY_SALT = b'km-sync-dummy-salt'
+
+
+def _scrypt(pw, salt, n, r, p):
+    with _scrypt_lock:
+        return hashlib.scrypt(pw.encode('utf-8'), salt=salt, n=1 << n, r=r, p=p, maxmem=64 * MB, dklen=32)
+
+
+def pw_hash(pw):
+    salt = secrets.token_bytes(16)
+    return f'scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${b64e(salt)}${b64e(_scrypt(pw, salt, SCRYPT_N, SCRYPT_R, SCRYPT_P))}'
+
+
+def pw_check(pw, stored):
+    """stored 为空时也算一次（假的），让「没有这个用户」和「密码错」用时一样。"""
+    if not isinstance(pw, str) or len(pw) > 128:
+        pw = ''
+    try:
+        alg, n, r, p, salt, h = (stored or '').split('$')
+        if alg != 'scrypt':
+            raise ValueError
+        n, r, p, salt, h = int(n), int(r), int(p), b64d(salt), b64d(h)
+        if not (10 <= n <= 20 and 1 <= r <= 16 and 1 <= p <= 4):
+            raise ValueError
+    except ValueError:
+        _scrypt(pw, _DUMMY_SALT, SCRYPT_N, SCRYPT_R, SCRYPT_P)
+        return False
+    return hmac.compare_digest(_scrypt(pw, salt, n, r, p), h)
+
+
+# 常见弱密码（12 位以上的；更短的本来就不允许）+ 规则检查。不依赖外部密码表。
+_WEAK_WORDS = {
+    'password', 'passw0rd', 'p@ssw0rd', 'p@ssword', 'iloveyou', 'qwerty', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'admin',
+    'administrator', 'welcome', 'letmein', 'dragon', 'monkey', 'football', 'baseball', 'sunshine', 'princess', 'superman',
+    'master', 'shadow', 'michael', 'woaini', 'aini', 'woaiwojia', 'abc', 'abcd', 'abcdef', 'qazwsx', 'qweasd', 'qweasdzxc',
+    'changeme', 'secret', 'default', 'root', 'test', 'guest', 'login', 'kmsync', 'zhongkao', 'fujian', 'tencent', 'qq',
+    'computer', 'internet', 'whatever', 'trustno', 'starwars', 'pokemon', 'chocolate', 'liverpool', 'jordan', 'hello',
+    'helloworld', 'zaq', 'xsw', 'mima', 'wodemima', 'woshinidie', 'nihao', 'baobao', 'beijing', 'shanghai', 'china',
+}
+_WEAK_SEQ = ('0123456789012345678901234567890', '9876543210987654321098765432109', 'abcdefghijklmnopqrstuvwxyz',
+             'qwertyuiopasdfghjklzxcvbnm', '1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p', 'qazwsxedcrfvtgbyhnujmikolp',
+             '1q2w3e4r5t6y7u8i9o0p', 'zaq12wsxcde34rfvbgt56yhnmju78ik', 'qweasdzxcrtyfghvbnuiojklm')
+
+
+def pw_problem(pw, user, host):
+    """返回中文原因，或 None（可以用）。按 NIST 800-63B：看长度和黑名单，不要求「大写 + 符号」。"""
+    if not isinstance(pw, str):
+        return '密码格式不对'
+    if len(pw) < 12:
+        return '密码至少 12 个字符'
+    if len(pw) > 128:
+        return '密码最多 128 个字符'
+    low = pw.lower()
+    for bad, name in ((user, '用户名'), ('admin', '「admin」'), ('kmsync', '「kmsync」'), (host, '服务器地址')):
+        if bad and str(bad).lower() in low:
+            return f'密码里不能包含{name}'
+    core = re.sub(r'^[\d\W_]+|[\d\W_]+$', '', low)
+    if len(set(low)) <= 3 or core in _WEAK_WORDS or core == '' or any(low in s for s in _WEAK_SEQ):
+        return '这个密码太常见、太好猜，请换一个（可以用几个不相关的词加数字）'
+    for n in range(1, 7):
+        if len(low) % n == 0 and low == low[:n] * (len(low) // n):
+            return '这个密码太常见、太好猜，请换一个（可以用几个不相关的词加数字）'
+    return None
+
+
+def totp(secret, step, digits=6, alg='sha1'):
+    """RFC 6238（HOTP，30 秒一步）。"""
+    h = hmac.new(secret, int(step).to_bytes(8, 'big'), alg).digest()
+    o = h[-1] & 15
+    return str((int.from_bytes(h[o:o + 4], 'big') & 0x7FFFFFFF) % 10 ** digits).zfill(digits)
+
+
+def totp_match(secret, code, now, last_step=0):
+    """允许前后各差一个 30 秒；用过的时间步（<= last_step）不再接受。返回匹配的时间步或 None。"""
+    if not isinstance(code, str) or not re.fullmatch(r'\d{6}', code.strip()):
+        return None
+    code = code.strip()
+    cur = int(now // 30)
+    for st in (cur, cur - 1, cur + 1):
+        if st > (last_step or 0) and hmac.compare_digest(totp(secret, st), code):
+            return st
+    return None
+
+
+def b32(b):
+    return base64.b32encode(b).decode('ascii').rstrip('=')
+
+
+# ---------------------------------------------------------------- TLS 证书（热更新）
+
+def cert_info(path):
+    """读证书的到期时间、签发者、SAN（只读文件，不联网）。"""
+    try:
+        d = ssl._ssl._test_decode_cert(path)   # noqa: SLF001 CPython 自带，读 PEM 证书
+    except Exception as e:  # noqa: BLE001
+        return {'err': repr(e)[:200]}
+    issuer = ', '.join(f'{k}={v}' for rdn in d.get('issuer', ()) for k, v in rdn)
+    return {'not_after': int(ssl.cert_time_to_seconds(d['notAfter']) * 1000), 'not_before': int(ssl.cert_time_to_seconds(d['notBefore']) * 1000),
+            'issuer': issuer, 'san': [v for _, v in d.get('subjectAltName', ())]}
+
+
+class TLS:
+    """443 用的证书：每隔 interval 秒看一次文件修改时间，变了就换新的 SSLContext（新连接用新证书，不用重启）。
+    新证书加载失败时继续用旧的；一直没有可用证书时 443 不接受连接。都不影响 8787。"""
+
+    def __init__(self, cert, key, interval=60):
+        self.cert, self.key, self.interval = cert, key, interval
+        self.ctx, self.mt, self.checked, self.err, self.info = None, None, 0.0, None, {}
+        self.lock = threading.Lock()
+        self.check(force=True)
+
+    def _mtimes(self):
+        try:
+            a, b = os.stat(self.cert), os.stat(self.key)
+            return (a.st_mtime_ns, a.st_size, b.st_mtime_ns, b.st_size)
+        except OSError:
+            return None
+
+    def check(self, force=False):
+        with self.lock:
+            now = time.monotonic()
+            if not force and now - self.checked < self.interval:
+                return self.ctx
+            self.checked = now
+            mt = self._mtimes()
+            if mt is None:
+                if self.ctx is None:
+                    self.err = '还没有证书（deploy.ps1 -SetupTls 签发）'
+                return self.ctx
+            if mt == self.mt:
+                return self.ctx
+            try:
+                ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+                ctx.load_cert_chain(self.cert, self.key)
+                ctx.set_alpn_protocols(['http/1.1'])
+            except (ssl.SSLError, OSError, ValueError) as e:
+                self.err = '新证书加载失败，继续用旧的：' + repr(e)[:160] if self.ctx else '证书加载失败：' + repr(e)[:160]
+                print(self.err, flush=True)
+                return self.ctx
+            self.ctx, self.mt, self.err, self.info = ctx, mt, None, cert_info(self.cert)
+            print(f'已加载证书，到期 {self.info.get("not_after")}，签发者 {self.info.get("issuer")}', flush=True)
+            return ctx
+
+    def status(self, now_ms):
+        self.check()
+        na = self.info.get('not_after')
+        return {'enabled': self.ctx is not None, 'not_after': na, 'hours_left': round((na - now_ms) / 3600000, 1) if na else None,
+                'issuer': self.info.get('issuer', ''), 'err': self.err}
+
+
 # ---------------------------------------------------------------- 节点
 
 class Node:
@@ -256,6 +445,12 @@ class Node:
         self.fail_all = deque()         # 管理接口所有外网来源失败时间
         self.kid_hits = {}              # 管理接口每个 kid 成功请求时间
         self.hours = {}                 # 小时 -> [请求数, 错误数]
+        # 网页后台（main() / 测试里设置）
+        self.tls = None                 # TLS 实例；None = 没配置 443
+        self.web_dir = None             # 静态文件目录
+        self.acme_dir = None            # Let's Encrypt webroot（80 端口只从这里读验证文件）
+        self.web_url = f'https://{public_host}'
+        self.cur = None                 # 当前管理请求的身份（admin() 持锁时设置）
         self._migrate()
         self.janitor()
 
@@ -273,6 +468,11 @@ class Node:
                 db.execute('CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)')
                 row = db.execute("SELECT v FROM meta WHERE k='schema'").fetchone()
                 ver = int(row[0]) if row else 0
+                if name == 'admin' and 0 < ver < len(steps):
+                    # 升级表结构前备份一份（admin.db.v<旧版本>.bak），回滚时可以对照
+                    bak = sqlite3.connect(f'{self.adb_path}.v{ver}.bak')
+                    db.backup(bak)
+                    bak.close()
                 for i, sql in enumerate(steps, 1):
                     if i > ver:
                         db.executescript(sql)
@@ -321,6 +521,12 @@ class Node:
             self.ndb.execute('DELETE FROM rdv WHERE expires < ?', (now,))
             self.adb.execute('DELETE FROM bans WHERE until < ?', (now,))
             self.adb.execute('DELETE FROM log WHERE t < ?', (now - LOG_KEEP_DAYS * 86400000,))
+            # 过期的网页会话保留一天（期间再用它只回 403、不计入失败），之后删掉
+            try:
+                self.adb.execute('DELETE FROM web_sessions WHERE expires < ? OR last_used < ?',
+                                 (now - 86400000, now - WEB_IDLE * 1000 - 86400000))
+            except sqlite3.OperationalError:
+                pass        # 只认表结构 1 的库（测试里模拟回滚）
             # 换钥后的旧组：有了下一代组超过 60 天，整个删掉（设备应该早就迁走了）
             old = self.adb.execute('SELECT DISTINCT parent_gid FROM known_groups WHERE parent_gid IS NOT NULL AND created < ?',
                                    (now - SUPERSEDED_DAYS * 86400000,)).fetchall()
@@ -678,10 +884,10 @@ class Node:
         row = self.adb.execute('SELECT enc_key, last_ctr FROM admin_keys WHERE kid=?', (kid,)).fetchone()
         return row
 
-    def _fail(self, ip, reason, kid=''):
-        """认证失败：记安全日志，计数，必要时封 IP / 熔断。"""
+    def _fail(self, ip, reason, kid='', op='auth', who='?'):
+        """认证失败（管理接口和网页登录共用）：记安全日志，计数，必要时封 IP / 熔断。"""
         now = self.now()
-        self.log('?', ip, 'auth', kid, '拒绝', reason, sec=True)
+        self.log(who, ip, op, kid, '拒绝', reason, sec=True)
         if is_local(ip):
             return
         q = self.fail_ip.setdefault(ip, deque())
@@ -702,26 +908,37 @@ class Node:
             self.fail_all.clear()
             self.log('系统', ip, 'breaker', '管理接口', '成功', '1 小时内认证失败合计 30 次，外网管理暂停 1 小时', sec=True)
 
-    def admin(self, body, ip):
-        """返回 (状态码, dict 或 bytes 响应体, 额外响应头)。认证失败一律 403 {}。"""
+    def _gate(self, ip, what='管理接口'):
+        """外网来源的总闸（管理接口和网页登录共用）：封禁、熔断、关闭外网管理、IP 名单。返回 True = 拒绝。本机来源不受限。"""
+        if is_local(ip):
+            return False
+        now = self.ms()
+        ban = self.adb.execute('SELECT until FROM bans WHERE ip=?', (ip,)).fetchone()
+        if ban and ban[0] > now:
+            return True
+        if (self.setting('breaker_until', 0) or 0) > now:
+            return True
+        if not self.setting('remote_admin', True):
+            return True
+        ips = self.setting('allow_ips', []) or []
+        if ips and not ip_in(ip, ips):
+            self._fail(ip, f'不在 IP 名单里（{what}）', op='web.login' if what == '网页登录' else 'auth')
+            return True
+        return False
+
+    def _session(self, kid):
+        return self.adb.execute('SELECT enc_key, last_ctr, user, last_used, expires FROM web_sessions WHERE kid=?', (kid,)).fetchone()
+
+    def admin(self, body, ip, channel='node'):
+        """返回 (状态码, dict 或 bytes 响应体, 额外响应头)。认证失败一律 403 {}。
+        channel='node'（8787）只认管理密钥；channel='web'（443、127.0.0.1:8788）还认网页会话密钥。"""
         deny = (403, {}, {})
         if self.aes is None:
             return deny
         local = is_local(ip)
         with self.lock:
-            now = self.ms()
-            if not local:
-                ban = self.adb.execute('SELECT until FROM bans WHERE ip=?', (ip,)).fetchone()
-                if ban and ban[0] > now:
-                    return deny
-                if (self.setting('breaker_until', 0) or 0) > now:
-                    return deny
-                if not self.setting('remote_admin', True):
-                    return deny
-                ips = self.setting('allow_ips', []) or []
-                if ips and not ip_in(ip, ips):
-                    self._fail(ip, '不在 IP 名单里')
-                    return deny
+            if self._gate(ip):
+                return deny
             try:
                 env = json.loads(body.decode('utf-8'))
                 kid, ctr = env['kid'], env['ctr']
@@ -733,10 +950,23 @@ class Node:
                 self._fail(ip, '请求格式不对')
                 return deny
             row = self.admin_key(kid)
-            if not row:
+            ident = None
+            if row:
+                enc_key, last = row
+                ident = {'kind': 'key', 'kid': kid}
+            elif channel == 'web':
+                s = self._session(kid)
+                if s:
+                    enc_key, last, user, last_used, expires = s
+                    now = self.ms()
+                    if last_used + WEB_IDLE * 1000 < now or expires < now:
+                        # 过期的会话：不算认证失败（网页同时发几个请求时不至于把自己的 IP 封掉）
+                        self.log(f'网页 {user}', ip, 'auth', kid[:4], '拒绝', '网页会话已过期')
+                        return deny
+                    ident = {'kind': 'web', 'kid': kid, 'user': user}
+            if not ident:
                 self._fail(ip, 'kid 不对', kid)
                 return deny
-            enc_key, last = row
             aead = self.aes(enc_key)
             try:
                 plain = aead.decrypt(iv, ct, f'km-admin-req|{kid}|{ctr}'.encode())
@@ -745,11 +975,14 @@ class Node:
                 return deny
             if ctr <= last:
                 self._fail(ip, '计数重复（重放或计数变小）', kid)
-                # 只有持有管理密钥的人能看懂的提示：告诉合法客户端上次的计数，让它用更大的重试
+                # 只有持有密钥的人能看懂的提示：告诉合法客户端上次的计数，让它用更大的重试
                 hiv = secrets.token_bytes(12)
                 hint = aead.encrypt(hiv, json.dumps({'last': last}, separators=(',', ':')).encode(), f'km-admin-retry|{kid}|{ctr}'.encode())
                 return 403, {}, {'X-KM-Retry': b64e(hiv) + '.' + b64e(hint)}
-            self.adb.execute('UPDATE admin_keys SET last_ctr=? WHERE kid=?', (ctr, kid))
+            if ident['kind'] == 'key':
+                self.adb.execute('UPDATE admin_keys SET last_ctr=? WHERE kid=?', (ctr, kid))
+            else:
+                self.adb.execute('UPDATE web_sessions SET last_ctr=?, last_used=? WHERE kid=?', (ctr, self.ms(), kid))
             self.adb.commit()
             if not local:
                 q = self.kid_hits.setdefault(kid, deque())
@@ -766,19 +999,39 @@ class Node:
                     raise ValueError
             except Exception:  # noqa: BLE001
                 op, args = None, {}
-            result = self.admin_op(op, args, kid, ip)
+            self.cur = ident
+            try:
+                result = self.admin_op(op, args, ident, ip)
+            finally:
+                self.cur = None
             riv = secrets.token_bytes(12)
             rct = aead.encrypt(riv, json.dumps(result, ensure_ascii=False, separators=(',', ':')).encode('utf-8'), f'km-admin-resp|{kid}|{ctr}'.encode())
             return 200, {'iv': b64e(riv), 'ct': b64e(rct)}, {}
 
-    READ_OPS = ('status', 'groups.list', 'invites.list', 'log.list')
+    READ_OPS = ('status', 'groups.list', 'invites.list', 'log.list', 'web.status', 'web.sessions', 'web.whoami')
+    KEY_ONLY_OPS = ('web.status', 'web.setPassword', 'web.setEnabled', 'web.totpReset', 'web.reset')
+    SESSION_ONLY_OPS = ('web.changePassword', 'web.totpBegin', 'web.totpConfirm', 'web.totpDisable', 'web.whoami', 'web.logout')
 
-    def admin_op(self, op, args, kid, ip):
+    @staticmethod
+    def who_of(ident):
+        if not ident:
+            return '?'
+        return f'管理员 {ident["kid"]}' if ident['kind'] == 'key' else f'网页 {ident["user"]}（会话 {ident["kid"][:4]}）'
+
+    def admin_op(self, op, args, ident, ip):
+        if isinstance(ident, str):        # 兼容旧调用：直接传 kid
+            ident = {'kind': 'key', 'kid': ident}
         fn = getattr(self, 'op_' + op.replace('.', '_'), None) if isinstance(op, str) and re.fullmatch(r'[a-z]+(\.[a-zA-Z]+)?', op) else None
-        who = f'管理员 {kid}'
+        who = self.who_of(ident)
         if not fn:
             self.log(who, ip, str(op)[:30], '', '失败', '没有这个操作')
             return {'ok': False, 'err': 'op', 'msg': '没有这个操作'}
+        if op in self.KEY_ONLY_OPS and ident['kind'] != 'key':
+            self.log(who, ip, op, '', '失败', '网页上不能做这个操作（只能在审批 App 里做）')
+            return {'ok': False, 'err': 'perm', 'msg': '网页上不能做这个操作，请在审批 App 里做'}
+        if op in self.SESSION_ONLY_OPS and ident['kind'] != 'web':
+            self.log(who, ip, op, '', '失败', '这个操作只能在网页后台里做')
+            return {'ok': False, 'err': 'perm', 'msg': '这个操作只能在网页后台里做'}
         try:
             data, obj, note = fn(args, ip)
             self.ndb.commit()
@@ -790,7 +1043,7 @@ class Node:
             self.ndb.rollback()
             self.adb.rollback()
             if op not in self.READ_OPS:
-                self.log(who, ip, op, str(args.get('gid') or args.get('id') or '')[:8], '失败', e.msg)
+                self.log(who, ip, op, str(args.get('gid') or args.get('id') or args.get('kid') or '')[:8], '失败', e.msg)
             return {'ok': False, 'err': e.code, 'msg': e.msg}
 
     # ---------- 各操作：返回 (data, 日志对象, 日志说明)
@@ -820,6 +1073,8 @@ class Node:
             'remote_admin': bool(self.setting('remote_admin', True)), 'allow_ips': self.setting('allow_ips', []) or [],
             'breaker_until': self.setting('breaker_until', 0) or 0,
             'your_ip': ip, 'host': self.public_host, 'port': self.public_port,
+            'tls': self.tls.status(self.ms()) if self.tls else {'enabled': False, 'not_after': None, 'hours_left': None, 'issuer': '', 'err': '没有配置 443'},
+            'web': self.web_summary(),
         }, '', ''
 
     def op_groups_list(self, args, ip):
@@ -994,6 +1249,8 @@ class Node:
             except ValueError:
                 raise OpError(f'「{n}」不是 IP 或网段')
             clean.append(n)
+        if self.cur and self.cur['kind'] == 'web' and remote != bool(self.setting('remote_admin', True)):
+            raise OpError('网页上不能改「外网管理」开关（会把自己和审批 App 一起关在外面），请在审批 App 里改', 'perm')
         if not is_local(ip):
             if clean and not ip_in(ip, clean):
                 raise OpError(f'名单里没有你现在的 IP {ip}，保存后你会被锁在外面', 'self')
@@ -1015,6 +1272,250 @@ class Node:
         keys = ('id', 't', 'who', 'ip', 'op', 'obj', 'result', 'note', 'sec')
         return {'items': [dict(zip(keys, r)) for r in rows[:limit]], 'more': len(rows) > limit}, '', ''
 
+    # ================================================================ 网页后台：账号、会话、二次验证
+
+    def web_user(self):
+        row = self.adb.execute('SELECT user, pw_hash, totp_secret, totp_pending, totp_last_step, enabled, pw_changed, fail_times '
+                               'FROM web_user WHERE id=1').fetchone()
+        keys = ('user', 'pw_hash', 'totp_secret', 'totp_pending', 'totp_last_step', 'enabled', 'pw_changed', 'fail_times')
+        if not row:
+            return {'user': 'admin', 'pw_hash': None, 'totp_secret': None, 'totp_pending': None, 'totp_last_step': 0,
+                    'enabled': 0, 'pw_changed': None, 'fail_times': '[]'}
+        return dict(zip(keys, row))
+
+    def _save_web_user(self, u):
+        self.adb.execute('INSERT OR REPLACE INTO web_user(id, user, pw_hash, totp_secret, totp_pending, totp_last_step, enabled, pw_changed, fail_times) '
+                         'VALUES(1,?,?,?,?,?,?,?,?)', (u['user'], u['pw_hash'], u['totp_secret'], u['totp_pending'], u['totp_last_step'] or 0,
+                                                     1 if u['enabled'] else 0, u['pw_changed'], u['fail_times'] or '[]'))
+
+    def _account_fails(self, u):
+        try:
+            t = [x for x in json.loads(u['fail_times'] or '[]') if isinstance(x, int) and x > self.ms() - 3600000]
+        except ValueError:
+            t = []
+        return t
+
+    def _revoke_sessions(self, keep=None):
+        if keep:
+            return self.adb.execute('DELETE FROM web_sessions WHERE kid<>?', (keep,)).rowcount
+        return self.adb.execute('DELETE FROM web_sessions').rowcount
+
+    def web_summary(self):
+        u = self.web_user()
+        n = self.adb.execute('SELECT COUNT(*) FROM web_sessions WHERE expires>=? AND last_used>=?',
+                             (self.ms(), self.ms() - WEB_IDLE * 1000)).fetchone()[0]
+        return {'enabled': bool(u['enabled'] and u['pw_hash']), 'user': u['user'] if u['pw_hash'] else '', 'has_password': bool(u['pw_hash']),
+                'totp': bool(u['totp_secret']), 'sessions': n, 'pw_changed': u['pw_changed'], 'url': self.web_url,
+                'paused': len(self._account_fails(u)) >= WEB_ACCOUNT_FAILS}
+
+    def web_login(self, body, ip, ua=''):
+        """POST /admin/web/login {user, pw, code?} → 200 {ok, kid, key, user, idle, expires}；失败 403 {err, msg}。
+        失败和管理接口的认证失败进同一套计数（封 IP、熔断）；另有账号级：1 小时 10 次失败 → 网页登录暂停 1 小时。"""
+        fail = (403, {'err': 'login', 'msg': LOGIN_FAIL_MSG})
+        local = is_local(ip)
+        with self.lock:
+            if self._gate(ip, '网页登录'):
+                return 403, {'err': 'denied', 'msg': LOGIN_DENIED_MSG}
+            u = self.web_user()
+            if not local and len(self._account_fails(u)) >= WEB_ACCOUNT_FAILS:
+                self._fail(ip, '网页登录暂停中（账号 1 小时内失败 10 次）', op='web.login')
+                return 403, {'err': 'paused', 'msg': LOGIN_PAUSED_MSG}
+        try:
+            req = json.loads(body.decode('utf-8'))
+            user, pw, code = req.get('user'), req.get('pw'), req.get('code') or ''
+            if not isinstance(user, str) or not isinstance(pw, str) or not isinstance(code, str):
+                raise ValueError
+        except Exception:  # noqa: BLE001
+            user, pw, code = '', '', ''
+        # scrypt 很慢，不占着节点的锁（设备同步不用等）；它自己有一把锁，同一时间只算一个
+        pw_ok = pw_check(pw, u['pw_hash'])
+        with self.lock:
+            u = self.web_user()       # 算哈希期间可能被改过，重读
+            reason, step = None, None
+            if not u['pw_hash']:
+                reason = '还没设置网页密码'
+            elif not u['enabled']:
+                reason = '网页登录已关闭'
+            elif not hmac.compare_digest(user.strip().encode(), u['user'].encode()):
+                reason = '用户名不对'
+            elif not pw_ok:
+                reason = '密码不对'
+            elif u['totp_secret']:
+                step = totp_match(u['totp_secret'], code, self.now(), u['totp_last_step'])
+                if step is None:
+                    reason = '验证码不对或已用过' if code else '没填验证码'
+            shown = re.sub(r'[^\w.@-]', '', user)[:32] or '?'
+            if reason:
+                self._fail(ip, '网页登录失败：' + reason, op='web.login', who=f'网页 {shown}')
+                if u['pw_hash'] and not local:
+                    t = self._account_fails(u) + [self.ms()]
+                    u['fail_times'] = json.dumps(t[-50:])
+                    self._save_web_user(u)
+                    if len(t) == WEB_ACCOUNT_FAILS:
+                        self.log('系统', ip, 'web.pause', u['user'], '成功', '网页账号 1 小时内失败 10 次，网页登录暂停 1 小时（审批 App 不受影响）', sec=True)
+                    self.adb.commit()
+                return fail
+            if step is not None:
+                u['totp_last_step'] = step
+            u['fail_times'] = '[]'
+            self._save_web_user(u)
+            key = secrets.token_bytes(32)
+            while True:
+                kid = secrets.token_hex(4)
+                if not self.admin_key(kid) and not self._session(kid):
+                    break
+            now = self.ms()
+            ua = re.sub(r'[\x00-\x1f]', '', ua or '')[:160]
+            self.adb.execute('INSERT INTO web_sessions(kid, enc_key, last_ctr, user, created, last_used, expires, ip, ua) VALUES(?,?,0,?,?,?,?,?,?)',
+                             (kid, hm(key, b'km-admin-enc-v1'), u['user'], now, now, now + WEB_MAX_AGE * 1000, ip, ua))
+            old = self.adb.execute('SELECT kid FROM web_sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?', (WEB_MAX_SESSIONS,)).fetchall()
+            for (k,) in old:
+                self.adb.execute('DELETE FROM web_sessions WHERE kid=?', (k,))
+                self.log('系统', ip, 'web.revoke', k[:4], '成功', f'同时登录超过 {WEB_MAX_SESSIONS} 个，踢掉最早的会话')
+            self.adb.commit()
+            self.log(f'网页 {u["user"]}（会话 {kid[:4]}）', ip, 'web.login', kid[:4], '成功', '登录' + ('（二次验证）' if step is not None else '') + (f'，浏览器 {ua[:60]}' if ua else ''))
+            return 200, {'ok': True, 'kid': kid, 'key': b64e(key), 'user': u['user'], 'idle': WEB_IDLE, 'expires': now + WEB_MAX_AGE * 1000}
+
+    # ---------- 只有管理密钥 K（审批 App）能做
+    def op_web_status(self, args, ip):
+        return self.web_summary(), '', ''
+
+    def op_web_setPassword(self, args, ip):
+        user, pw = args.get('user', 'admin'), args.get('pw')
+        if not isinstance(user, str) or not RE_USER.match(user.strip()):
+            raise OpError('用户名要 3–32 位字母或数字')
+        user = user.strip()
+        bad = pw_problem(pw, user, self.public_host)
+        if bad:
+            raise OpError(bad)
+        u = self.web_user()
+        u.update({'user': user, 'pw_hash': pw_hash(pw), 'enabled': 1, 'pw_changed': self.ms(), 'fail_times': '[]'})
+        self._save_web_user(u)
+        n = self._revoke_sessions()
+        return self.web_summary(), user, f'设置网页用户名和密码（用户名 {user}），网页登录打开' + (f'，{n} 个网页会话已失效' if n else '')
+
+    def op_web_setEnabled(self, args, ip):
+        on = args.get('enabled')
+        if not isinstance(on, bool):
+            raise OpError('参数不对')
+        u = self.web_user()
+        if on and not u['pw_hash']:
+            raise OpError('还没设置网页密码，先设密码')
+        u['enabled'] = 1 if on else 0
+        if on:
+            u['fail_times'] = '[]'
+        self._save_web_user(u)
+        n = 0 if on else self._revoke_sessions()
+        return self.web_summary(), '网页登录', ('打开网页登录' if on else '关闭网页登录') + (f'，{n} 个网页会话已失效' if n else '')
+
+    def op_web_totpReset(self, args, ip):
+        u = self.web_user()
+        if not u['totp_secret'] and not u['totp_pending']:
+            raise OpError('二次验证本来就没开')
+        u['totp_secret'] = u['totp_pending'] = None
+        self._save_web_user(u)
+        return self.web_summary(), '二次验证', '在审批 App 里关闭网页二次验证（之后只用密码登录）'
+
+    def op_web_reset(self, args, ip):
+        u = self.web_user()
+        if not u['pw_hash'] and not u['totp_secret']:
+            raise OpError('网页登录本来就没设置')
+        self.adb.execute('DELETE FROM web_user')
+        n = self._revoke_sessions()
+        return self.web_summary(), '网页登录', f'清空网页用户名、密码和二次验证（{n} 个网页会话已失效），网页登录关闭'
+
+    # ---------- K 和网页都能做：看会话、踢会话
+    def op_web_sessions(self, args, ip):
+        now, me = self.ms(), self.cur['kid'] if self.cur else None
+        out = []
+        for kid, user, created, last_used, expires, sip, ua in self.adb.execute(
+                'SELECT kid, user, created, last_used, expires, ip, ua FROM web_sessions ORDER BY created DESC'):
+            alive = expires >= now and last_used + WEB_IDLE * 1000 >= now
+            out.append({'kid': kid, 'user': user, 'created': created, 'last_used': last_used, 'expires': min(expires, last_used + WEB_IDLE * 1000),
+                        'ip': sip, 'ua': ua, 'alive': alive, 'current': kid == me})
+        return out, '', ''
+
+    def op_web_revoke(self, args, ip):
+        if args.get('all') is True:
+            n = self._revoke_sessions()
+            return {'removed': n}, '全部会话', f'踢掉全部网页会话（{n} 个）'
+        kid = args.get('kid')
+        if not isinstance(kid, str) or not re.fullmatch(r'[0-9a-f]{8}', kid):
+            raise OpError('会话号不对')
+        n = self.adb.execute('DELETE FROM web_sessions WHERE kid=?', (kid,)).rowcount
+        if not n:
+            raise OpError('没有这个会话（可能已经过期或退出）')
+        return {'removed': n}, kid[:4], '踢下线'
+
+    # ---------- 只有网页会话能做
+    def _need_pw(self, pw):
+        u = self.web_user()
+        if not pw_check(pw if isinstance(pw, str) else '', u['pw_hash']):
+            raise OpError('当前密码不对', 'pw')
+        return u
+
+    def op_web_whoami(self, args, ip):
+        kid = self.cur['kid']
+        row = self.adb.execute('SELECT user, created, last_used, expires, ip FROM web_sessions WHERE kid=?', (kid,)).fetchone()
+        u = self.web_user()
+        return {'user': row[0], 'kid': kid, 'created': row[1], 'expires': row[3], 'idle': WEB_IDLE, 'ip': row[4], 'totp': bool(u['totp_secret'])}, '', ''
+
+    def op_web_logout(self, args, ip):
+        self.adb.execute('DELETE FROM web_sessions WHERE kid=?', (self.cur['kid'],))
+        return {}, self.cur['kid'][:4], '退出'
+
+    def op_web_changePassword(self, args, ip):
+        u = self._need_pw(args.get('old'))
+        new = args.get('new')
+        bad = pw_problem(new, u['user'], self.public_host)
+        if bad:
+            raise OpError(bad)
+        if pw_check(new, u['pw_hash']):
+            raise OpError('新密码和旧密码一样')
+        u.update({'pw_hash': pw_hash(new), 'pw_changed': self.ms()})
+        self._save_web_user(u)
+        n = self._revoke_sessions()
+        return {'revoked': n}, u['user'], f'网页上改密码，全部 {n} 个网页会话已失效（要重新登录）'
+
+    def op_web_totpBegin(self, args, ip):
+        u = self._need_pw(args.get('pw'))
+        if u['totp_secret']:
+            raise OpError('二次验证已经开着')
+        sec = secrets.token_bytes(20)
+        u['totp_pending'] = sec
+        self._save_web_user(u)
+        label = f'km-sync:{u["user"]}@{self.public_host}'
+        return {'secret': b32(sec), 'uri': f'otpauth://totp/{label}?secret={b32(sec)}&issuer=km-sync&algorithm=SHA1&digits=6&period=30'}, \
+            '二次验证', '开始开启二次验证（还没生效）'
+
+    def op_web_totpConfirm(self, args, ip):
+        u = self.web_user()
+        if not u['totp_pending']:
+            raise OpError('请先点「开启二次验证」')
+        step = totp_match(u['totp_pending'], args.get('code'), self.now(), 0)
+        if step is None:
+            raise OpError('验证码不对：请输入手机验证器上当前显示的 6 位数字', 'code')
+        u.update({'totp_secret': u['totp_pending'], 'totp_pending': None, 'totp_last_step': step})
+        self._save_web_user(u)
+        return self.web_summary(), '二次验证', '开启二次验证'
+
+    def op_web_totpDisable(self, args, ip):
+        u = self._need_pw(args.get('pw'))
+        if not u['totp_secret']:
+            raise OpError('二次验证本来就没开')
+        step = totp_match(u['totp_secret'], args.get('code'), self.now(), u['totp_last_step'])
+        if step is None:
+            raise OpError('验证码不对或已用过', 'code')
+        u.update({'totp_secret': None, 'totp_pending': None, 'totp_last_step': step})
+        self._save_web_user(u)
+        return self.web_summary(), '二次验证', '网页上关闭二次验证'
+
+    def reset_web_login(self):
+        self.adb.execute('DELETE FROM web_user')
+        n = self._revoke_sessions()
+        self.adb.commit()
+        self.log('系统', '', 'web.reset', '网页登录', '成功', f'经 SSH 清空网页用户名、密码、二次验证和 {n} 个会话，网页登录关闭')
+
     # ---------- 命令行（部署脚本用）
     def new_admin_key(self):
         k = secrets.token_bytes(32)
@@ -1031,8 +1532,11 @@ class Node:
         self.set_setting('breaker_until', 0)
         self.set_setting('allow_ips', [])
         self.set_setting('remote_admin', True)
+        self.adb.execute("UPDATE web_user SET fail_times='[]'")
         self.adb.commit()
-        self.log('系统', '', 'access.reset', '访问', '成功', '经 SSH 清空封禁和 IP 名单，打开外网管理')
+        self.fail_ip.clear()
+        self.fail_all.clear()
+        self.log('系统', '', 'access.reset', '访问', '成功', '经 SSH 清空封禁和 IP 名单，打开外网管理，清空网页登录的失败计数')
 
 
 NODE_SCHEMA = [
@@ -1061,12 +1565,43 @@ ADMIN_SCHEMA = [
     CREATE TABLE bans(ip TEXT PRIMARY KEY, until INTEGER);
     CREATE TABLE settings(k TEXT PRIMARY KEY, v TEXT);
     """,
+    # 2（1.1.0）：网页后台。只加表，不动旧表，回滚到 1.0.0 不受影响
+    """
+    CREATE TABLE web_user(id INTEGER PRIMARY KEY CHECK(id = 1), user TEXT, pw_hash TEXT, totp_secret BLOB, totp_pending BLOB,
+                          totp_last_step INTEGER, enabled INTEGER, pw_changed INTEGER, fail_times TEXT);
+    CREATE TABLE web_sessions(kid TEXT PRIMARY KEY, enc_key BLOB, last_ctr INTEGER, user TEXT, created INTEGER, last_used INTEGER,
+                              expires INTEGER, ip TEXT, ua TEXT);
+    """,
 ]
 
 
 # ---------------------------------------------------------------- HTTP
 
-def make_handler(node, test_ip_header=False):
+class Server(ThreadingHTTPServer):
+    """tls 不为空时每个连接用当前证书包一层 TLS（握手放到处理线程里做，慢客户端不会卡住 accept）。"""
+    daemon_threads = True
+    request_queue_size = 64
+    tls = None
+
+    def get_request(self):
+        sock, addr = self.socket.accept()
+        if self.tls is None:
+            return sock, addr
+        ctx = self.tls.check()
+        if ctx is None:
+            sock.close()
+            raise OSError('没有可用证书')
+        return ctx.wrap_socket(sock, server_side=True, do_handshake_on_connect=False), addr
+
+    def handle_error(self, request, client_address):
+        e = sys.exc_info()[1]
+        if isinstance(e, (ssl.SSLError, ConnectionError, TimeoutError, socket.timeout)):
+            return      # 扫描器、握手失败、断线：不刷日志
+        print(f'连接出错 {client_address[0]}：{e!r}'[:300], flush=True)
+
+
+def make_handler(node, test_ip_header=False, channel='node', https=False):
+    """channel：node = 8787（设备 + App 管理）；web = 443 / 127.0.0.1:8788（网页后台）；acme = 80（证书验证 + 跳转）。"""
     class H(BaseHTTPRequestHandler):
         server_version = 'km-sync/' + VERSION
         sys_version = ''
@@ -1080,21 +1615,31 @@ def make_handler(node, test_ip_header=False):
                 return self.headers['X-KM-Test-IP']
             return self.client_address[0]
 
-        def _send(self, status, obj, extra=None):
+        def _send(self, status, obj, extra=None, ctype='application/json; charset=utf-8', cache='no-store'):
             body = obj if isinstance(obj, bytes) else json.dumps(obj, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
             self.send_response(status)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Type', ctype)
             self.send_header('Content-Length', str(len(body)))
-            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Cache-Control', cache)
             self.send_header('Connection', 'close')
+            if channel == 'web':
+                self.send_header('Content-Security-Policy', CSP)
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.send_header('Referrer-Policy', 'no-referrer')
+                self.send_header('X-Frame-Options', 'DENY')
+                if https:
+                    self.send_header('Strict-Transport-Security', 'max-age=604800')
             for k, v in (extra or {}).items():
                 self.send_header(k, v)
             self.end_headers()
-            self.wfile.write(body)
+            if self.command != 'HEAD':
+                self.wfile.write(body)
             node.count_hit(status >= 400)
             path = re.sub(r'/g/([0-9a-f]{6})[0-9a-f]+', r'/g/\1…', self.path.split('?')[0])
             path = re.sub(r'/rdv/(.{4}).*', r'/rdv/\1…', path)
-            print(f'{datetime.datetime.now(CN_TZ):%m-%d %H:%M:%S} {self._ip()} {self.command} {path} {status} {len(body)}', flush=True)
+            path = re.sub(r'/acme-challenge/(.{4}).*', r'/acme-challenge/\1…', path)[:120]
+            tag = {'node': '', 'web': ' [web]' if https else ' [web-local]', 'acme': ' [80]'}[channel]
+            print(f'{datetime.datetime.now(CN_TZ):%m-%d %H:%M:%S} {self._ip()}{tag} {self.command} {path} {status} {len(body)}', flush=True)
 
         def _body(self, limit):
             n = self.headers.get('Content-Length')
@@ -1115,19 +1660,68 @@ def make_handler(node, test_ip_header=False):
                 raise Reject(413, 'size', '请求太大')
             return self.rfile.read(n)
 
+        def _admin(self, path, ip):
+            if self.command != 'POST':
+                return self._send(403, {})
+            try:
+                body = self._body(ADMIN_BODY_MAX)
+            except Reject:
+                return self._send(403, {})
+            status, obj, extra = node.admin(body, ip, 'web' if channel == 'web' else 'node')
+            return self._send(status, obj, extra)
+
+        def _acme(self, path):
+            """80 端口：只回 Let's Encrypt 的验证文件；其它一律跳转 https（不提供任何页面和接口）。"""
+            if path.startswith('/v1/') or path.startswith('/admin'):
+                return self._send(404, {'err': 'path'})
+            if self.command not in ('GET', 'HEAD'):
+                return self._send(405, {'err': 'method'})
+            pre = '/.well-known/acme-challenge/'
+            if path.startswith(pre):
+                tok = path[len(pre):]
+                f = os.path.join(node.acme_dir or '/nonexistent', '.well-known', 'acme-challenge', tok)
+                if RE_ACME.match(tok) and os.path.isfile(f):
+                    with open(f, 'rb') as fh:
+                        return self._send(200, fh.read(4096), ctype='text/plain')
+                return self._send(404, b'not found', ctype='text/plain')
+            target = self.path if self.path.startswith('/') else '/'
+            return self._send(301, b'', {'Location': node.web_url + target}, ctype='text/plain')
+
+        def _static(self, path):
+            if self.command not in ('GET', 'HEAD'):
+                return self._send(405, {'err': 'method'})
+            ent = WEB_FILES.get(path)
+            if not ent or not node.web_dir:
+                return self._send(404, b'not found', ctype='text/plain')
+            f = os.path.join(node.web_dir, *ent[0].split('/'))
+            try:
+                with open(f, 'rb') as fh:
+                    data = fh.read()
+            except OSError:
+                return self._send(404, b'not found', ctype='text/plain')
+            if ent[0] == 'index.html':
+                data = data.replace(b'__V__', VERSION.encode())
+            return self._send(200, data, ctype=ent[1], cache='no-cache')
+
         def _handle(self):
             path = self.path.split('?')[0]
             ip = self._ip()
             try:
+                if channel == 'acme':
+                    return self._acme(path)
                 if path == '/admin/v1':
-                    if self.command != 'POST':
-                        return self._send(403, {})
-                    try:
-                        body = self._body(ADMIN_BODY_MAX)
-                    except Reject:
-                        return self._send(403, {})
-                    status, obj, extra = node.admin(body, ip)
-                    return self._send(status, obj, extra)
+                    return self._admin(path, ip)
+                if channel == 'web':
+                    if path == '/admin/web/login':
+                        if self.command != 'POST':
+                            return self._send(405, {'err': 'method'})
+                        try:
+                            body = self._body(LOGIN_BODY_MAX)
+                        except Reject:
+                            return self._send(403, {'err': 'login', 'msg': LOGIN_FAIL_MSG})
+                        status, obj = node.web_login(body, ip, self.headers.get('User-Agent', ''))
+                        return self._send(status, obj)
+                    return self._static(path)
                 if not path.startswith('/v1/'):
                     return self._send(404, {'err': 'path'})
                 if not node.rate_ok(ip):
@@ -1137,24 +1731,25 @@ def make_handler(node, test_ip_header=False):
                 return self._send(status, obj)
             except Reject as r:
                 return self._send(r.status, {'err': r.err})
+            except (ConnectionError, TimeoutError, socket.timeout, ssl.SSLError):
+                return None     # 客户端断开 / 超时：不用回
             except Exception as e:  # noqa: BLE001
                 print('内部错误', repr(e), flush=True)
                 return self._send(500, {'err': 'internal'})
 
-        do_GET = do_POST = _handle
+        do_GET = do_POST = do_HEAD = _handle
 
         def do_PUT(self):
             self._send(405, {'err': 'method'})
 
-        do_DELETE = do_PUT
+        do_DELETE = do_OPTIONS = do_PUT
 
     return H
 
 
-def serve(node, host, port, test_ip_header=False):
-    srv = ThreadingHTTPServer((host, port), make_handler(node, test_ip_header))
-    srv.daemon_threads = True
-    srv.request_queue_size = 64
+def serve(node, host, port, test_ip_header=False, channel='node', tls=None):
+    srv = Server((host, port), make_handler(node, test_ip_header, channel, https=tls is not None))
+    srv.tls = tls
     return srv
 
 
@@ -1167,11 +1762,41 @@ def janitor_loop(node, stop):
 
 
 def load_config(path):
-    cfg = {'listen': '0.0.0.0', 'port': 8787, 'data_dir': '/var/lib/km-sync', 'public_host': '43.142.41.27', 'public_port': 8787}
+    cfg = {'listen': '0.0.0.0', 'port': 8787, 'data_dir': '/var/lib/km-sync', 'public_host': '43.142.41.27', 'public_port': 8787,
+           # 网页后台（1.1.0）；端口填 0 = 不开
+           'https_port': 443, 'http_port': 80, 'local_web_port': 8788,
+           'tls_cert': '/etc/km-sync/tls/fullchain.pem', 'tls_key': '/etc/km-sync/tls/privkey.pem',
+           'acme_dir': '/var/lib/km-sync-acme', 'web_dir': '/opt/km-sync/web'}
     if path and os.path.exists(path):
         with open(path, encoding='utf-8') as f:
             cfg.update(json.load(f))
     return cfg
+
+
+def start_web(node, cfg, test_ip_header=False):
+    """起 443 / 80 / 127.0.0.1:8788。任何一路起不来只打印原因，不影响 8787。返回 [(说明, server)]。"""
+    hp = int(cfg.get('https_port') or 0)
+    node.web_dir, node.acme_dir = cfg.get('web_dir'), cfg.get('acme_dir')
+    node.web_url = f'https://{cfg["public_host"]}' + ('' if hp in (0, 443) else f':{hp}')
+    if hp:
+        node.tls = TLS(cfg['tls_cert'], cfg['tls_key'], int(cfg.get('tls_check_interval', 60)))
+        if node.tls.err:
+            print('443：' + node.tls.err + '（有证书后 60 秒内自动开始服务，不用重启）', flush=True)
+    out = []
+    for name, host, port, channel, tls in (('网页后台 https', cfg['listen'], hp, 'web', node.tls),
+                                           ('证书验证/跳转 http', cfg['listen'], int(cfg.get('http_port') or 0), 'acme', None),
+                                           ('网页后台（SSH 隧道）', '127.0.0.1', int(cfg.get('local_web_port') or 0), 'web', None)):
+        if not port:
+            continue
+        try:
+            srv = serve(node, host, port, test_ip_header, channel, tls)
+        except OSError as e:
+            print(f'{name} 监听 {host}:{port} 失败：{e}（只影响网页后台，同步和审批 App 照常）', flush=True)
+            continue
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        print(f'{name} 监听 {host}:{srv.server_address[1]}', flush=True)
+        out.append((name, srv))
+    return out
 
 
 def main():
@@ -1180,6 +1805,7 @@ def main():
     ap.add_argument('--init', action='store_true')
     ap.add_argument('--new-admin-key', action='store_true')
     ap.add_argument('--reset-access', action='store_true')
+    ap.add_argument('--reset-web-login', action='store_true')
     ap.add_argument('--version', action='store_true')
     a = ap.parse_args()
     if a.version:
@@ -1187,7 +1813,7 @@ def main():
         return
     cfg = load_config(a.config)
     node = Node(cfg['data_dir'], cfg['public_host'], cfg['public_port'])
-    if a.init or a.new_admin_key or a.reset_access:
+    if a.init or a.new_admin_key or a.reset_access or a.reset_web_login:
         out = {'version': VERSION, 'crypto': CRYPTO_ERR is None}
         with node.lock:
             if a.new_admin_key or (a.init and not node.adb.execute('SELECT 1 FROM admin_keys').fetchone()):
@@ -1201,6 +1827,9 @@ def main():
                 node.log('系统', '', 'invites.create', out['invite']['id'], '成功', '部署时生成初始邀请码（30 天 10 次）')
             if a.reset_access:
                 node.reset_access()
+            if a.reset_web_login:
+                node.reset_web_login()
+            out['web'] = node.web_summary()
         print('KMJSON ' + json.dumps(out, ensure_ascii=True))
         return
     if CRYPTO_ERR:
@@ -1209,6 +1838,7 @@ def main():
     srv = serve(node, cfg['listen'], int(cfg['port']))
     stop = threading.Event()
     threading.Thread(target=janitor_loop, args=(node, stop), daemon=True).start()
+    start_web(node, cfg)
     print(f'km-sync {VERSION} 监听 {cfg["listen"]}:{cfg["port"]}，数据目录 {cfg["data_dir"]}', flush=True)
     try:
         srv.serve_forever()

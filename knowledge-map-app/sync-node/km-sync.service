@@ -11,11 +11,16 @@ ExecStart=/usr/bin/python3 /opt/km-sync/km_sync_node.py --config /etc/km-sync/co
 Restart=always
 RestartSec=1
 NoNewPrivileges=true
+# 1.1.0：网页后台要听 80（证书验证）和 443（https）；只给这一项能力，进程仍是 kmsync，不是 root
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
 ReadWritePaths=/var/lib/km-sync
+# 证书目录 /etc/km-sync/tls 只读（ProtectSystem=strict 下其它目录本来也只读，包括 /var/lib/km-sync-acme）
+ReadOnlyPaths=/etc/km-sync
 MemoryMax=200M
 Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 

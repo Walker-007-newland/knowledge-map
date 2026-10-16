@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>节点后台 · km-sync</title>
+<!-- 网页后台（#6 第二期）。km-sync 只在 443 和 127.0.0.1:8788 上发这几个文件；__V__ 由节点换成版本号。
+     页面里没有内联脚本（CSP script-src 'self'）。节点页的界面直接用审批 App 的 node.js / node.css。 -->
+<link rel="stylesheet" href="web.css?v=__V__">
+<link rel="stylesheet" href="node.css?v=__V__">
+</head>
+<body>
+<header>
+  <div class="bar">
+    <button id="back" hidden aria-label="返回">‹ 返回</button>
+    <h1 id="title">节点后台</h1>
+    <span id="who" class="who" hidden></span>
+    <button id="logout" hidden>退出</button>
+    <button id="newReq" hidden></button>
+  </div>
+  <div id="tabs" hidden></div>
+</header>
+<main id="main">
+  <noscript><div class="card">这个页面需要打开 JavaScript。</div></noscript>
+  <div id="loading" class="empty">加载中…</div>
+</main>
+<template id="loginTpl">
+  <div class="card form login">
+    <div class="ltitle">同步节点管理后台</div>
+    <div class="hint">这里能看同步组、设备、同步时间、占用空间、邀请码和操作日志；<b>看不到任何学习内容</b>（节点上只有加密后的数据）。</div>
+    <form id="lform" autocomplete="on">
+      <label for="luser">用户名</label>
+      <input id="luser" name="username" autocomplete="username" maxlength="32" required>
+      <label for="lpw">密码</label>
+      <input id="lpw" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+      <label for="lcode">二次验证码（没开二次验证就空着）</label>
+      <input id="lcode" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位数字">
+      <div class="row"><button class="primary" id="lgo" type="submit">登录</button></div>
+    </form>
+    <div id="lmsg" class="lmsg"></div>
+    <div class="hint lfoot">网页密码在「团队审批」App →「节点」→「限额与访问」→「网页登录」里设置。忘了密码就在 App 里重新设。</div>
+  </div>
+</template>
+<template id="insecureTpl">
+  <div class="card">
+    <div class="nbad" style="font-weight:700">● 不能在这个地址登录</div>
+    <p>为了保护密码，网页后台只能用 <b>https://</b> 地址打开（地址栏有小锁），或者在电脑上经 SSH 隧道打开 <code>http://localhost:8788</code>。</p>
+    <p class="hint">现在的地址浏览器认为不安全，页面里的加密功能（WebCrypto）用不了。</p>
+  </div>
+</template>
+<script src="web.js?v=__V__"></script>
+<script src="node.js?v=__V__"></script>
+</body>
+</html>

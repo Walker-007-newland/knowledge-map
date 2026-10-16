@@ -4,10 +4,15 @@
 #   ... deploy.ps1 -Check              只读体检：服务状态、监听端口、进程身份、权限、磁盘、版本，不改任何东西
 #   ... deploy.ps1 -Rollback           换回上一版并重启（再部署一次即回到新版）
 #   ... deploy.ps1 -NewAdminKey        换管理密钥（手机丢了用；旧的立即失效），重出管理码图片
-#   ... deploy.ps1 -ResetAdminAccess   清空 IP 封禁、熔断和 IP 名单，打开外网管理（把自己锁在外面时用）
+#   ... deploy.ps1 -ResetAdminAccess   清空 IP 封禁、熔断和 IP 名单，打开外网管理（把自己锁在外面时用；也清空网页登录的失败计数）
+#   ... deploy.ps1 -SetupTls           网页后台证书：snap 装 certbot（≥5.4），先 staging 再正式签发 Let's Encrypt IP 证书（约 160 小时，自动续期）
+#   ... deploy.ps1 -SetupTls -StagingOnly   只签 staging 证书（拦截实测用，浏览器不信任）
+#   ... deploy.ps1 -TlsCheck           只读：证书签发者、有效期、剩余时间、续期定时器、certbot renew --dry-run
+#   ... deploy.ps1 -ResetWebLogin      清空网页用户名、密码、二次验证和所有网页会话，网页登录关闭（之后在审批 App 里重新设密码）
 # 管理密钥、邀请码图片只写在签名目录：$env:KM_SIGNING_DIR，没设就用主目录的 knowledge-map-app\signing（已 gitignore）
-# 只部署 km-sync 一个服务：不改 SSH 配置、不开其它端口、不装软件包
+# 只部署 km-sync 一个服务：不改 SSH 配置、不开防火墙；唯一装的软件是 -SetupTls 用的 snap 版 certbot（#6 第二期管理员已同意）
 param([switch]$Check, [switch]$Rollback, [switch]$NewAdminKey, [switch]$ResetAdminAccess,
+      [switch]$SetupTls, [switch]$StagingOnly, [switch]$TlsCheck, [switch]$ResetWebLogin,
       [string]$Server = '43.142.41.27', [string]$User = 'ubuntu', [string]$Key = "$HOME\.ssh\km_tencent")
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
@@ -36,18 +41,30 @@ function Remote([string]$cmd) {
   return $json
 }
 
+# 网页后台的静态文件：sync-node/web 下的外壳 + 审批 App 的节点页（node.js / node.css / 两个二维码库），页面只维护一份
+$root = Split-Path (Split-Path $here -Parent) -Parent
+$webFiles = [ordered]@{
+  'index.html' = "$here\web\index.html"; 'web.js' = "$here\web\web.js"; 'web.css' = "$here\web\web.css"
+  'node.js' = "$root\team-admin-app\www\node.js"; 'node.css' = "$root\team-admin-app\www\node.css"
+  'vendor\qrcode.js' = "$root\team-admin-app\www\vendor\qrcode.js"; 'vendor\jsQR.js' = "$root\team-admin-app\www\vendor\jsQR.js"
+}
+
 function Upload {
   $tmp = Join-Path ([IO.Path]::GetTempPath()) ('km-sync-upload-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-  New-Item -ItemType Directory $tmp | Out-Null
+  New-Item -ItemType Directory "$tmp\web\vendor" -Force | Out-Null
   try {
-    foreach ($f in 'km_sync_node.py', 'km-sync.service', 'remote.sh') {
+    foreach ($f in 'km_sync_node.py', 'km-sync.service', 'remote.sh', 'tls-deploy-hook.sh') {
       # 统一成 LF，避免 Windows 换行让 bash/systemd 出错
       $text = [IO.File]::ReadAllText((Join-Path $here $f)) -replace "`r`n", "`n"
       [IO.File]::WriteAllText((Join-Path $tmp $f), $text, (New-Object Text.UTF8Encoding $false))
     }
+    foreach ($k in $webFiles.Keys) {
+      if (-not (Test-Path $webFiles[$k])) { throw "缺网页文件：$($webFiles[$k])" }
+      Copy-Item $webFiles[$k] (Join-Path "$tmp\web" $k)
+    }
     & ssh @sshOpts $target 'rm -rf /tmp/km-sync-upload && mkdir -p /tmp/km-sync-upload'
     if ($LASTEXITCODE) { throw 'SSH 连不上服务器' }
-    & scp -i $Key -o BatchMode=yes -q "$tmp\km_sync_node.py" "$tmp\km-sync.service" "$tmp\remote.sh" "${target}:/tmp/km-sync-upload/"
+    & scp -i $Key -o BatchMode=yes -q -r "$tmp\km_sync_node.py" "$tmp\km-sync.service" "$tmp\remote.sh" "$tmp\tls-deploy-hook.sh" "$tmp\web" "${target}:/tmp/km-sync-upload/"
     if ($LASTEXITCODE) { throw '上传失败' }
   } finally { Remove-Item $tmp -Recurse -Force }
 }
@@ -84,7 +101,12 @@ if ($Check) {
   Item 'km-sync 运行中（active）' ($r['active'] -eq 'active') $r['active']
   Item '开机自启（enabled）' ($r['enabled'] -eq 'enabled') $r['enabled']
   Item '进程身份是 kmsync' ($r['user'] -eq 'kmsync') $r['user']
-  Item '对外只监听 22 和 8787' (($ports -join ',') -eq '22,8787') ($ports -join ',')
+  Item '对外只监听 22、80、443、8787' (($ports -join ',') -eq '22,80,443,8787') ($ports -join ',')
+  Item '80、443 由 kmsync 进程监听' ($r['web_owner'] -eq 'kmsync,') $r['web_owner']
+  Item '8788 只在 127.0.0.1' ($r['local_web'] -eq '127.0.0.1:8788,') $r['local_web']
+  $hl = 0; $okCert = [int]::TryParse([string]$r['cert_hours_left'], [ref]$hl) -and $hl -gt 48
+  Item '网页后台证书剩余 > 48 小时' $okCert ("$($r['cert_hours_left']) 小时")
+  Item 'https 200、80 端口跳转 301' (($r['https'] -eq '200') -and ($r['http80'] -eq '301')) ("https $($r['https'])，80 $($r['http80'])")
   Item '/etc/km-sync/config.json 权限 600' ($r['config_mode'] -eq '600') $r['config_mode']
   Item '/var/lib/km-sync 权限 700' ($r['data_mode'] -eq '700') $r['data_mode']
   Item '/v1/hello 有响应' ($r['hello'] -like '*km-sync*') $r['hello']
@@ -95,6 +117,52 @@ if ($Check) {
   Write-Host ("  磁盘：" + $r['disk'] + "；服务重启次数：" + $r['restarts'])
   if ($bad) { Write-Host "体检有 $bad 项不通过" -ForegroundColor Red; exit 1 }
   Write-Host '体检通过'
+  exit 0
+}
+
+if ($TlsCheck) {
+  Upload
+  $out = & ssh @sshOpts $target 'sudo bash /tmp/km-sync-upload/remote.sh tlscheck; s=$?; rm -rf /tmp/km-sync-upload; exit $s'
+  if ($LASTEXITCODE) { throw '证书检查命令失败' }
+  $r = @{}
+  foreach ($l in @($out)) {
+    $i = $l.IndexOf('='); if ($i -gt 0) { $r[$l.Substring(0, $i)] = $l.Substring($i + 1) }
+    if ($l -like 'dry_log=*') { Write-Host ('  ' + $l) }
+  }
+  $script:bad = 0
+  function T($name, $ok, $val) { if ($ok) { Write-Host ("  OK   " + $name + "：" + $val) } else { Write-Host ("  失败 " + $name + "：" + $val) -ForegroundColor Red; $script:bad++ } }
+  T "签发者是 Let's Encrypt" ($r['issuer'] -match "Let's Encrypt") $r['issuer']
+  T '证书 SAN 是服务器 IP' ($r['san'] -match [regex]::Escape("IP Address:$Server")) $r['san']
+  $vh = 0; [void][int]::TryParse([string]$r['valid_hours'], [ref]$vh)
+  T '有效期约 160 小时（shortlived）' (($vh -ge 150) -and ($vh -le 170)) "$vh 小时（$($r['not_before']) → $($r['not_after'])）"
+  $hl = 0; [void][int]::TryParse([string]$r['hours_left'], [ref]$hl)
+  T '剩余 > 48 小时' ($hl -gt 48) "$hl 小时"
+  T '续期定时器 active' ($r['timer'] -eq 'active') $r['timer']
+  T '剩 3 天就续期' ($r['renew_before'] -eq '3 days') $r['renew_before']
+  T 'certbot renew --dry-run 成功' ($r['dry_run'] -eq 'ok') $r['dry_run']
+  T '没有遗留的 staging 证书' ($r['lineages'] -notmatch 'staging') $r['lineages']
+  if ($script:bad) { Write-Host "证书检查有 $($script:bad) 项不通过" -ForegroundColor Red; exit 1 }
+  Write-Host '证书检查通过'
+  exit 0
+}
+
+if ($SetupTls) {
+  Upload
+  Remote ("sudo KM_PUBLIC_HOST=$Server bash /tmp/km-sync-upload/remote.sh setup-tls staging" + $(if ($StagingOnly) { ' force' } else { '' })) | Out-Null
+  if ($StagingOnly) {
+    & ssh @sshOpts $target 'rm -rf /tmp/km-sync-upload' | Out-Null
+    Write-Host 'staging 证书已签发（浏览器不信任，只用来实测）。正式签发：deploy.ps1 -SetupTls'
+    exit 0
+  }
+  Remote "sudo KM_PUBLIC_HOST=$Server bash /tmp/km-sync-upload/remote.sh setup-tls prod; s=`$?; rm -rf /tmp/km-sync-upload; exit `$s" | Out-Null
+  Write-Host "正式证书已签发，60 秒内 https://$Server/ 生效。查看：deploy.ps1 -TlsCheck"
+  exit 0
+}
+
+if ($ResetWebLogin) {
+  Upload
+  Remote 'sudo bash /tmp/km-sync-upload/remote.sh resetweb; s=$?; rm -rf /tmp/km-sync-upload; exit $s' | Out-Null
+  Write-Host '已清空网页用户名、密码、二次验证和所有网页会话，网页登录已关闭。请在审批 App「节点 → 限额与访问 → 网页登录」里重新设密码'
   exit 0
 }
 
@@ -140,5 +208,5 @@ if ($r.invite) {
 $info.version = $r.version
 $info.updated = (Get-Date).ToString('yyyy-MM-dd HH:mm')
 Save-Info $info
-Write-Host "部署完成：km-sync $($r.version) @ ${Server}:8787"
+Write-Host "部署完成：km-sync $($r.version) @ ${Server}:8787；网页后台 https://$Server/（证书：deploy.ps1 -SetupTls）"
 Write-Host "管理码图片：$signDir\sync-node-admin.png（审批 App「节点」页扫一次）"

@@ -1,10 +1,13 @@
-// 「节点」页：管理腾讯云上的同步节点 km-sync（#6）。
-// 网络请求走原生 Native.nodeCall（Node.java：Socket + 整包 AES-GCM），管理密钥只在原生侧，网页拿不到。
-// 浏览器 ?mock 时用 mockNode 假数据；?mock&node=none 预览「未配置」，?mock&node=down 预览「连不上」。
-// 依赖 index.html 里的 $、esc、toast、when、ago、MOCK、current、tab、renderList、renderTabs。
+// 「节点」页：管理腾讯云上的同步节点 km-sync（#6）。审批 App 和网页后台（sync-node/web，#6 第二期）共用这一份。
+// 审批 App：网络请求走原生 Native.nodeCall（Node.java：Socket + 整包 AES-GCM），管理密钥只在原生侧，网页拿不到。
+// 网页后台：sync-node/web/web.js 提供同名的 Native 垫片（WebCrypto + fetch，会话密钥只在内存里），并设 window.KM_WEB = true。
+// 浏览器 ?mock 时用 mockNode 假数据；?mock&node=none 预览「未配置」，?mock&node=down 预览「连不上」，?mock&node=cert 预览证书快过期。
+// 依赖页面里的 $、esc、toast、when、ago、MOCK、current、tab、renderList、renderTabs。
 
 const NODE_MOCK = (location.search.match(/[?&]node=(\w+)/) || [])[1] || '';
-const NODE_SUBS = [['status', '状态'], ['groups', '同步组'], ['invites', '邀请码'], ['access', '限额与访问'], ['log', '操作日志']];
+const KM_WEB = !!window.KM_WEB;
+const NODE_SUBS = [['status', '状态'], ['groups', '同步组'], ['invites', '邀请码'], ['access', '限额与访问'], ['log', '操作日志']]
+  .concat(KM_WEB ? [['account', '账号安全']] : []);
 const nodeState = { sub: 'status', status: null, err: null, groups: null, invites: null, log: null, logSec: false, busy: false };
 window.nodeAlert = false;
 
@@ -29,6 +32,10 @@ function nodeCall(op, args) {
     }
     if (status === 0) return Promise.reject(Object.assign(new Error(text || '连不上'), { kind: 'down' }));
     if (status === 429) return Promise.reject(Object.assign(new Error('请求太频繁，过一分钟再试'), { kind: 'rate' }));
+    if (KM_WEB) {
+      if (window.webLoggedOut) setTimeout(() => window.webLoggedOut('登录已过期或被踢下线，请重新登录'), 0);
+      return Promise.reject(Object.assign(new Error('登录已过期或被踢下线，请重新登录'), { kind: 'denied' }));
+    }
     const off = lsGet('km-node-remote-off') === '1';
     return Promise.reject(Object.assign(new Error(off ? '已关闭外网管理：只能经电脑 SSH 隧道管理。要恢复，在电脑上运行 deploy.ps1 -ResetAdminAccess'
       : `节点拒绝了请求（${status}）：管理码可能已失效（换过管理密钥），或这个网络的 IP 被限速/封禁了`), { kind: 'denied' }));
@@ -63,7 +70,7 @@ function adminCodeError(text) {
 function nodeSetup(text) {
   const err = adminCodeError(text);
   if (err) return { err };
-  if (MOCK) { window.__mockNodeInfo = { configured: true, host: '43.142.41.27', port: 8787, kid: '7dc74850' }; return { ok: true, kid: '7dc74850' }; }
+  if (MOCK) { window.__mockNodeInfo = { configured: true, host: '43.142.41.27', port: 8787, kid: 'c0ffee42' }; return { ok: true, kid: 'c0ffee42' }; }
   try { return JSON.parse(Native.nodeSetup(String(text).trim())); } catch (e) { return { err: '保存失败：' + e.message }; }
 }
 
@@ -129,7 +136,16 @@ const adminCodeInputsHtml = () => `
 function nodeAlertOf(s, err) {
   if (err) return err.kind === 'down' || err.kind === 'denied';
   if (!s) return false;
-  return s.days_left <= 14 || (s.disk_total && s.disk_free / s.disk_total < 0.1);
+  return s.days_left <= 14 || (s.disk_total && s.disk_free / s.disk_total < 0.1) || certBad(s);
+}
+/** 网页后台证书剩 < 48 小时（正常每 3–4 天自动续一次，始终剩 3 天以上；剩不到 2 天说明续期失败了）。1.0.0 的节点没有这一项。 */
+const certBad = s => !!(s && s.tls && s.tls.not_after && s.tls.hours_left < 48);
+function certText(t) {
+  if (!t) return ['—（节点是 1.0.0，没有网页后台）', ''];
+  if (!t.enabled) return [esc(t.err || '没有证书'), 'nwarn'];
+  const h = t.hours_left;
+  const left = h < 0 ? `已过期 ${fmtDays(-h * 3600)}` : `还剩 ${fmtDays(h * 3600)}`;
+  return [`Let's Encrypt，${left}${h < 48 ? '（自动续期可能失败了，网页后台快打不开了；审批 App 和同步不受影响）' : '，自动续期'}`, h < 48 ? 'nbad' : ''];
 }
 async function nodeCheck() {
   const info = nodeInfo();
@@ -154,11 +170,11 @@ function renderNode() {
   }
   $('main').innerHTML = `<div class="seg" id="nseg">${NODE_SUBS.map(([k, n]) => `<button data-s="${k}" class="${k === nodeState.sub ? 'on' : ''}">${n}</button>`).join('')}</div><div id="nbody"><div class="empty">加载中…</div></div>`;
   $('nseg').querySelectorAll('button').forEach(b => b.onclick = () => { nodeState.sub = b.dataset.s; renderNode(); });
-  ({ status: nodeStatusView, groups: nodeGroupsView, invites: nodeInvitesView, access: nodeAccessView, log: nodeLogView })[nodeState.sub]();
+  ({ status: nodeStatusView, groups: nodeGroupsView, invites: nodeInvitesView, access: nodeAccessView, log: nodeLogView, account: () => window.webAccountView() })[nodeState.sub]();
 }
 const nbody = html => { if ($('nbody')) $('nbody').innerHTML = html; return $('nbody'); };
 const downCard = e => `<div class="card"><div class="nbad" style="font-weight:700">● 连不上同步节点</div><div style="margin-top:4px">${esc(e.message)}</div>
-  ${e.kind === 'down' ? '<div class="hint">超时一般是腾讯云防火墙还没放行 TCP 8787，或服务器停了/到期了。</div>' : ''}
+  ${e.kind === 'down' ? (KM_WEB ? '<div class="hint">网络断了，或服务器停了/到期了。</div>' : '<div class="hint">超时一般是腾讯云防火墙还没放行 TCP 8787，或服务器停了/到期了。</div>') : ''}
   <div class="row"><button id="nretry">重试</button></div></div>`;
 function bindRetry(fn) { const b = $('nretry'); if (b) b.onclick = fn; }
 
@@ -172,6 +188,10 @@ async function nodeStatusView() {
   const dl = s.days_left, dcls = dl <= 3 ? 'nbad' : dl <= 14 ? 'nwarn' : '';
   const dtext = dl < 0 ? `已过期 ${-dl} 天` : `还剩 ${dl} 天`;
   const lowDisk = s.disk_free / s.disk_total < 0.1;
+  const [ctext, ccls] = certText(s.tls);
+  const w = s.web;
+  const wtext = !w ? '—' : !w.has_password ? '还没设置（在审批 App「限额与访问」里设密码）' : !w.enabled ? '已关闭'
+    : `已打开 · 用户 ${esc(w.user)} · ${w.totp ? '已开二次验证' : '没开二次验证'} · ${w.sessions} 个会话${w.paused ? ' · <span class="nbad">失败过多，暂停中</span>' : ''}`;
   nbody(`
     <div class="card">
       <div class="nok" style="font-weight:700">● 在线</div>
@@ -182,8 +202,10 @@ async function nodeStatusView() {
         <span>同步组</span><b>${s.groups} / ${s.limits.max_groups} · 总占用 ${fmtBytes(s.bytes)}</b>
         <span>近 24 小时</span><b>${s.requests_24h.toLocaleString()} 次请求、${s.errors_24h.toLocaleString()} 次错误</b>
         <span>服务器到期</span><b class="${dcls}">${esc(s.expiry)}，${dtext}</b>
+        <span>证书</span><b class="${ccls}">${ctext}</b>
+        <span>网页后台</span><b>${s.tls && s.tls.enabled ? `<a href="https://${esc(s.host)}/" target="_blank" rel="noopener">https://${esc(s.host)}</a> · ` : ''}${wtext}</b>
         <span>外网管理</span><b>${s.remote_admin ? '允许' : '已关闭'}${s.allow_ips.length ? ` · 只允许 ${s.allow_ips.length} 个 IP/网段` : ''}</b>
-        <span>管理码</span><b>kid ${esc(info.kid)} · 你现在的 IP ${esc(s.your_ip)}</b>
+        <span>${KM_WEB ? '本次登录' : '管理码'}</span><b>${KM_WEB ? '会话' : 'kid'} ${esc(KM_WEB ? String(info.kid).slice(0, 4) : info.kid)} · 你现在的 IP ${esc(s.your_ip)}</b>
       </div>
       ${s.breaker_until > Date.now() ? `<div class="nbad" style="margin-top:6px">外网管理因失败次数过多暂停到 ${when(s.breaker_until)}</div>` : ''}
       <div class="row"><button id="nexp">改到期日</button><button id="nrefresh">刷新</button></div>
@@ -334,11 +356,14 @@ async function nodeAccessView() {
       </div>
       <div class="row"><button class="primary" id="lsave">保存限额</button></div></div>
     <div class="card form"><div style="font-weight:700">管理访问</div>
-      <label class="ncheck"><input type="checkbox" id="aremote" ${s.remote_admin ? 'checked' : ''}> 允许外网管理（关掉后只能在电脑上经 SSH 隧道管理，手机就管不了了）</label>
+      <label class="ncheck"><input type="checkbox" id="aremote" ${s.remote_admin ? 'checked' : ''} ${KM_WEB ? 'disabled' : ''}> 允许外网管理（关掉后只能在电脑上经 SSH 隧道管理，手机就管不了了）</label>
+      ${KM_WEB ? '<div class="hint">这个开关只能在审批 App 里改（网页上关掉会把自己和 App 一起关在外面）。</div>' : ''}
       <label for="aips">只允许这些 IP / 网段（每行一个，如 117.30.0.0/16；空着 = 不限）</label>
       <textarea id="aips" style="min-height:90px" placeholder="空着 = 不限（手机网络 IP 经常变，一般不用填）">${esc(s.allow_ips.join('\n'))}</textarea>
       <div class="hint">你现在的 IP：<b>${esc(s.your_ip)}</b>。名单里不包含它时不能保存，免得把自己锁在外面。</div>
-      <div class="row"><button class="primary" id="asave">保存访问设置</button></div></div>`);
+      <div class="row"><button class="primary" id="asave">保存访问设置</button></div></div>
+    ${KM_WEB ? '' : '<div id="webbox"></div>'}`);
+  if (!KM_WEB) renderWebLogin($('webbox'), s);
   $('lsave').onclick = async () => {
     const v = { max_groups: +$('lmg').value, group_mb: +$('lgm').value, sec_mb: +$('lsm').value, req_mb: +$('lrm').value, ip_rate: +$('lir').value };
     const R = { max_groups: [1, 200, '最多组数'], group_mb: [1, 500, '每组默认空间'], sec_mb: [1, 16, '单分区'], req_mb: [1, 32, '单请求'], ip_rate: [60, 10000, '每 IP 次数'] };
@@ -376,6 +401,91 @@ async function nodeLogView(more) {
   if ($('lmore')) $('lmore').onclick = () => nodeLogView(true);
 }
 
+// ---------- 网页登录（只在审批 App 里：管理密钥是总钥匙，网页密码在这里设） ----------
+/** 前端的密码强度提示（和节点 pw_problem 同样的规则；最终以节点检查为准）。返回问题说明或 null。 */
+function pwHint(pw, user, host) {
+  if (pw.length < 12) return `还差 ${12 - pw.length} 个字符（至少 12 个）`;
+  if (pw.length > 128) return '最多 128 个字符';
+  const low = pw.toLowerCase();
+  for (const [bad, name] of [[user, '用户名'], ['admin', '「admin」'], ['kmsync', '「kmsync」'], [host, '服务器地址']]) {
+    if (bad && low.includes(String(bad).toLowerCase())) return `不能包含${name}`;
+  }
+  if (new Set(low).size <= 3 || /^(.{1,6})\1+$/.test(low) || /^[0-9!-\/:-@\[-`{-~\s]*$/.test(low)) return '太简单了';
+  return null;
+}
+
+async function renderWebLogin(box, s) {
+  if (!box) return;
+  const w = s.web;
+  if (!w) { box.innerHTML = '<div class="card hint">网页后台要节点 1.1.0 以上（现在是 ' + esc(s.version) + '）。</div>'; return; }
+  let sess = [];
+  try { sess = await nodeCall('web.sessions'); } catch (e) { /* 列表拿不到就空着 */ }
+  if (!$('webbox')) return;
+  const url = `https://${s.host}`;
+  const live = sess.filter(x => x.alive);
+  box.innerHTML = `<div class="card form"><div style="font-weight:700">网页登录</div>
+      <div class="hint">电脑浏览器打开 <b>${esc(url)}</b>，用这里设的用户名和密码登录，能做的事和这个「节点」页一样（同样看不到学习内容）。
+        网页不能改外网管理开关、不能改这里的设置；网页密码泄露了，在这里「全部踢下线」再重新设密码。</div>
+      <div class="kv">
+        <span>状态</span><b class="${w.enabled ? 'nok' : ''}">${!w.has_password ? '还没设置（设好密码后自动打开）' : w.enabled ? '已打开' : '已关闭'}${w.paused ? ' · <span class="nbad">失败过多，网页登录暂停 1 小时</span>' : ''}</b>
+        <span>用户名</span><b>${w.has_password ? esc(w.user) : '—'}</b>
+        <span>二次验证</span><b>${w.totp ? '已开（登录要输手机验证器上的 6 位码）' : '没开（建议在网页「账号安全」里开）'}</b>
+        <span>密码设置于</span><b>${w.pw_changed ? when(w.pw_changed) : '—'}</b>
+      </div>
+      ${w.has_password ? `<label class="ncheck"><input type="checkbox" id="wen" ${w.enabled ? 'checked' : ''}> 允许网页登录</label>` : ''}
+      <label for="wuser">用户名（3–32 位字母或数字）</label><input id="wuser" maxlength="32" value="${esc(w.user || 'admin')}" autocomplete="off">
+      <label for="wpw">${w.has_password ? '新密码' : '密码'}（至少 12 个字符；不要和别的网站共用）</label><input id="wpw" type="password" maxlength="128" autocomplete="new-password">
+      <label for="wpw2">再输一次</label><input id="wpw2" type="password" maxlength="128" autocomplete="new-password">
+      <div class="hint" id="wpwhint">长一点比复杂更安全，比如几个不相关的词加数字。</div>
+      <div class="row"><button class="primary" id="wset">${w.has_password ? '重新设置密码' : '设置密码并打开网页登录'}</button>
+        ${w.totp ? '<button id="wtotp">关闭二次验证</button>' : ''}</div>
+    </div>
+    <div class="card"><div style="font-weight:700;margin-bottom:4px">网页会话（${live.length}）</div>
+      ${live.length ? live.map(x => `<div class="feed">会话 <b>${esc(x.kid.slice(0, 4))}</b> · ${esc(x.ip)} · 登录 ${when(x.created)} · 最后使用 ${ago(x.last_used)}
+          <div class="hint" style="word-break:break-all">${esc(x.ua || '')}</div>
+          <div class="row"><button class="danger" data-wk="${esc(x.kid)}">踢下线</button></div></div>`).join('')
+        : '<div class="hint">没有人登录着</div>'}
+      <div class="row">${live.length ? '<button class="danger" id="wall">全部踢下线</button>' : ''}${w.has_password ? '<button class="danger" id="wreset">重置网页登录</button>' : ''}</div>
+    </div>`;
+  const hint = () => {
+    const pw = $('wpw').value, h = pwHint(pw, $('wuser').value.trim(), s.host);
+    $('wpwhint').textContent = !pw ? '长一点比复杂更安全，比如几个不相关的词加数字。' : h ? '✗ ' + h : $('wpw2').value && $('wpw2').value !== pw ? '✗ 两次输入不一样' : '✓ 可以用';
+    $('wpwhint').className = 'hint ' + (!pw ? '' : h || ($('wpw2').value && $('wpw2').value !== pw) ? 'nbad' : 'nok');
+  };
+  $('wpw').oninput = $('wpw2').oninput = $('wuser').oninput = hint;
+  const reload = () => renderNode();
+  $('wset').onclick = async () => {
+    const user = $('wuser').value.trim(), pw = $('wpw').value;
+    if (!/^[A-Za-z0-9]{3,32}$/.test(user)) return toast('用户名要 3–32 位字母或数字');
+    const h = pwHint(pw, user, s.host); if (h) return toast('密码' + h);
+    if (pw !== $('wpw2').value) return toast('两次输入的密码不一样');
+    if (w.has_password && !confirm('重新设置密码后，所有网页上登录着的会话都会被踢下线。确定？')) return;
+    try { await nodeCall('web.setPassword', { user, pw }); $('wpw').value = $('wpw2').value = ''; toast(`已设置，电脑上打开 ${url} 登录`, 4000); reload(); }
+    catch (e) { toast(e.message, 5000); }
+  };
+  if ($('wen')) $('wen').onchange = async () => {
+    const on = $('wen').checked;
+    if (!on && !confirm('关闭后网页后台不能登录，已登录的网页会被踢下线。确定？')) { $('wen').checked = true; return; }
+    try { await nodeCall('web.setEnabled', { enabled: on }); toast(on ? '已打开网页登录' : '已关闭网页登录'); reload(); } catch (e) { toast(e.message, 4000); reload(); }
+  };
+  if ($('wtotp')) $('wtotp').onclick = async () => {
+    if (!confirm('关闭二次验证后，网页登录只要用户名和密码。手机丢了、验证器没了时用。确定？')) return;
+    try { await nodeCall('web.totpReset'); toast('已关闭二次验证'); reload(); } catch (e) { toast(e.message, 4000); }
+  };
+  box.querySelectorAll('[data-wk]').forEach(b => b.onclick = async () => {
+    if (!confirm(`把会话 ${b.dataset.wk.slice(0, 4)} 踢下线？那台电脑上的网页会回到登录页。`)) return;
+    try { await nodeCall('web.revoke', { kid: b.dataset.wk }); toast('已踢下线'); reload(); } catch (e) { toast(e.message, 4000); }
+  });
+  if ($('wall')) $('wall').onclick = async () => {
+    if (!confirm('把所有网页会话都踢下线？')) return;
+    try { await nodeCall('web.revoke', { all: true }); toast('已全部踢下线'); reload(); } catch (e) { toast(e.message, 4000); }
+  };
+  if ($('wreset')) $('wreset').onclick = async () => {
+    if (!confirm('清空网页的用户名、密码和二次验证，踢掉所有会话，网页登录关闭。之后要在这里重新设密码才能登录。确定？')) return;
+    try { await nodeCall('web.reset'); toast('已重置网页登录'); reload(); } catch (e) { toast(e.message, 4000); }
+  };
+}
+
 // ---------- 设置页里的「同步节点」一块 ----------
 function renderNodeSettings(box) {
   const info = nodeInfo();
@@ -396,7 +506,7 @@ function renderNodeSettings(box) {
 
 // ---------- 浏览器预览用假数据 ----------
 function mockNodeInfo() {
-  if (!window.__mockNodeInfo) window.__mockNodeInfo = NODE_MOCK === 'none' ? { configured: false } : { configured: true, host: '43.142.41.27', port: 8787, kid: '7dc74850' };
+  if (!window.__mockNodeInfo) window.__mockNodeInfo = NODE_MOCK === 'none' ? { configured: false } : { configured: true, host: '43.142.41.27', port: 8787, kid: 'c0ffee42' };
   return window.__mockNodeInfo;
 }
 function mockNode(op, a) {
@@ -417,34 +527,60 @@ function mockNode(op, a) {
       { id: 'q9w8e7r6', label: '发错了', created: now - 5 * D, expires: now + 2 * D, max_uses: 1, used: 0, revoked_at: now - 4 * D, groups: 0 },
     ],
     log: [],
+    tlsLeft: NODE_MOCK === 'cert' ? 30 : null,     // ?mock&node=cert：预览证书快过期（续期失败）
+    web: { user: 'boss', has_password: true, enabled: true, totp: false, pw_changed: now - 3 * D, paused: false },
+    sessions: [
+      { kid: '5e1f0a2b', user: 'boss', created: now - 2 * H, last_used: now - 4 * 60e3, expires: now + 26 * 60e3, ip: '117.30.12.8', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/141.0 Safari/537.36', alive: true, current: false },
+      { kid: '9a7b3c4d', user: 'boss', created: now - 5 * D, last_used: now - 5 * D, expires: now - 5 * D + 30 * 60e3, ip: '117.30.12.8', ua: 'Edge', alive: false, current: false },
+    ],
   };
   if (!m.log.length) {
     const L = (t, who, ip, op, obj, result, note, sec) => m.log.push({ id: m.log.length + 1, t, who, ip, op, obj, result, note, sec: sec ? 1 : 0 });
     L(now - 40 * D, '系统', '', 'start', '1.0.0', '成功', '服务启动');
     L(now - 40 * D, '系统', '', 'invites.create', 'x3vq8n2b', '成功', '部署时生成初始邀请码（30 天 10 次）');
-    L(now - 20 * D, '管理员 7dc74850', '117.30.12.8', 'invites.create', 'k7m2p9qa', '成功', '生成邀请码「小明」30 天 3 次');
+    L(now - 20 * D, '管理员 c0ffee42', '117.30.12.8', 'invites.create', 'k7m2p9qa', '成功', '生成邀请码「小明」30 天 3 次');
     L(now - 20 * D, '设备', '', 'invite.use', 'k7m2p9qa / a1b2c3', '成功', '新建组');
     L(now - 9 * D, '设备', '', 'invite.use', 'x3vq8n2b / 0badba', '成功', '新建组');
-    L(now - 8 * D, '管理员 7dc74850', '117.30.12.8', 'groups.remove', '0badba', '成功', '移除并封禁');
+    L(now - 8 * D, '管理员 c0ffee42', '117.30.12.8', 'groups.remove', '0badba', '成功', '移除并封禁');
     for (let i = 0; i < 6; i++) L(now - 3 * D + i * 60e3, '?', '45.155.205.' + (10 + i), 'auth', '', '拒绝', 'kid 不对', true);
     L(now - 3 * D + 6 * 60e3, '系统', '45.155.205.12', 'ban', '45.155.205.12', '成功', '10 分钟内认证失败 5 次，封禁这个 IP 1 小时', true);
     L(now - 3 * D + 7 * 60e3, '系统', '45.155.205.15', 'breaker', '管理接口', '成功', '1 小时内认证失败合计 30 次，外网管理暂停 1 小时', true);
-    for (let i = 0; i < 60; i++) L(now - 2 * D + i * H / 2, '管理员 7dc74850', '117.30.12.8', 'groups.setNote', 'a1b2c3', '成功', `备注改为「测试 ${i}」`);
+    for (let i = 0; i < 60; i++) L(now - 2 * D + i * H / 2, '管理员 c0ffee42', '117.30.12.8', 'groups.setNote', 'a1b2c3', '成功', `备注改为「测试 ${i}」`);
     L(now - 5 * 60e3, '设备', '', 'invite.use', 'x3vq8n2b / 0badba', '拒绝', '组已封禁');
   }
   const ok = data => [200, JSON.stringify({ ok: true, data })];
   const fail = msg => [200, JSON.stringify({ ok: false, err: 'bad', msg })];
-  const log = (op, obj, result, note) => m.log.push({ id: m.log.length + 1, t: Date.now(), who: '管理员 7dc74850', ip: '192.168.1.5', op, obj, result, note, sec: 0 });
+  const log = (op, obj, result, note) => m.log.push({ id: m.log.length + 1, t: Date.now(), who: '管理员 c0ffee42', ip: '192.168.1.5', op, obj, result, note, sec: 0 });
   const g = a.gid && m.groups.find(x => x.gid === a.gid);
   const stateOfInv = i => i.revoked_at ? 'revoked' : i.expires < now ? 'expired' : i.used >= i.max_uses ? 'used' : 'ok';
   const qrOf = i => `kmnode:1?h=43.142.41.27&p=8787&i=${i.id}&s=MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK`;
   switch (op) {
     case 'status': {
       const exp = new Date(m.expiry + 'T00:00:00+08:00'), today = new Date(new Date(now + 8 * H).toISOString().slice(0, 10) + 'T00:00:00+08:00');
-      return ok({ version: '1.0.0', proto: 1, started: now - 31 * D, uptime: 31 * 86400 + 3600, now, disk_total: 42140479488, disk_free: 35540000000,
+      const tlsLeft = m.tlsLeft != null ? m.tlsLeft : 101.5;
+      return ok({ version: '1.1.0', proto: 1, started: now - 31 * D, uptime: 31 * 86400 + 3600, now, disk_total: 42140479488, disk_free: 35540000000,
         node_db: 45000000, admin_db: 81920, groups: m.groups.filter(x => x.live).length, bytes: m.groups.reduce((s, x) => s + x.bytes, 0),
         requests_24h: 1204, errors_24h: 0, expiry: m.expiry, days_left: Math.round((exp - today) / D), limits: m.limits,
-        remote_admin: m.remote, allow_ips: m.ips, breaker_until: 0, your_ip: '192.168.1.5', host: '43.142.41.27', port: 8787 });
+        remote_admin: m.remote, allow_ips: m.ips, breaker_until: 0, your_ip: '192.168.1.5', host: '43.142.41.27', port: 8787,
+        tls: { enabled: true, not_after: now + tlsLeft * H, hours_left: tlsLeft, issuer: "C=US, O=Let's Encrypt, CN=YE1", err: null },
+        web: { ...m.web, user: m.web.has_password ? m.web.user : '', sessions: m.sessions.filter(x => x.alive).length, url: 'https://43.142.41.27' } });
+    }
+    case 'web.status': return ok({ ...m.web, sessions: m.sessions.filter(x => x.alive).length });
+    case 'web.sessions': return ok(m.sessions);
+    case 'web.setPassword': {
+      if (!/^[A-Za-z0-9]{3,32}$/.test(a.user || '')) return fail('用户名要 3–32 位字母或数字');
+      const h = pwHint(a.pw || '', a.user, '43.142.41.27'); if (h) { log(op, a.user, '失败', '密码' + h); return fail('密码' + h); }
+      Object.assign(m.web, { user: a.user, has_password: true, enabled: true, pw_changed: Date.now(), paused: false });
+      const n = m.sessions.length; m.sessions = []; log(op, a.user, '成功', `设置网页用户名和密码（用户名 ${a.user}），网页登录打开` + (n ? `，${n} 个网页会话已失效` : ''));
+      return ok(m.web);
+    }
+    case 'web.setEnabled': m.web.enabled = a.enabled; if (!a.enabled) m.sessions = []; log(op, '网页登录', '成功', a.enabled ? '打开网页登录' : '关闭网页登录'); return ok(m.web);
+    case 'web.totpReset': if (!m.web.totp) return fail('二次验证本来就没开'); m.web.totp = false; log(op, '二次验证', '成功', '在审批 App 里关闭网页二次验证'); return ok(m.web);
+    case 'web.reset': Object.assign(m.web, { user: '', has_password: false, enabled: false, totp: false, pw_changed: null }); m.sessions = []; log(op, '网页登录', '成功', '清空网页用户名、密码和二次验证'); return ok(m.web);
+    case 'web.revoke': {
+      if (a.all) { const n = m.sessions.length; m.sessions = []; log(op, '全部会话', '成功', `踢掉全部网页会话（${n} 个）`); return ok({ removed: n }); }
+      const i = m.sessions.findIndex(x => x.kid === a.kid); if (i < 0) return fail('没有这个会话（可能已经过期或退出）');
+      m.sessions.splice(i, 1); log(op, a.kid.slice(0, 4), '成功', '踢下线'); return ok({ removed: 1 });
     }
     case 'groups.list': return ok(m.groups.map(x => ({ ...x, quota: (x.quota_mb || m.limits.group_mb) * 1048576 })));
     case 'groups.clear': if (!g || !g.live) return fail('这个组在节点上没有数据'); g.bytes = 0; g.devices.forEach(d => { d.sections = 0; d.bytes = 0; }); log(op, short(g.gid), '成功', '清空数据'); return ok({});
@@ -464,6 +600,8 @@ function mockNode(op, a) {
     case 'limits.set': Object.assign(m.limits, a); log(op, '限额', '成功', JSON.stringify(a)); return ok(m.limits);
     case 'expiry.set': m.expiry = a.date; log(op, '到期日', '成功', '改为 ' + a.date); return ok({});
     case 'access.set': {
+      const badIp = a.ips.find(n => !/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(n) || n.split('/')[0].split('.').some(x => +x > 255) || (n.includes('/') && +n.split('/')[1] > 32));
+      if (badIp) { log(op, '访问', '失败', `「${badIp}」不是 IP 或网段`); return fail(`「${badIp}」不是 IP 或网段`); }
       const inList = a.ips.some(n => n === '192.168.1.5' || (n.endsWith('/16') && '192.168.1.5'.startsWith(n.split('.').slice(0, 2).join('.') + '.')) || (n.endsWith('/24') && '192.168.1.5'.startsWith(n.split('.').slice(0, 3).join('.') + '.')));
       if (a.ips.length && !inList) { log(op, '访问', '失败', '名单里没有当前 IP'); return [200, JSON.stringify({ ok: false, err: 'self', msg: '名单里没有你现在的 IP 192.168.1.5，保存后你会被锁在外面' })]; }
       m.remote = a.remote; m.ips = a.ips; log(op, '访问', '成功', a.remote ? '外网管理开' : '外网管理关'); return ok({ remote: a.remote, ips: a.ips });
