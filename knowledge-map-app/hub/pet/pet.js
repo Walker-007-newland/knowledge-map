@@ -743,14 +743,64 @@
     refresh();
   };
 
-  // 桌面小部件：只在平板 App 里有；系统支持就弹出“添加到桌面”，不支持就教怎么手动加
-  if (window.KMBridge && KMBridge.pinWidget) {
+  /* ---------------- 桌面小部件（只在平板 App 里有） ---------------- */
+  // 安卓不允许 App 自己把小部件放上桌面，只能请桌面弹“添加”窗口，或者让用户手动加。
+  // 不少国产桌面“说支持”一键添加却什么也不弹（缺“桌面快捷方式”权限时静默失败），所以请求后要确认真的加上了
+  const B = window.KMBridge;
+  const widgetCount = () => { try { return B.widgetCount ? B.widgetCount() : -1; } catch (e) { return -1; } };
+  function widgetInfo() { try { return JSON.parse(B.widgetInfo ? B.widgetInfo() : '{}'); } catch (e) { return {}; } }
+  // 各品牌桌面里“小部件”的叫法和位置不一样
+  function howToAdd(brand) {
+    if (/xiaomi|redmi|poco/.test(brand)) return '在桌面空白处<b>双指捏合</b>（或长按空白处）→ <b>添加小部件</b> → 往下找到或搜索 <b>知识图谱</b> → 把<b>小狗</b>拖到桌面';
+    if (/huawei|honor/.test(brand)) return '在桌面空白处<b>双指捏合</b>（或长按空白处）→ <b>窗口小工具</b>（不是“服务卡片”）→ <b>知识图谱</b> → 点<b>小狗</b>，放到桌面';
+    if (/oppo|oneplus|realme/.test(brand)) return '<b>长按</b>桌面空白处 → <b>插件</b>（或“小组件”）→ <b>知识图谱</b> → 把<b>小狗</b>拖到桌面';
+    if (/vivo|iqoo/.test(brand)) return '在桌面空白处<b>双指捏合</b> → <b>原子组件</b>或<b>小组件</b> → <b>知识图谱</b> → 把<b>小狗</b>拖到桌面';
+    if (/samsung/.test(brand)) return '<b>长按</b>桌面空白处 → <b>小组件</b> → <b>知识图谱</b> → 把<b>小狗</b>拖到桌面';
+    return '<b>长按</b>桌面空白处（有的平板是<b>双指捏合</b>）→ <b>小部件</b>（也叫“窗口小工具”“小组件”）→ 找到 <b>知识图谱</b> → 把<b>小狗</b>拖到桌面';
+  }
+  function showPinGuide(why) {
+    const info = widgetInfo(), brand = info.brand || '';
+    const head = why === 'silent' ? '没看到“添加到桌面”的窗口？'
+      : why === 'manual' ? '这台平板要手动把小狗放到桌面' : '把小狗放到桌面';
+    const lead = why === 'silent' ? '桌面没有弹出添加窗口，通常是 App 没有“桌面快捷方式”权限。用下面任一种办法都行：'
+      : '安卓不允许 App 自己把小狗放上桌面，需要你动手加一次。加好以后，重启平板它也会一直在桌面上。';
+    $('pinGuideBody').innerHTML = '<h2>' + head + '</h2><p>' + lead + '</p>' +
+      '<ol><li><b>手动添加（最稳）</b><br>' + howToAdd(brand) + '。</li>' +
+      (info.pinSupported ? '<li><b>开权限后再点“放到桌面”</b><br>系统设置 → 应用 → 知识图谱 → 权限，打开<b>桌面快捷方式</b>（有的叫“创建桌面快捷方式”）。<br><button class="primary" id="pinSettings" style="margin-top:8px;padding:8px 14px;font-size:15px">打开本应用设置</button></li>' : '') +
+      '</ol><p class="hint">设备：' + esc(brand) + ' ' + esc(info.model || '') + ' · Android API ' + (info.sdk || '?') +
+      ' · 一键添加：' + (info.pinSupported ? '支持' : '不支持') + ' · 桌面上的小狗：' + (info.count >= 0 ? info.count : '?') + ' 个</p>';
+    const s = $('pinSettings');
+    if (s) s.onclick = () => B.openAppSettings && B.openAppSettings();
+    $('pinGuide').hidden = false;
+  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function updatePinBtn() { $('btnPin').textContent = widgetCount() > 0 ? '桌面小狗 ✓' : '放到桌面'; }
+
+  if (B && B.pinWidget) {
     $('btnPin').hidden = false;
+    updatePinBtn();
+    $('pinGuideClose').onclick = () => { $('pinGuide').hidden = true; };
     $('btnPin').onclick = () => {
       requestSnap(0);
-      if (KMBridge.pinWidget()) toast('在弹出的窗口里点“添加”，小狗就会出现在桌面上');
-      else toast('长按桌面空白处 → 小部件 → 知识图谱，把小狗拖到桌面');
+      const before = widgetCount();
+      if (before > 0) { showPinGuide('again'); return; }
+      if (!B.pinWidget()) { showPinGuide('manual'); return; }
+      toast('如果弹出“添加到桌面”的窗口，点“添加”');
+      // 12 秒内桌面上多了小狗就算成功；否则多半是桌面没弹窗，给出手动步骤
+      let n = 0;
+      const t = setInterval(() => {
+        const c = widgetCount();
+        if (c > before) { clearInterval(t); toast('小狗已经在桌面上了！'); updatePinBtn(); }
+        else if (++n >= 12) { clearInterval(t); showPinGuide('silent'); }
+      }, 1000);
     };
+    // 回到页面时（比如刚从桌面加好回来）刷新按钮，加上了就关掉说明
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      updatePinBtn();
+      if (widgetCount() > 0) $('pinGuide').hidden = true;
+    });
+    if (location.hash === '#pin') setTimeout(() => { if (widgetCount() <= 0) showPinGuide('intro'); }, 600);
   }
 
   $('btnRename').onclick = () => {

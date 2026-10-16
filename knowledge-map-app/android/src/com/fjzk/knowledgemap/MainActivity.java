@@ -321,6 +321,29 @@ public class MainActivity extends Activity {
             try { return PetWidget.pin(MainActivity.this); } catch (Exception e) { return false; }
         }
 
+        /** 桌面上已放了几个小狗（网页用来确认“放到桌面”是否真的成功） */
+        @JavascriptInterface
+        public int widgetCount() {
+            try { return PetWidget.count(MainActivity.this); } catch (Exception e) { return -1; }
+        }
+
+        /** 品牌、系统版本、桌面是否支持一键添加（JSON） */
+        @JavascriptInterface
+        public String widgetInfo() { return PetWidget.info(MainActivity.this); }
+
+        /** 打开本应用的系统设置页（去开“桌面快捷方式”权限） */
+        @JavascriptInterface
+        public void openAppSettings() {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName())));
+                    } catch (ActivityNotFoundException ignored) { }
+                }
+            });
+        }
+
         /** 听写时保持屏幕常亮 */
         @JavascriptInterface
         public void keepScreenOn(final boolean on) {

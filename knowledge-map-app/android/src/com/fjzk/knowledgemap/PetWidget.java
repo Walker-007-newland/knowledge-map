@@ -53,12 +53,41 @@ public class PetWidget extends AppWidgetProvider {
         refresh(ctx);
     }
 
-    /** 弹出系统的“添加到桌面”对话框（Android 8+，且桌面支持才行） */
+    /**
+     * 弹出系统的“添加到桌面”对话框（Android 8+，且桌面支持才行）。
+     * 注意：小米、华为、OPPO、vivo 等桌面常常“说支持”却什么都不弹（缺“桌面快捷方式”权限时静默失败），
+     * 所以网页在调用后还会用 count() 检查是否真的加上了，没加上就显示手动添加的步骤。
+     */
     static boolean pin(Context ctx) {
         if (Build.VERSION.SDK_INT < 26) return false;
         AppWidgetManager mgr = ctx.getSystemService(AppWidgetManager.class);
         if (mgr == null || !mgr.isRequestPinAppWidgetSupported()) return false;
         return mgr.requestPinAppWidget(new ComponentName(ctx, PetWidget.class), null, null);
+    }
+
+    /** 桌面上现在放了几个小狗小部件 */
+    static int count(Context ctx) {
+        return AppWidgetManager.getInstance(ctx).getAppWidgetIds(new ComponentName(ctx, PetWidget.class)).length;
+    }
+
+    /** 给网页排查用：品牌、系统版本、桌面是否声称支持一键添加 */
+    static String info(Context ctx) {
+        boolean pinOk = false;
+        if (Build.VERSION.SDK_INT >= 26) {
+            AppWidgetManager mgr = ctx.getSystemService(AppWidgetManager.class);
+            pinOk = mgr != null && mgr.isRequestPinAppWidgetSupported();
+        }
+        try {
+            return new JSONObject()
+                .put("brand", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase())
+                .put("model", Build.MODEL)
+                .put("sdk", Build.VERSION.SDK_INT)
+                .put("pinSupported", pinOk)
+                .put("count", count(ctx))
+                .toString();
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     static RemoteViews views(Context ctx) {

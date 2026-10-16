@@ -79,8 +79,14 @@
     var color = f < P.HUNGRY ? '#d4553f' : '#e8893b';
     var card = document.getElementById('petCard');
     card.innerHTML = '<span class="ico">' + (f < P.HUNGRY ? '🥺' : '🐕') + '</span><div><h2></h2><p>饱食度<span class="meter"><i style="width:' + f + '%;background:' + color + '"></i></span>　🦴 ' + st.bones +
-      (f < P.HUNGRY ? '　<b style="color:' + color + '">饿了</b>' : '') + '　📚 今天学习 ' + Math.round(KMStudy.secondsOn(KMStudy.load(), KMStudy.dayKey()) / 60) + ' 分钟</p></div>' + (n ? '<span class="badge">+' + n * P.BONES_PER_NODE + ' 🦴 待领取</span>' : '');
+      (f < P.HUNGRY ? '　<b style="color:' + color + '">饿了</b>' : '') + '　📚 今天学习 ' + Math.round(KMStudy.secondsOn(KMStudy.load(), KMStudy.dayKey()) / 60) + ' 分钟</p></div>' +
+      (n ? '<span class="badge">+' + n * P.BONES_PER_NODE + ' 🦴 待领取</span>' : noWidget() ? '<span class="badge" style="background:#2f6fde">📌 把小狗放到桌面</span>' : '');
     card.querySelector('h2').textContent = st.name + ' · Lv.' + L + ' ' + P.stage(L).name;
+    card.href = !n && noWidget() ? 'pet/index.html#pin' : 'pet/index.html';   // #pin：宠物页直接打开“放到桌面”说明
+  }
+  // 平板 App 里、桌面上还没有小狗小部件
+  function noWidget() {
+    try { return !!(window.KMBridge && KMBridge.widgetCount && KMBridge.widgetCount() === 0); } catch (e) { return false; }
   }
   renderPet();
   window.addEventListener('pageshow', renderPet);   // 从图谱或宠物页返回时刷新
