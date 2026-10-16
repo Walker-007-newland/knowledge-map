@@ -433,7 +433,7 @@ async function renderWebLogin(box, s) {
         <span>密码设置于</span><b>${w.pw_changed ? when(w.pw_changed) : '—'}</b>
       </div>
       ${w.has_password ? `<label class="ncheck"><input type="checkbox" id="wen" ${w.enabled ? 'checked' : ''}> 允许网页登录</label>` : ''}
-      <label for="wuser">用户名（3–32 位字母或数字）</label><input id="wuser" maxlength="32" value="${esc(w.user || 'boss')}" autocomplete="off">
+      <label for="wuser">用户名（3–32 位字母或数字）</label><input id="wuser" maxlength="32" value="${esc(w.user || 'admin')}" autocomplete="off">
       <label for="wpw">${w.has_password ? '新密码' : '密码'}（至少 12 个字符；不要和别的网站共用）</label><input id="wpw" type="password" maxlength="128" autocomplete="new-password">
       <label for="wpw2">再输一次</label><input id="wpw2" type="password" maxlength="128" autocomplete="new-password">
       <div class="hint" id="wpwhint">长一点比复杂更安全，比如几个不相关的词加数字。</div>
