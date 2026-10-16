@@ -62,7 +62,7 @@ public class SyncHarness {
             List<String> cmd = new ArrayList<>(Arrays.asList(python, "-X", "utf8", new File(root, "knowledge-map-app/android/test/harness_node.py").getPath()));
             if (remote) { cmd.add("--remote"); cmd.add(remoteAddr); }
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+            pb.redirectError(System.getenv("KM_HARNESS_VERBOSE") != null ? ProcessBuilder.Redirect.INHERIT : ProcessBuilder.Redirect.DISCARD);
             pb.environment().put("PYTHONIOENCODING", "utf-8");
             p = pb.start();
             in = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));

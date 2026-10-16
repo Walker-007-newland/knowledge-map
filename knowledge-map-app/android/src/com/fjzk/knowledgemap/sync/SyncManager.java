@@ -42,7 +42,7 @@ public final class SyncManager {
     String notice = "";            // 被移出组时给学生看的一句话
 
     volatile Group g;               // null = 没加入同步组
-    Join join;
+    volatile Join join;
 
     // 节点状态（不落盘的部分）
     volatile boolean busy;
@@ -862,8 +862,9 @@ public final class SyncManager {
         join = null;
     }
 
-    public synchronized String joinState() {
-        return join == null ? "{}" : SyncJson.stringify(join.state(now()));
+    public String joinState() {
+        Join j = join;
+        return j == null ? "{}" : SyncJson.stringify(j.state(now()));
     }
 
     /** C：扫加入码（或手输地址和 26 位码），取 ①、放 ② */

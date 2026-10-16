@@ -4,7 +4,7 @@
 //    这里调 KMBridge.hello()，Java 用 evaluateJavascript 把令牌只送进主页面的 __kmTok；页面只用 KMApp，不再直接碰 KMBridge。
 //    KMApp.xxx(...) 和原来 KMBridge 方法同名同参数，自动在前面补令牌：
 //    - 没有返回值的方法：令牌没到就排队，到了按顺序发出
-//    - 有返回值的方法（pinWidget、deviceName、sharedGet）：令牌没到时返回空值，需要结果的写在 KMApp.ready().then(...) 里
+//    - 有返回值的方法（pinWidget、deviceName、sharedGet；#1 的 syncState、syncTake、joinState）：令牌没到时返回空值，需要结果的写在 KMApp.ready().then(...) 里
 //    - 不需要令牌的（appVersion、widgetCount、widgetInfo）直接转发
 //    普通浏览器里没有 KMBridge，不定义 KMApp；只在主页面（window.top === window）建门面
 (function () {
@@ -38,13 +38,16 @@
     ready: function () { return ready; },
     isReady: function () { return !!token; }
   };
-  ['speak', 'stopSpeak', 'saveFile', 'updatePet', 'savePetImage', 'keepScreenOn', 'goBack', 'checkUpdate', 'openAppSettings', 'sharedPut'].forEach(function (m) {
+  ['speak', 'stopSpeak', 'saveFile', 'updatePet', 'savePetImage', 'keepScreenOn', 'goBack', 'checkUpdate', 'openAppSettings', 'sharedPut',
+    // #1 设备同步：没有返回值，结果经 window.__kmSyncEvent 事件回来
+    'syncNow', 'syncPublish', 'syncAck', 'nodeJoin', 'nodeRemove', 'joinOpen', 'joinClose', 'joinScan', 'joinConfirm',
+    'syncRename', 'syncRemove', 'syncLeave'].forEach(function (m) {
     if (B[m]) A[m] = function () {
       var args = Array.prototype.slice.call(arguments);
       if (token) call(m, args); else queue.push([m, args]);
     };
   });
-  var empty = { pinWidget: false, deviceName: '', sharedGet: '' };
+  var empty = { pinWidget: false, deviceName: '', sharedGet: '', syncState: '', syncTake: '', joinState: '' };
   Object.keys(empty).forEach(function (m) {
     if (B[m]) A[m] = function () { return token ? call(m, Array.prototype.slice.call(arguments)) : empty[m]; };
   });

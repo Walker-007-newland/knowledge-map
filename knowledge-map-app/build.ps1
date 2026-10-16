@@ -48,6 +48,12 @@ Copy-Item "$here\hub\data.html" "$work\assets\www\data.html"
 Copy-Item "$here\hub\km-study.js" "$work\assets\www\km-study.js"
 Copy-Item "$here\hub\km-narrate.js" "$work\assets\www\km-narrate.js"
 Copy-Item "$here\hub\km-reward.js" "$work\assets\www\km-reward.js"
+# #1 设备同步：km-sync.js（发布分区、安全页面合并）、设备同步页、扫码和生成二维码（jsQR Apache-2.0、qrcode-generator MIT，单文件，file:// 可用）
+Copy-Item "$here\hub\km-sync.js" "$work\assets\www\km-sync.js"
+Copy-Item "$here\hub\sync.html" "$work\assets\www\sync.html"
+New-Item -ItemType Directory -Force "$work\assets\www\vendor" | Out-Null
+Copy-Item "$here\hub\vendor\jsQR.js" "$work\assets\www\vendor\jsQR.js"
+Copy-Item "$here\hub\vendor\qrcode.js" "$work\assets\www\vendor\qrcode.js"
 if ($SelfTest) {
   New-Item -ItemType Directory -Force "$work\assets\www\selftest" | Out-Null
   Copy-Item "$here\selftest\*.html" "$work\assets\www\selftest\"
@@ -64,7 +70,7 @@ Get-ChildItem $petSrc -Recurse -File | Where-Object { $_.Extension -ne '.py' } |
   Copy-Item $_.FullName $dst
 }
 
-# 每个页面：<head> 里最先加载 km-shim.js（下载、朗读补丁）、km-data.js（学习数据中枢：修改记录、设备编号、听写词单互通，「我的数据」页用）、km-study.js（学习计时，重复加载会自动跳过）、km-narrate.js（知识点语音讲解，只在讲解页出现）、pet/pet-core.js + km-reward.js（掌握知识点当场发骨头，并同步桌面小狗）；去掉 ?v= 缓存参数，避免 file:// 下找不到文件
+# 每个页面：<head> 里最先加载 km-shim.js（下载、朗读补丁）、km-data.js（学习数据中枢：修改记录、设备编号、听写词单互通，「我的数据」页用）、km-study.js（学习计时，重复加载会自动跳过）、km-narrate.js（知识点语音讲解，只在讲解页出现）、pet/pet-core.js + km-reward.js（掌握知识点当场发骨头，并同步桌面小狗）、km-sync.js（#1 设备同步：发布分区、安全页面合并）；去掉 ?v= 缓存参数，避免 file:// 下找不到文件
 $utf8 = New-Object Text.UTF8Encoding $false
 Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
   $depth = $_.DirectoryName.Substring("$work\assets\www".Length).Split('\', [StringSplitOptions]::RemoveEmptyEntries).Count
@@ -76,7 +82,8 @@ Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
   $narrate = ('../' * $depth) + 'km-narrate.js'
   $petCore = ('../' * $depth) + 'pet/pet-core.js'
   $reward = ('../' * $depth) + 'km-reward.js'
-  $tag = "<script src=`"$shim`"></script>`n<script src=`"$data`"></script>`n<script src=`"$study`"></script>`n<script src=`"$narrate`"></script>`n<script src=`"$petCore`"></script>`n<script src=`"$reward`"></script>"
+  $syncJs = ('../' * $depth) + 'km-sync.js'
+  $tag = "<script src=`"$shim`"></script>`n<script src=`"$data`"></script>`n<script src=`"$study`"></script>`n<script src=`"$narrate`"></script>`n<script src=`"$petCore`"></script>`n<script src=`"$reward`"></script>`n<script src=`"$syncJs`"></script>"
   $html = if ($html -match '<head>') { ([regex]'<head>').Replace($html, "<head>`n$tag", 1) } else { "$tag`n$html" }
   if ($html -notmatch [regex]::Escape($shim)) { throw "没能在 $($_.FullName) 注入 km-shim.js" }
   [IO.File]::WriteAllText($_.FullName, $html, $utf8)
@@ -94,8 +101,10 @@ if ($LASTEXITCODE) { throw 'aapt2 link 失败' }
 $srcs = @(Get-ChildItem "$here\android\src", "$work\gen" -Recurse -Filter *.java | ForEach-Object { $_.FullName })
 & "$jdkBin\javac.exe" -encoding UTF-8 --release 11 -nowarn -cp $androidJar -d "$work\classes" @srcs
 if ($LASTEXITCODE) { throw 'javac 失败' }
-$classes = @(Get-ChildItem "$work\classes" -Recurse -Filter *.class | ForEach-Object { $_.FullName })
-& "$bt\d8.bat" --release --min-api 24 --lib $androidJar --output "$work\dex" @classes
+# 类文件先打成一个 jar 再交给 d8（#1 加了同步内核后类文件多了，逐个传会超出 Windows 命令行长度）
+& "$jdkBin\jar.exe" cf "$work\classes.jar" -C "$work\classes" .
+if ($LASTEXITCODE) { throw 'jar 失败' }
+& "$bt\d8.bat" --release --min-api 24 --lib $androidJar --output "$work\dex" "$work\classes.jar"
 if ($LASTEXITCODE) { throw 'd8 失败' }
 
 # 4. 把 classes.dex 和网页放进 apk，对齐，签名
@@ -139,7 +148,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/vendor/jsQR.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   # 自检页只在 -SelfTest 包里（正式包里没有 selftest/，也就不会注入 KMSelfTest）

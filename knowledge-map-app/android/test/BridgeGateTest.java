@@ -25,6 +25,8 @@ public class BridgeGateTest {
     /** 规则表里所有需要令牌的方法（和 MainActivity.Bridge 一致） */
     static final String[] TOKEN_METHODS = { "speak", "stopSpeak", "saveFile", "updatePet", "savePetImage", "pinWidget",
         "openAppSettings", "keepScreenOn", "goBack", "checkUpdate", "deviceName", "sharedGet", "sharedPut" };
+    static final String[] SYNC_METHODS = { "syncState", "syncNow", "syncPublish", "syncTake", "syncAck", "nodeJoin", "nodeRemove",
+        "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm", "syncRename", "syncRemove", "syncLeave" };
     static final String[] FREE_METHODS = { "hello", "appVersion", "widgetCount", "widgetInfo" };
 
     public static void main(String[] args) {
@@ -106,6 +108,32 @@ public class BridgeGateTest {
         g.check(null, "goBack", t + 2);
         ok(logs.size() == 2, "换了页面再被拒打第二行");
         ok(g.deniedCount() == 4, "累计被拒次数 = 4（实际 " + g.deniedCount() + "）");
+
+        System.out.println("7. #1 设备同步接口");
+        g = new BridgeGate();
+        String notes = g.issue(BridgeGate.WWW + "skills-map/notes.html", t);
+        ok(!g.check(notes, "syncTake", t), "skills-map 笔记页（有 B 站 iframe）的令牌调 syncTake 被拒");
+        ok(!g.check(notes, "syncAck", t), "笔记页的令牌调 syncAck 被拒");
+        ok(g.check(notes, "syncPublish", t), "笔记页（file:// 页面）能发布 syncPublish");
+        for (String m : SYNC_METHODS) ok(!g.check(null, m, t), "不带令牌调 " + m + " 被拒");
+        String dataTok = g.issue(DATA, t + 1);
+        ok(!g.check(dataTok, "syncRemove", t + 2), "data.html 调 syncRemove 被拒");
+        ok(!g.check(dataTok, "nodeJoin", t + 2), "data.html 调 nodeJoin 被拒");
+        ok(g.check(dataTok, "syncTake", t + 2) && g.check(dataTok, "syncAck", t + 2), "data.html 能 syncTake / syncAck");
+        String syncTok = g.issue(BridgeGate.WWW + "sync.html", t + 3);
+        for (String m : SYNC_METHODS) ok(g.check(syncTok, m, t + 4), "sync.html 调 " + m + " 通过");
+        String home = g.issue(BridgeGate.WWW + "index.html", t + 5);
+        ok(g.check(home, "syncTake", t + 6) && g.check(home, "syncState", t + 6) && !g.check(home, "syncLeave", t + 6), "总入口能取收件箱、看状态，不能退出同步组");
+        String study = g.issue(BridgeGate.WWW + "pet/study.html", t + 7);
+        ok(g.check(study, "syncTake", t + 8), "学习统计页能 syncTake");
+        String pet = g.issue(BridgeGate.WWW + "pet/index.html", t + 9);
+        ok(!g.check(pet, "syncTake", t + 10) && g.check(pet, "syncPublish", t + 10), "宠物页不能 syncTake（数据在内存里），能发布");
+        String dict = g.issue(DICT, t + 11);
+        for (String m : SYNC_METHODS) ok(!g.check(dict, m, t + 12), "听写页（https 虚拟地址）调 " + m + " 被拒");
+        String bili2 = g.issue(BILI, t + 13);
+        for (String m : SYNC_METHODS) ok(!g.check(bili2, m, t + 14), "B 站页面的令牌调 " + m + " 被拒");
+        String fakeSync = g.issue(BridgeGate.WWW + "sync.html.evil", t + 15);
+        ok(!g.check(fakeSync, "syncLeave", t + 16), "sync.html.evil 不算同步页");
 
         System.out.println();
         System.out.println("通过 " + pass + "，失败 " + fail);

@@ -21,6 +21,9 @@ public class BridgeGate {
     public static final String ASSETS = "https://appassets.androidplatform.net/";
     public static final String[] APP = { WWW, ASSETS };
     public static final String[] APP_FILE = { WWW };
+    /** #1 同步的安全页面：总入口、设备同步、我的数据、学习统计（这些页面不把学习数据放在内存里，合并写回不会被覆盖） */
+    public static final String[] SAFE = { WWW + "index.html", WWW + "sync.html", WWW + "data.html", WWW + "pet/study.html" };
+    public static final String[] SYNC_PAGE = { WWW + "sync.html" };
 
     static final long KEEP_PREV_MS = 5000;      // 换新令牌后，上一张再保留 5 秒（切换瞬间正在进行的调用不失败）
     static final long HELLO_WINDOW_MS = 10000;  // hello 限速：10 秒内最多 10 次
@@ -48,9 +51,11 @@ public class BridgeGate {
         allow(APP, "speak", "stopSpeak", "saveFile", "updatePet", "savePetImage", "pinWidget",
             "openAppSettings", "keepScreenOn", "goBack", "checkUpdate");
         allow(APP, "deviceName", "sharedGet", "sharedPut");          // #2 我的数据
-        // #1 第一期的同步接口在这里加行，例如：
-        // allow(APP_FILE, "syncState", "syncNow", "syncPublish");
-        // allow(new String[] { WWW + "index.html", WWW + "sync.html", WWW + "data.html", WWW + "pet/study.html" }, "syncTake", "syncAck");
+        // #1 第一期：设备同步。全部要令牌（syncState 含设备名也一样）；听写页（https 虚拟地址）不在 APP_FILE 里，调不到
+        allow(APP_FILE, "syncState", "syncNow", "syncPublish");
+        allow(SAFE, "syncTake", "syncAck");                         // 只在安全页面合并写回本机
+        allow(SYNC_PAGE, "nodeJoin", "nodeRemove", "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm",
+            "syncRename", "syncRemove", "syncLeave");
     }
 
     /** 不需要令牌的方法 */

@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设备同步</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --good: #2f8a4c; --warn: #b8641a; --bad: #c23f2e; --soft: #f1ede4;
+    --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --good: #5cbf7a; --warn: #e3a05a; --bad: #ef7a68; --soft: #2a2b30;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+    --accent: #6b9bf0; --good: #5cbf7a; --warn: #e3a05a; --bad: #ef7a68; --soft: #2a2b30;
+    --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100vh; padding: 20px 16px 40px; }
+  main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .back { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; background: var(--surface);
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: 1px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 10px; font-size: 19px; }
+  .card p { margin: 0 0 10px; line-height: 1.6; color: var(--muted); font-size: 15px; }
+  #status { font-size: 18px; font-weight: 600; line-height: 1.5; margin: 0 0 6px; color: var(--text); }
+  #status.ok { color: var(--good); } #status.error, #status.offline { color: var(--bad); }
+  .small { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .btn { display: block; width: 100%; padding: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--soft);
+    color: var(--text); font: 600 18px var(--font); text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; margin-top: 10px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--bad); }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .5; }
+  .mini { font: 15px var(--font); padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--text); cursor: pointer; }
+  .mini.danger { color: var(--bad); }
+  .dev { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .dev:first-child { border-top: none; }
+  .dev .ico { font-size: 26px; flex: none; }
+  .dev .info { flex: 1 1 200px; min-width: 0; }
+  .dev .name { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+  .dev .sub { font-size: 13px; color: var(--muted); }
+  .dev .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); margin-left: 6px; font-weight: 400; }
+  textarea, input[type=text] { width: 100%; font: 16px var(--font); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  textarea { min-height: 72px; resize: vertical; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 15px; margin-top: 12px; }
+  .msg { margin-top: 10px; font-size: 15px; line-height: 1.6; white-space: pre-line; }
+  .msg.bad { color: var(--bad); } .msg.good { color: var(--good); }
+  #qrBox { text-align: center; }
+  #qrBox canvas { max-width: 100%; height: auto; border-radius: 8px; }
+  .code-text { font: 600 16px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; margin: 8px 0; color: var(--text); }
+  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  .modal-in { background: var(--surface); color: var(--text); border-radius: 18px; padding: 22px 20px; width: 100%; max-width: 460px; box-shadow: var(--shadow); }
+  .modal-in h2 { margin: 0 0 10px; font-size: 20px; }
+  .modal-in p { color: var(--muted); line-height: 1.6; margin: 0 0 10px; }
+  .bigcode { font: 700 48px ui-monospace, Consolas, monospace; letter-spacing: 10px; text-align: center; margin: 10px 0; color: var(--accent); }
+  .row { display: flex; gap: 10px; }
+  .row .btn { flex: 1; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="index.html">← 总入口</a><h1>设备同步</h1></div>
+
+  <section class="card" id="noApp" hidden>
+    <h2>要在平板 App 里用</h2>
+    <p>设备同步要在知识图谱平板 App 里用；电脑浏览器请用「我的数据」导出、导入文件。</p>
+    <a class="btn" href="data.html">💾 去「我的数据」</a>
+  </section>
+
+  <section class="card" id="statusCard" hidden>
+    <p id="status">读取中…</p>
+    <div class="small">数据只在你自己的设备之间传，加密保存；同步节点上只有看不懂的密文。</div>
+    <div class="msg" id="notice" hidden></div>
+  </section>
+
+  <section class="card" id="start" hidden>
+    <h2>开始同步</h2>
+    <p>同一个学生的几台平板、手机，学习记录、错题、作文草稿和小狗会合成一份。只加入你自己的设备。</p>
+    <label class="btn primary">📷 扫邀请码，开始同步<input type="file" accept="image/*" capture="environment" hidden id="scanInvite"></label>
+    <div class="small" style="margin-top:6px">第一台设备用：邀请码是管理员给的二维码。</div>
+    <label class="btn">📷 扫加入码，加入我的另一台设备<input type="file" accept="image/*" capture="environment" hidden id="scanJoin"></label>
+    <div class="small" style="margin-top:6px">在已经同步的那台设备上点「添加设备」，它会显示加入码。</div>
+    <details>
+      <summary>扫不了？手动输入</summary>
+      <p class="small" style="margin-top:8px">粘贴邀请码文字（kmnode:1?…），或另一台设备上显示的加入码（地址 · 26 位码）。</p>
+      <textarea id="manual" placeholder="kmnode:1?h=…  或  43.142.41.27:8787 · ABCD-EFGH-…"></textarea>
+      <button class="btn" id="btnManual">确定</button>
+    </details>
+    <div class="msg" id="startMsg" hidden></div>
+  </section>
+
+  <section class="card" id="joinWait" hidden>
+    <h2>正在加入…</h2>
+    <p id="joinWaitText"></p>
+    <div class="bigcode" id="joinWaitCode"></div>
+    <div class="small">两台设备上的确认码要一样。对不上就不要确认。</div>
+  </section>
+
+  <section class="card" id="group" hidden>
+    <h2>我的设备</h2>
+    <div id="devices"></div>
+    <button class="btn primary" id="btnSync">🔄 立即同步</button>
+    <button class="btn" id="btnAdd">➕ 添加设备</button>
+    <div id="addBox" hidden>
+      <div id="qrBox"></div>
+      <div class="code-text" id="joinText"></div>
+      <div class="small" id="joinLeft"></div>
+      <div class="small">用另一台设备打开「设备同步」→「扫加入码」，扫上面的二维码；扫不了就手动输入这段文字。</div>
+      <button class="btn" id="btnAddClose">取消</button>
+    </div>
+    <div class="msg" id="groupMsg" hidden></div>
+  </section>
+
+  <section class="card" id="more" hidden>
+    <h2>其它</h2>
+    <label class="btn">📷 重新扫邀请码<input type="file" accept="image/*" capture="environment" hidden id="rescan"></label>
+    <div class="small" style="margin-top:6px">同步节点换了地址、或提示「邀请码已失效」时用。</div>
+    <button class="btn danger" id="btnLeave">退出同步组</button>
+    <div class="small" style="margin-top:6px">退出后本机学习数据保留，只是不再和别的设备同步。</div>
+  </section>
+</main>
+<script src="km-data.js"></script>
+<script src="km-study.js"></script>
+<script src="pet/pet-core.js"></script>
+<script src="km-sync.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // 测试页 tests/sync-test.html 把本页放进 iframe，用 __kmMockApp 模拟原生桥
+  let A = window.KMApp && window.KMApp.syncState ? window.KMApp : null;
+  if (!A) { try { if (window.parent !== window && window.parent.__kmMockApp) { A = window.parent.__kmMockApp; KMSync._init(A); } } catch (e) { /* 跨域 */ } }
+  if (!A) { $('noApp').hidden = false; return; }
+
+  let st = null, joinTimer = 0, joinExp = 0, joinRole = '', hostName = '';
+
+  function show(el, text, cls) { el.hidden = !text; el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+  function render() {
+    st = KMSync.state() || st;
+    $('statusCard').hidden = false;
+    if (!st) { $('status').textContent = '读取中…'; return; }
+    $('status').textContent = KMSync.statusText(st);
+    $('status').className = st.inGroup ? st.status : '';
+    show($('notice'), st.inGroup ? '' : st.notice, 'bad');
+    $('start').hidden = st.inGroup || joinRole === 'guest';
+    $('group').hidden = !st.inGroup;
+    $('more').hidden = !st.inGroup;
+    if (!st.inGroup) return;
+    $('joinWait').hidden = true;
+    const rows = (st.members || []).slice().sort((a, b) => (b.me - a.me) || String(a.name).localeCompare(String(b.name)));
+    let html = rows.map(m => {
+      const when = m.me ? (st.lastOk ? '上次同步：' + KMSync.fmtTime(st.lastOk) + ' · 节点' : '还没同步过')
+        : (m.last ? '上次收到它的改动：' + KMSync.fmtTime(m.last) + ' · 节点' : '还没收到它的改动');
+      return '<div class="dev"><span class="ico">' + (m.me ? '📱' : '💻') + '</span><div class="info"><div class="name">' + esc(m.name || '未命名设备') +
+        (m.me ? '<span class="tag">本机</span>' : '') + '</div><div class="sub">' + esc(when) + '</div></div><div class="acts">' +
+        '<button class="mini" data-rename="' + esc(m.dev) + '">改名</button>' + (m.me ? '' : '<button class="mini danger" data-remove="' + esc(m.dev) + '">移除</button>') + '</div></div>';
+    }).join('');
+    const n = st.node;
+    if (n) html += '<div class="dev"><span class="ico">☁️</span><div class="info"><div class="name">同步节点 ' + esc(n.h + ':' + n.p) + '</div><div class="sub">' +
+      esc(n.off ? '已停用' : n.msg ? n.msg : n.last ? '上次同步：' + KMSync.fmtTime(n.last) : '还没同步过') + '</div></div></div>';
+    $('devices').innerHTML = html;
+  }
+
+  /* ---------------- 扫码 ---------------- */
+  async function decodeQrFile(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('图片打不开')); i.src = url; });
+      for (const max of [1600, 1000, 640, 2400]) {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+        const r = jsQR(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+        if (r && r.data) return r.data;
+      }
+      return null;
+    } finally { URL.revokeObjectURL(url); }
+  }
+  function loadScript(src) {
+    return new Promise((ok, bad) => {
+      if (document.querySelector('script[src="' + src + '"]')) return ok();
+      const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('加载 ' + src + ' 失败'));
+      document.head.appendChild(s);
+    });
+  }
+  function bindScan(input, msgEl) {
+    input.addEventListener('change', async () => {
+      const f = input.files && input.files[0];
+      input.value = '';
+      if (!f) return;
+      show(msgEl, '正在识别二维码…');
+      try {
+        await loadScript('vendor/jsQR.js');
+        const text = await decodeQrFile(f);
+        if (!text) { show(msgEl, '没认出二维码，请再拍一次（对准二维码、拍清楚一点），或用「手动输入」', 'bad'); return; }
+        handleCode(text, msgEl);
+      } catch (e) { show(msgEl, '识别失败：' + e.message, 'bad'); }
+    });
+  }
+
+  /** 认出的文字：邀请码 → 建组 / 换节点；加入码 → 加入；都不是 → 中文提示 */
+  function handleCode(text, msgEl) {
+    const t = String(text || '').trim();
+    if (/^kmnode:1\?/.test(t)) {
+      if (!st || !st.inGroup) {
+        if (!confirm('用这张邀请码建一个同步组？\n建好后，你的其它设备扫这台设备上的「加入码」就能加入。\n开始前会先在「下载/知识图谱」里备份一份本机数据。')) { show(msgEl, ''); return; }
+        backup();
+      }
+      show(msgEl, '正在连接同步节点…');
+      A.nodeJoin(t);
+      return;
+    }
+    if (/^kmjoin:1\?/.test(t) || /^[A-Za-z0-9.-]+:\d{1,5}\s*[·\s]\s*[A-Za-z0-9\s-]{20,}$/.test(t)) {
+      if (st && st.inGroup) { show(msgEl, '这台设备已经在一个同步组里，请先「退出同步组」（本机数据保留）再加入', 'bad'); return; }
+      show(msgEl, '正在联系另一台设备…');
+      joinRole = 'guest';
+      A.joinScan(t);
+      return;
+    }
+    if (/^kmadmin:/.test(t)) { show(msgEl, '这是同步节点的管理码，要在「团队审批」App 里扫，不是给学生平板用的', 'bad'); return; }
+    show(msgEl, '这不是同步用的二维码（邀请码以 kmnode:1? 开头，加入码以 kmjoin:1? 开头）', 'bad');
+  }
+
+  /** 第一次同步前，按 #2 导出一份备份到 下载/知识图谱/ */
+  function backup() {
+    try {
+      const d = new Date(), p = n => (n < 10 ? '0' : '') + n;
+      const name = '知识图谱-同步前备份-' + d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + '.json';
+      A.saveFile(name, JSON.stringify(KMData.collect(), null, 1));
+    } catch (e) { /* 备份失败不挡同步，导入前也会再备份 */ }
+  }
+
+  /* ---------------- 加入码（本机是已在组里的 A） ---------------- */
+  async function showJoinCode(d) {
+    $('addBox').hidden = false;
+    $('btnAdd').hidden = true;
+    $('joinText').textContent = d.display || d.text;
+    joinExp = +d.exp || 0;
+    try {
+      await loadScript('vendor/qrcode.js');
+      const q = qrcode(0, 'M'); q.addData(d.text); q.make();
+      const n = q.getModuleCount(), quiet = 4, cell = Math.max(4, Math.floor(360 / (n + quiet * 2)));
+      const size = (n + quiet * 2) * cell;
+      $('qrBox').innerHTML = '<canvas id="qrCanvas" width="' + size + '" height="' + size + '"></canvas>';
+      const g = $('qrCanvas').getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, size, size); g.fillStyle = '#000';
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect((c + quiet) * cell, (r + quiet) * cell, cell, cell);
+    } catch (e) { $('qrBox').textContent = '二维码画不出来，请让另一台设备手动输入下面的文字'; }
+    clearInterval(joinTimer);
+    const tick = () => {
+      const left = Math.max(0, joinExp - Date.now());
+      $('joinLeft').textContent = left ? '还剩 ' + Math.floor(left / 60000) + ' 分 ' + Math.floor(left / 1000) % 60 + ' 秒' : '加入码已过期，请重新生成';
+      if (!left) { clearInterval(joinTimer); closeJoin(false); }
+    };
+    tick();
+    joinTimer = setInterval(tick, 1000);
+  }
+  function closeJoin(tell) {
+    clearInterval(joinTimer);
+    $('addBox').hidden = true;
+    $('btnAdd').hidden = false;
+    $('qrBox').innerHTML = '';
+    if (tell) A.joinClose();
+  }
+
+  function modal(html) {
+    const ov = document.createElement('div');
+    ov.className = 'modal';
+    ov.innerHTML = '<div class="modal-in">' + html + '</div>';
+    document.body.appendChild(ov);
+    return ov;
+  }
+  function askJoin(d) {
+    const ov = modal('<h2>「' + esc(d.name) + '」要加入你的同步组</h2><p>先看那台设备上显示的确认码，和下面的一样才点加入。</p>' +
+      '<div class="bigcode">' + esc(d.code) + '</div>' +
+      '<p>加入后两台设备的学习记录会合并成一份，<b>只加入同一个学生自己的设备</b>。</p>' +
+      '<div class="row"><button class="btn danger" id="mNo">不是我的设备</button><button class="btn primary" id="mYes">数字一样，加入</button></div>');
+    ov.querySelector('#mYes').onclick = () => { ov.remove(); A.joinConfirm(true); show($('groupMsg'), '正在把同步钥匙交给「' + d.name + '」…'); };
+    ov.querySelector('#mNo').onclick = () => { ov.remove(); A.joinConfirm(false); closeJoin(false); };
+  }
+  function askText(title, value, onOk) {
+    const ov = modal('<h2>' + esc(title) + '</h2><input type="text" id="mText" maxlength="40"><div class="row" style="margin-top:12px"><button class="btn" id="mNo">取消</button><button class="btn primary" id="mYes">确定</button></div>');
+    const inp = ov.querySelector('#mText');
+    inp.value = value || '';
+    ov.querySelector('#mNo').onclick = () => ov.remove();
+    ov.querySelector('#mYes').onclick = () => { const v = inp.value.trim(); if (!v) return; ov.remove(); onOk(v); };
+    inp.focus();
+  }
+
+  /* ---------------- 事件 ---------------- */
+  window.addEventListener('km-sync', e => {
+    const t = e.detail.type, d = e.detail.data || {};
+    if (t === 'state') render();
+    else if (t === 'action-result') {
+      const el = d.op === 'nodeJoin' && !(st && st.inGroup) ? $('startMsg') : $('groupMsg');
+      show(el, d.msg, d.ok ? 'good' : 'bad');
+      if (d.op === 'leave' && d.ok) show($('startMsg'), d.msg, 'good');
+      render();
+    } else if (t === 'join-code') showJoinCode(d);
+    else if (t === 'join-request') {
+      if (d.role === 'host') askJoin(d);
+      else {
+        hostName = d.name;
+        $('start').hidden = true;
+        $('joinWait').hidden = false;
+        $('joinWaitText').textContent = d.hint || ('请在「' + d.name + '」上确认，确认码：');
+        $('joinWaitCode').textContent = d.code;
+      }
+    } else if (t === 'join-result') {
+      if (d.role === 'guest' || joinRole === 'guest') {
+        joinRole = '';
+        $('joinWait').hidden = true;
+        if (d.ok) { backup(); show($('groupMsg'), d.msg + '，正在第一次同步…（同步前的备份在 下载/知识图谱/）', 'good'); }
+        else show($('startMsg'), d.msg, 'bad');
+      } else {
+        closeJoin(false);
+        show($('groupMsg'), d.msg, d.ok ? 'good' : 'bad');
+      }
+      render();
+    }
+  });
+  window.addEventListener('km-sync-merged', e => { if (e.detail && e.detail.text) show($('groupMsg'), e.detail.text, 'good'); });
+
+  /* ---------------- 按钮 ---------------- */
+  bindScan($('scanInvite'), $('startMsg'));
+  bindScan($('scanJoin'), $('startMsg'));
+  bindScan($('rescan'), $('groupMsg'));
+  $('btnManual').onclick = () => handleCode($('manual').value, $('startMsg'));
+  $('btnSync').onclick = () => { KMSync.publish(); A.syncNow(); show($('groupMsg'), '正在同步…'); };
+  $('btnAdd').onclick = () => { show($('groupMsg'), '正在生成加入码…'); A.joinOpen(); };
+  $('btnAddClose').onclick = () => closeJoin(true);
+  $('btnLeave').onclick = () => {
+    if (!confirm('退出同步组？\n本机学习数据保留，以后不再和别的设备同步。')) return;
+    A.syncLeave();
+  };
+  $('devices').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !st) return;
+    const dev = b.dataset.rename || b.dataset.remove;
+    const m = (st.members || []).find(x => x.dev === dev);
+    if (!m) return;
+    if (b.dataset.rename) askText('给「' + (m.name || '这台设备') + '」改个名字', m.name, v => A.syncRename(dev, v));
+    else if (confirm('移除「' + m.name + '」？\n移除后「' + m.name + '」不能再和你的设备同步，它上面已有的学习记录留在它自己那里。' +
+      '如果是丢了的设备，移除后它也拿不到以后的新数据。\n顺便看看列表里有没有不认识的设备。')) {
+      A.syncRemove(dev);
+      show($('groupMsg'), '正在移除「' + m.name + '」并更换同步钥匙…');
+    }
+  });
+
+  const start = () => { render(); KMSync.mergeNow(); };
+  if (A.ready) A.ready().then(start); else start();
+})();
+</script>
+</body>
+</html>

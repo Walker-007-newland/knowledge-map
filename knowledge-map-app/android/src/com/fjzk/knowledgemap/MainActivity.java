@@ -31,6 +31,9 @@ import android.widget.Toast;
 
 import org.json.JSONObject;
 
+import com.fjzk.knowledgemap.sync.SyncAndroid;
+import com.fjzk.knowledgemap.sync.SyncJson;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -73,6 +76,7 @@ public class MainActivity extends Activity {
     Updater updater;
     String pendingOpen;    // 总入口加载完后要接着打开的页面
     final BridgeGate gate = new BridgeGate();
+    SyncAndroid sync;      // 设备同步（需求 #1），事件只送主页面
 
     @Override
     protected void onCreate(Bundle state) {
@@ -98,6 +102,16 @@ public class MainActivity extends Activity {
         gate.setLog(new BridgeGate.Log() {
             public void denied(String method, String page) { Log.w("KMBridge", "KMBridge denied " + method + " on " + page); }
         });
+        sync = new SyncAndroid(this, new SyncAndroid.Sink() {
+            public void event(final String type, final String json) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        web.evaluateJavascript("window.__kmSyncEvent&&__kmSyncEvent(" + SyncJson.quote(type) + "," + SyncJson.quote(json) + ")", null);
+                    }
+                });
+            }
+        });
+        syncDevice();
         web.addJavascriptInterface(new Bridge(), "KMBridge");
         // 真机自检包（build.ps1 -SelfTest）才有 selftest/ 页面和 KMSelfTest；正式包里两者都没有
         if (hasAsset("www/selftest/bridge.html")) web.addJavascriptInterface(new SelfTest(), "KMSelfTest");
@@ -143,9 +157,27 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (sync != null) sync.onResume();
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         if (tts != null) tts.stop();
+        if (sync != null) sync.onPause();
+    }
+
+    /** 同步用的设备编号 = #2 的 km-device-v1（共享存储里那份，图谱页和听写页同一个） */
+    void syncDevice() {
+        File f = sharedFile("km-device-v1");
+        if (f == null || !f.isFile()) return;
+        try {
+            JSONObject o = new JSONObject(new String(readAll(f), StandardCharsets.UTF_8));
+            JSONObject v = new JSONObject(o.optString("v", "{}")).optJSONObject("value");
+            if (v != null) sync.setDevice(v.optString("id", ""), v.optString("name", ""));
+        } catch (Exception ignored) { }
     }
 
     @Override
@@ -435,7 +467,9 @@ public class MainActivity extends Activity {
                 File tmp = new File(f.getPath() + ".tmp");
                 FileOutputStream out = new FileOutputStream(tmp);
                 try { out.write(o.toString().getBytes(StandardCharsets.UTF_8)); } finally { out.close(); }
-                return tmp.renameTo(f) || (f.delete() && tmp.renameTo(f));
+                boolean done = tmp.renameTo(f) || (f.delete() && tmp.renameTo(f));
+                if (done && "km-device-v1".equals(key)) syncDevice();
+                return done;
             } catch (Exception e) { return false; }
         }
 
@@ -476,6 +510,97 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 public void run() { Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show(); }
             });
+        }
+        // ---------------- 设备同步（需求 #1）：只交明文分区，密钥都在 Java；页面限制见 BridgeGate 规则表
+
+        @JavascriptInterface
+        public String syncState(String token) {
+            if (!gate.check(token, "syncState", now())) return "";
+            return sync.state();
+        }
+
+        @JavascriptInterface
+        public void syncNow(String token) {
+            if (!gate.check(token, "syncNow", now())) return;
+            sync.syncNow();
+        }
+
+        @JavascriptInterface
+        public void syncPublish(String token, String json) {
+            if (!gate.check(token, "syncPublish", now()) || json == null) return;
+            sync.publish(json);
+        }
+
+        @JavascriptInterface
+        public String syncTake(String token) {
+            if (!gate.check(token, "syncTake", now())) return "";
+            return sync.take();
+        }
+
+        @JavascriptInterface
+        public void syncAck(String token, String json) {
+            if (!gate.check(token, "syncAck", now()) || json == null) return;
+            sync.ack(json);
+        }
+
+        @JavascriptInterface
+        public void nodeJoin(String token, String text) {
+            if (!gate.check(token, "nodeJoin", now()) || text == null) return;
+            sync.nodeJoin(text);
+        }
+
+        @JavascriptInterface
+        public void nodeRemove(String token) {
+            if (!gate.check(token, "nodeRemove", now())) return;
+            sync.nodeRemove();
+        }
+
+        @JavascriptInterface
+        public void joinOpen(String token) {
+            if (!gate.check(token, "joinOpen", now())) return;
+            sync.joinOpen();
+        }
+
+        @JavascriptInterface
+        public void joinClose(String token) {
+            if (!gate.check(token, "joinClose", now())) return;
+            sync.joinClose();
+        }
+
+        @JavascriptInterface
+        public String joinState(String token) {
+            if (!gate.check(token, "joinState", now())) return "";
+            return sync.joinState();
+        }
+
+        @JavascriptInterface
+        public void joinScan(String token, String text) {
+            if (!gate.check(token, "joinScan", now()) || text == null) return;
+            sync.joinScan(text);
+        }
+
+        @JavascriptInterface
+        public void joinConfirm(String token, boolean ok) {
+            if (!gate.check(token, "joinConfirm", now())) return;
+            sync.joinConfirm(ok);
+        }
+
+        @JavascriptInterface
+        public void syncRename(String token, String dev, String name) {
+            if (!gate.check(token, "syncRename", now()) || dev == null || name == null) return;
+            sync.rename(dev, name);
+        }
+
+        @JavascriptInterface
+        public void syncRemove(String token, String dev) {
+            if (!gate.check(token, "syncRemove", now()) || dev == null) return;
+            sync.remove(dev);
+        }
+
+        @JavascriptInterface
+        public void syncLeave(String token) {
+            if (!gate.check(token, "syncLeave", now())) return;
+            sync.leave();
         }
     }
 
