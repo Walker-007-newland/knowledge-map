@@ -11,6 +11,21 @@ $branch = "team/issue-$Issue"
 if (-not (Test-Path $wt)) { throw "找不到工作区 $wt" }
 if ($Notes -match '[“”]') { throw 'Notes 里不能用中文弯引号，请用「」' }
 
+# 多个需求单并行开发时，上线必须排队：同一时间只允许一个 release（抢 main、抢版本号）
+$lockPath = Join-Path (Split-Path $teach -Parent) 'teach-team-wt\.release-lock'
+$lock = $null
+$deadline = (Get-Date).AddMinutes(60)
+while (-not $lock) {
+  try { $lock = [IO.File]::Open($lockPath, 'CreateNew', 'Write', 'None') }
+  catch {
+    # 锁文件超过 90 分钟视为上次异常退出留下的，清掉重试
+    if ((Test-Path $lockPath) -and ((Get-Date) - (Get-Item $lockPath).LastWriteTime).TotalMinutes -gt 90) { Remove-Item $lockPath -Force; continue }
+    if ((Get-Date) -gt $deadline) { throw '等了 60 分钟仍有别的需求单在上线，稍后再试' }
+    Write-Host '另一个需求单正在上线，排队等待…'; Start-Sleep -Seconds 30
+  }
+}
+try {
+
 # 1. 合并最新 main
 git -C $wt merge main --no-edit
 if ($LASTEXITCODE) { git -C $wt merge --abort; Write-Host '和 main 有冲突'; exit 2 }
@@ -31,3 +46,6 @@ if ($LASTEXITCODE) { Write-Host '主目录 main 无法快进'; exit 3 }
 git -C $teach worktree remove $wt --force
 git -C $teach branch -d $branch
 Write-Host "上线完成：#$Issue"
+} finally {
+  $lock.Dispose(); Remove-Item $lockPath -Force -ErrorAction SilentlyContinue
+}
