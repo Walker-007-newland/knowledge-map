@@ -88,17 +88,17 @@
   }
   // 平板 App 里、桌面上还没有小狗小部件
   function noWidget() {
-    try { return !!(window.KMBridge && KMBridge.widgetCount && KMBridge.widgetCount() === 0); } catch (e) { return false; }
+    try { return !!(window.KMApp && KMApp.widgetCount && KMApp.widgetCount() === 0); } catch (e) { return false; }
   }
   renderPet();
   window.addEventListener('pageshow', renderPet);   // 从图谱或宠物页返回时刷新
 </script>
 <script>
   // 只有在平板 App 里才有更新按钮
-  if (window.KMBridge && KMBridge.checkUpdate) {
+  if (window.KMApp && KMApp.checkUpdate) {
     var b = document.getElementById('btnUpdate');
     b.hidden = false;
-    b.onclick = function () { KMBridge.checkUpdate(); };
+    b.onclick = function () { KMApp.checkUpdate(); };
   }
 </script>
 </body>

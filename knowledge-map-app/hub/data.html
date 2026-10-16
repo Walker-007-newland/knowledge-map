@@ -101,13 +101,13 @@
 <script>
 (function () {
   const D = window.KMData, $ = id => document.getElementById(id);
-  const inApp = !!(window.KMBridge && KMBridge.saveFile);
+  const inApp = !!(window.KMApp && KMApp.saveFile);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const where = inApp ? '下载/知识图谱/' : '浏览器「下载」文件夹里的 ';
 
   function download(name, obj) {
     const text = JSON.stringify(obj, null, 1);
-    if (inApp) { KMBridge.saveFile(name, text); return; }     // 原生保存到 下载/知识图谱/，并弹出提示
+    if (inApp) { KMApp.saveFile(name, text); return; }     // 原生保存到 下载/知识图谱/，并弹出提示
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
     a.download = name;
@@ -206,6 +206,7 @@
   $('btnDone').onclick = () => { $('done').hidden = true; };
 
   renderOverview();
+  D.ready().then(renderOverview);     // App 里拿到令牌、和共享存储对齐后（设备名、听写词单）再刷新一次
   window.addEventListener('pageshow', renderOverview);
 })();
 </script>

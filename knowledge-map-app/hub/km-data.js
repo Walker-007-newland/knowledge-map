@@ -7,7 +7,9 @@
 //    修改记录写进 km-meta-v1：{ 键: { 条目id: { t: 修改时间, by: 设备, x: 删除时间, v: 删除前的内容, vers: 草稿各设备版本 } } }
 //    写完发 window 事件 'km-data-change'，detail = { keys: [...] }
 // 2. 设备编号：km-device-v1 = { id, name, created }（App 里同时存一份到原生共享存储，听写页和图谱页用同一个编号）
-// 3. 听写词单在 https 虚拟地址的另一份 localStorage 里：经 KMBridge.sharedGet / sharedPut 和图谱页互通
+// 3. 听写词单在 https 虚拟地址的另一份 localStorage 里：经 KMApp.sharedGet / sharedPut（km-shim.js 的门面，自动带令牌）和图谱页互通。
+//    令牌要等 KMApp.ready()：之前读不到共享存储，所以设备编号先用本空间的，ready 后再和共享存储对齐（共享里的为准）、
+//    听写页 ready 后才合并共享存储里的词单；ready 之前设备编号和听写页的自动同步都不写共享存储。KMData.ready() 在对齐完成后兑现
 // 4. merge(a, b) 是纯函数：不读写存储、不读当前时间；幂等、对称、满足结合律（三台设备按任意顺序合并结果都一样），
 //    输出的对象属性排好序，同样的输入在任何设备上得到一字不差的结果。
 //    做法：每种数据的合并都是“取上界”——数取大/取小、集合取并集、“取较新”按 (时间, 设备编号, JSON 文本) 的全序取最大
@@ -108,8 +110,10 @@
   /* ---------------- 本机存储 ---------------- */
   let ls = null;
   try { ls = window.localStorage; } catch (e) { ls = null; }
-  const B = window.KMBridge;
+  const B = window.KMApp;
   const hasShared = !!(B && B.sharedGet && B.sharedPut);
+  // 能读写原生共享存储了（拿到令牌）；不在 App 里时没有共享存储，视为一直就绪
+  const sharedReady = () => !hasShared || B.isReady();
   const nativeSet = Storage.prototype.setItem, nativeRemove = Storage.prototype.removeItem;
   function rawSet(k, v) { try { nativeSet.call(ls, k, v); } catch (e) { /* 存不了就算了 */ } }
   function parse(raw) { try { return JSON.parse(raw); } catch (e) { return raw; } }
@@ -150,6 +154,7 @@
       return isObj(v) ? v : null;
     } catch (e) { return null; }
   }
+  // 令牌没到时 KMApp.sharedPut 会排队，到了再写（导入写回不会丢）
   function sharedWrite(key, value, meta) {
     if (!hasShared) return;
     try { B.sharedPut(key, JSON.stringify({ value, meta: meta || {} }), Date.now()); } catch (e) { /* 忽略 */ }
@@ -168,6 +173,12 @@
   }
   /** 本机设备编号 { id: 16 位十六进制, name, created } */
   function device() {
+    if (!sharedReady()) {
+      // 令牌还没到：先用本空间的编号（没有就新建一个存下来），不缓存、不碰共享存储，ready 后再对齐
+      let d = readLocal(DEVICE);
+      if (!isObj(d) || !d.id) { d = { id: newId(), created: Date.now(), name: deviceName() }; rawSet(DEVICE, JSON.stringify(d)); }
+      return d;
+    }
     if (dev) { const cur = readLocal(DEVICE); if (!isObj(cur) || cur.id !== dev.id) rawSet(DEVICE, JSON.stringify(dev)); return dev; }
     let d = readLocal(DEVICE);
     if (!isObj(d) || !d.id) d = null;
@@ -251,7 +262,7 @@
     });
     saveMeta(prune(meta, now));
     // 听写页写了词单：同步到原生共享存储，图谱页那边的「我的数据」才能导出它
-    if (hasShared && location.protocol !== 'file:') keys.forEach(key => { if (byKey[key].store === 'shared') sharedWrite(key, readLocal(key), meta[key]); });
+    if (hasShared && B.isReady() && location.protocol !== 'file:') keys.forEach(key => { if (byKey[key].store === 'shared') sharedWrite(key, readLocal(key), meta[key]); });
     try { window.dispatchEvent(new CustomEvent('km-data-change', { detail: { keys } })); } catch (e) { /* 忽略 */ }
   }
 
@@ -836,8 +847,12 @@
   const fileName = () => '知识图谱-全部学习数据-' + stamp() + '.json';
   const backupName = () => '知识图谱-导入前备份-' + stamp(true) + '.json';
 
+  // App 里：拿到令牌后对齐设备编号（共享存储里的为准）、听写页合并共享存储里的词单；浏览器里立即就绪
+  const ready = hasShared ? B.ready().then(() => { try { dev = null; device(); syncShared(); } catch (e) { /* 忽略 */ } }) : Promise.resolve();
+
   window.KMData = {
     SCHEMA, KEYS, META, DEVICE,
+    ready: () => ready,
     device, collect, merge, apply, parseFile, summary, fileName, backupName,
     // 小狗和学习时长用：骨头公式、迁移
     petBones, normPet, normStudy, ownedPrice, uniqClaimed,
@@ -847,5 +862,4 @@
     _flush: flush, _canon: canon, _resetDevice: () => { dev = null; }, _itemsOf: (key, v) => itemsOf(byKey[key], v), _sharedRead: sharedRead
   };
 
-  syncShared();
 })();
