@@ -71,6 +71,13 @@
       st.spent = m.spent; st.legacy = m.legacy;
       try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) { /* 忽略 */ }
     }
+    // #7：#2 上线后的导入曾按去重数重算经验，小狗可能降了一级 → 同一只狗（born 相同）从升级前的备份恢复经验。
+    // xp 只会变大，条件自然只成立一次；不是同一只狗不动；claimed、spent、legacy、bones 都不碰
+    const bk = readJSON(STORE + '-backup');
+    if (bk && bk.breed && bk.born != null && bk.born === st.born && (+bk.xp || 0) > (+st.xp || 0)) {
+      st.xp = +bk.xp;
+      try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) { /* 忽略 */ }
+    }
     return st;
   }
   function save(st) {
