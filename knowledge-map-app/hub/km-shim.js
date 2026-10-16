@@ -57,6 +57,13 @@
   try { Object.defineProperty(window, 'KMApp', { value: A, writable: false, configurable: false }); }
   catch (e) { return; }
   hello();
+  // 从往返缓存里恢复的页面（返回键回来，没有重新加载）：手里的令牌可能早已作废，重新要一张，期间的调用照样排队
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    token = '';
+    clearTimeout(retry);
+    hello();
+  });
 
   // 1. “备份进度”用 blob 链接下载，WebView 不支持，改由原生保存到“下载”目录
   var blobs = {}, createURL = URL.createObjectURL;

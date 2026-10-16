@@ -164,6 +164,21 @@
       ok(Object.isFrozen(A), 'KMApp 被冻结，不能替换方法');
     });
 
+    await test('从往返缓存恢复的页面重新要令牌', async () => {
+      const { w, m } = await page({ auto: false });
+      const t1 = randTok(), t2 = randTok();
+      m.send(t1);
+      w.dispatchEvent(new w.PageTransitionEvent('pageshow', { persisted: false }));
+      eq(m.hellos, 1, '普通的 pageshow 不重新要');
+      w.dispatchEvent(new w.PageTransitionEvent('pageshow', { persisted: true }));
+      eq(m.hellos, 2, '恢复时重新 hello()');
+      ok(!w.KMApp.isReady(), '旧令牌不再使用');
+      w.KMApp.checkUpdate();
+      eq(m.calls.length, 0, '新令牌到之前排队');
+      m.send(t2);
+      eq(m.calls, [['checkUpdate', t2]], '新令牌到后带新令牌发出');
+    });
+
     await test('3 秒还没拿到令牌就再要一次', async () => {
       const { w, m } = await page({ auto: true, ignoreFirst: true, delay: 10 });
       w.KMApp.saveFile('b.json', 'x');
