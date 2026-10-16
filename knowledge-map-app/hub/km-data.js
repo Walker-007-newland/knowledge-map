@@ -490,8 +490,8 @@
     return m ? +m[1] * 10000 + +m[2] * 100 + +m[3] : 0;
   }
   const isPet = v => isObj(v) && !!v.breed;
+  // 经验 xp 不在这里重算（#7）：取「去重后的已领知识点数」和两边各自 xp 的最大值（见 joinPet），等级不会因合并倒退；骨头与 xp 无关
   function finishPet(r) {
-    r.xp = uniqClaimed(r);
     r.bones = petBones(r);
     return r;
   }
@@ -535,6 +535,8 @@
     r.petDay = pd.petDay; r.petCount = pd.petCount || 0;
     const ls2 = jMax(a.lastStudy, b.lastStudy);
     if (ls2 !== undefined) r.lastStudy = ls2;
+    // 经验：取上界（max 满足交换、结合、幂等）。旧数据 claimed 有重复时 xp 比去重数大，保留学生已经看到的等级
+    r.xp = Math.max(uniqClaimed(r), +a.xp || 0, +b.xp || 0);
     return finishPet(r);
   }
 
@@ -616,7 +618,7 @@
       if (L.keys[k] !== undefined) { const c = mergeKey(byKey[k], sa, sa).val; if (c !== undefined) before[k] = sortDeep(c); }
     });
     const result = sortDeep({ keys, meta });
-    return { result, report: makeReport(before, I, result) };
+    return { result, report: makeReport(before, I, result, L) };
   }
 
   /* ---------------- 合并报告（给学生看的变化清单） ---------------- */
@@ -642,7 +644,7 @@
     return n;
   }
   function petLevel(xp) { return window.KMPet ? KMPet.level(xp || 0) : 1; }
-  function makeReport(LK, I, result) {
+  function makeReport(LK, I, result, L) {
     const items = [];
     let conflicts = 0;
     const order = k => { const i = KEYS.findIndex(s => s.key === k); return i < 0 ? KEYS.length : i; };
@@ -679,13 +681,14 @@
         }));
         conflicts += c;
         const d0 = draftCount(before), d1 = draftCount(after);
-        if (d1 > d0) parts.push('新增 ' + (d1 - d0) + ' 篇');
-        if (c) parts.push(c + ' 篇两台设备写的不一样，两份都保留了');
         let edited = 0;
         Object.keys(a).forEach(id => Object.keys(isObj(a[id]) ? a[id] : {}).forEach(q => {
           const o = isObj(b[id]) && isObj(b[id][q]) ? b[id][q] : undefined;
           if (o && !same(o, a[id][q])) edited++;
         }));
+        if (!d0 && !d1 && !c && !edited) return;     // 前后都没有写了字的草稿：不报（不落到兜底的「新增」）
+        if (d1 > d0) parts.push('新增 ' + (d1 - d0) + ' 篇');
+        if (c) parts.push(c + ' 篇两台设备写的不一样，两份都保留了');
         if (edited > c) parts.push((edited - c) + ' 篇换成了另一台设备上较新的版本');
       } else if (kind === 'study') {
         const m0 = studyMinutes(before), m1 = studyMinutes(after);
@@ -698,11 +701,17 @@
           if (isPet(other) && (other.born !== before.born)) parts.push('两只小狗合并为「' + after.name + '」');
           else if (before.name !== after.name) parts.push('名字改为「' + after.name + '」');
           if (before.bones !== after.bones) parts.push('骨头 ' + before.bones + ' → ' + after.bones);
+          const lv0 = petLevel(before.xp), lv1 = petLevel(after.xp);
+          if (lv0 !== lv1) parts.push('等级 Lv.' + lv0 + ' → Lv.' + lv1);
           const x0 = uniqClaimed(before), x1 = uniqClaimed(after);
           if (x1 !== x0) parts.push('已领知识点 ' + (x1 > x0 ? '+' : '−') + Math.abs(x1 - x0) + '（共 ' + x1 + ' 个）');
           const own0 = new Set(before.owned || []).size, own1 = new Set(after.owned || []).size;
           if (own1 !== own0) parts.push('装扮 ' + own0 + ' → ' + own1 + ' 件');
-          if (!same(before.equip || {}, after.equip || {})) parts.push('换上了另一台设备的穿戴');
+          if (!same(before.equip || {}, after.equip || {})) {
+            // 两边都没有换装时间（升级前的记录）：只能按固定次序选一边（保证合并顺序无关），说明一下
+            const noT = !(+before.equipT) && !(isPet(other) && +other.equipT);
+            parts.push(noT ? '换上了另一台设备的穿戴（两边都是升级前的记录，分不出先后；可以到宠物页换回来）' : '换上了另一台设备的穿戴');
+          }
           if (before.breed !== after.breed && !(isPet(other) && other.born !== before.born)) parts.push('品种改为另一台设备上的');
           if (before.petDay !== after.petDay || (+before.petCount || 0) !== (+after.petCount || 0)) parts.push('今天摸摸的次数有更新');
           if (!parts.length) parts.push('补上了另一台设备的喂食、学习记录（骨头、等级不变）');
@@ -716,7 +725,12 @@
         if (plus) parts.push('新增 ' + plus + ' 个词单');
         if (minus) parts.push('删除 ' + minus + ' 个词单');
         if (upd) parts.push(upd + ' 个词单有更新');
-        if (!same(b.settings, a.settings)) parts.push('听写设置换成较新的');
+        if (!same(b.settings, a.settings)) {
+          const noT = !entryOf(L && L.meta[k], '@settings').t && !entryOf(I.meta[k], '@settings').t;
+          if (b.settings === undefined) parts.push('加上另一台设备的听写设置');
+          else if (noT) parts.push('听写设置用了另一台设备的（两边都是升级前的记录，分不出先后；可以在听写页改回来）');
+          else parts.push('听写设置换成较新的');
+        }
       }
       if (!parts.length) {
         if (before === undefined) parts.push('新增');
@@ -794,7 +808,7 @@
     if (prefix && isObj(data.progress)) {
       const keys = {};
       keys[prefix + '-progress-v1'] = data.progress;
-      if (isObj(data.drafts)) keys[prefix + '-drafts-v1'] = data.drafts;
+      if (isObj(data.drafts) && draftCount(data.drafts) > 0) keys[prefix + '-drafts-v1'] = data.drafts;     // 空草稿不带（#7）
       return { ok: true, legacy: byKey[prefix + '-progress-v1'].name, pkg: { device: { id: 'legacy-' + data.app, name: '旧的单科备份' }, keys, meta: {}, exported: data.exported } };
     }
     return bad;
