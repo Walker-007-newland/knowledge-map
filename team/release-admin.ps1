@@ -7,7 +7,8 @@
 # Notes 里不能用中文弯引号，用「」
 param([Parameter(Mandatory)][int]$Issue, [Parameter(Mandatory)][string]$Notes, [switch]$SkipNode, [switch]$SkipAdmin)
 $ErrorActionPreference = 'Stop'
-$teach = Split-Path $PSScriptRoot -Parent
+# 主目录：从工作区里运行（本脚本第一次上线前只在工作区里有）也能找到
+$teach = Split-Path (git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir).Trim() -Parent
 $wt = Join-Path (Split-Path $teach -Parent) "teach-team-wt\issue-$Issue"
 $branch = "team/issue-$Issue"
 if (-not (Test-Path $wt)) { throw "找不到工作区 $wt" }
