@@ -15,6 +15,7 @@ import org.json.JSONObject;
 /** 管理员审批 App：网页界面在 assets/www，网络请求走原生桥（不受 CORS 限制，token 不进网页存储）。 */
 public class MainActivity extends Activity {
     private WebView web;
+    private Updater updater;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -37,6 +38,8 @@ public class MainActivity extends Activity {
         setContentView(web);
         web.loadUrl("file:///android_asset/www/index.html");
         CheckJob.schedule(this);
+        updater = new Updater(this);
+        updater.check(false);   // 每次打开静默检查，有新版才弹窗
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1);
         }
@@ -46,6 +49,12 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.evaluateJavascript("window.onAppResume && window.onAppResume()", null);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (updater != null) updater.destroy();
+        super.onDestroy();
     }
 
     @Override
@@ -66,6 +75,12 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String repo() { return Gh.REPO; }
+
+        @JavascriptInterface
+        public String version() { return updater.currentVersion(); }
+
+        @JavascriptInterface
+        public void checkUpdate() { runOnUiThread(() -> updater.check(true)); }
 
         /** 异步请求，完成后回调 window.__ghDone(id, status, text)。 */
         @JavascriptInterface

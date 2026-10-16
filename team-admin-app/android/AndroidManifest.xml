@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- 在线更新：下载新版后交给系统安装器 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:label="团队审批"
@@ -24,6 +26,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="com.fjzk.teamadmin.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <service
             android:name=".CheckJob"
             android:permission="android.permission.BIND_JOB_SERVICE"

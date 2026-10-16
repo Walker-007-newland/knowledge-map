@@ -94,6 +94,7 @@
     <h1 id="title">团队审批</h1>
     <button id="newReq" title="提一个需求">＋ 需求</button>
     <button id="refresh" title="刷新">刷新</button>
+    <button id="settings" title="设置与更新" aria-label="设置">⚙</button>
   </div>
   <div class="tabs" id="tabs"></div>
 </header>
@@ -508,8 +509,14 @@ function renderNew() {
 function renderSetup() {
   stopOffice();
   current = { number: -2 }; $('tabs').hidden = true; $('actions').hidden = true; $('back').hidden = !window.Native || !Native.hasToken();
-  $('title').textContent = '设置';
-  $('main').innerHTML = `<div class="card form">
+  $('title').textContent = '设置'; $('newReq').hidden = true;
+  const ver = window.Native && Native.version ? Native.version() : '浏览器预览';
+  $('main').innerHTML = `<div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1"><b>团队审批</b> <span class="hint">版本 ${esc(ver)}</span>
+      <div class="hint">每次打开会自动检查新版本，有新版会弹窗提示。</div></div>
+      <button id="upd">检查更新</button></div></div>
+    <div class="card form">
+    ${hasToken() ? '<div class="hint" style="margin-bottom:8px">已设置 token。如需更换，粘贴新的 token 后保存。</div>' : ''}
     <div class="hint">需要一个只能访问团队看板仓库的 GitHub token（只存在本机）：
       <ol><li>电脑浏览器打开 github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new token</li>
       <li>Repository access 选 <b>Only select repositories</b> → <code>${esc(REPO)}</code></li>
@@ -517,6 +524,7 @@ function renderSetup() {
       <li>生成后复制，粘贴到下面</li></ol></div>
     <label for="tk">Token</label><input id="tk" type="password" autocomplete="off" placeholder="github_pat_…">
     <div class="row"><button class="primary" id="tks">保存并检查</button></div></div>`;
+  $('upd').onclick = () => window.Native && Native.checkUpdate ? Native.checkUpdate() : toast('只有在 App 里才能更新');
   $('tks').onclick = async () => {
     const v = $('tk').value.trim(); if (!v) return toast('请粘贴 token');
     if (window.Native) Native.setToken(v);
@@ -532,7 +540,7 @@ setInterval(() => { if (tab === 'office' && !current && hasToken() && !document.
 $('back').onclick = () => (current && current.number === -2 && hasToken()) ? (current = null, load()) : window.goBack();
 $('refresh').onclick = () => load();
 $('newReq').onclick = renderNew;
-$('title').ondblclick = renderSetup;
+$('settings').onclick = renderSetup;
 
 // ---------- 浏览器预览用假数据 ----------
 function mockApi(method, path, body) {
