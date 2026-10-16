@@ -14,7 +14,7 @@ token 读 knowledge-map-app/signing/github-token.txt（已 gitignore，不要打
   python team/gh.py history [天数]              最近关闭的需求单（去重用），默认 60 天
   python team/gh.py status <角色> <状态> <在做什么> [编号]
                                                 上报自己的状态，管理员 App「办公室」页实时显示
-                                                角色：需求员/产品/开发/测试；状态：工作中/空闲/阻塞
+                                                角色：需求员/产品/开发/开发2/开发3/测试/CEO；状态：工作中/空闲/阻塞
   python team/gh.py setup                       建仓库标签和团队状态单（只需一次）
 正文文件写成 UTF-8 的 .md，避免命令行中文编码问题。
 """
@@ -41,7 +41,7 @@ STATES = {
 }
 PREFIX = '状态:'
 STATUS_LABEL = '团队状态'          # 这张单只存团队成员的实时状态，不是需求
-ROLES = ['需求员', '产品', '开发', '测试']
+ROLES = ['需求员', '产品', '开发', '开发2', '开发3', '测试', 'CEO']  # 开发2/开发3：并行开发时的工位；CEO：调度员兼审批员
 MEMBER_STATES = {'工作中': 'working', '空闲': 'idle', '阻塞': 'blocked'}
 
 
