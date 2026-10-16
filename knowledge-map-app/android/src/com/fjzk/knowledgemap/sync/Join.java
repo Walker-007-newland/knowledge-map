@@ -16,6 +16,7 @@ import static com.fjzk.knowledgemap.sync.SyncCrypto.*;
 final class Join {
     static final long TTL = 10 * 60 * 1000L;        // 等于转交点有效期
     static final long GUEST_HINT = 60 * 1000L;
+    static final int RDV_MSGS = 8, RDV_BYTES = 16 * 1024;   // 节点上每个转交点的上限（PROTOCOL.md 第 2 节）
 
     final boolean host;
     final byte[] s;

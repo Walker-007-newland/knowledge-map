@@ -415,6 +415,27 @@ public class SyncHarness {
         String r3e = r3.last("action-result");
         check(thrown == null && r3e != null && r3e.contains("连不上"), "节点连不上（hello 不通）：建组回「同步节点连不上…」，不抛出", r3e);
         new File(d2, "out").delete();
+
+        // group.json 本身是乱码：要明确提示；下次建组时旧的 group.json、out/、inbox/ 全部清掉，不带进新组
+        Dev k = new Dev("devK", "文件坏了的平板");
+        k.m.setDevice("devK", "文件坏了的平板");
+        new File(k.dir, "out").mkdirs();
+        new File(k.dir, "inbox").mkdirs();
+        Files.write(new File(k.dir, "group.json").toPath(), "这不是 JSON".getBytes(StandardCharsets.UTF_8));
+        Files.write(new File(k.dir, "out/0123456789abcdef0123.json").toPath(), "{\"name\":\"旧组的分区\",\"rev\":1}".getBytes(StandardCharsets.UTF_8));
+        Files.write(new File(k.dir, "inbox/0123456789abcdef0123.json").toPath(), "{\"dev\":\"old\",\"name\":\"旧组的收件\",\"rev\":1}".getBytes(StandardCharsets.UTF_8));
+        Files.write(new File(k.dir, "node.json").toPath(), "{\"g\":{\"aaaa\":{\"since\":99}}}".getBytes(StandardCharsets.UTF_8));
+        k.restart();
+        Map<String, Object> ks = k.state();
+        check(!SyncJson.b(ks, "inGroup") && SyncJson.s(ks, "notice").contains("同步文件损坏") && SyncJson.s(ks, "notice").contains("重新加入"),
+            "group.json 是乱码：明确提示「同步文件损坏了……需要重新加入同步组」", k.m.state());
+        Map<String, Object> kj = SyncJson.obj(k.m.nodeJoin(fixPort(invite(node), node)));
+        track(k);
+        boolean clean = !new File(k.dir, "out/0123456789abcdef0123.json").exists() && !new File(k.dir, "inbox/0123456789abcdef0123.json").exists()
+            && SyncJson.l(SyncJson.parse(k.m.take())).isEmpty() && !k.m.cids().containsKey("旧组的分区")
+            && !SyncJson.stringify(k.m.st.json("node.json")).contains("aaaa");
+        check(SyncJson.b(kj, "ok") && clean && SyncJson.s(k.state(), "notice").isEmpty(), "重新建组时旧的 group.json、node.json、out/、inbox/ 都清掉了，没带进新组", kj + " " + k.m.cids());
+        k.m.leave();
     }
 
     static void track2(SyncService s) {
@@ -451,33 +472,76 @@ public class SyncHarness {
 
     static void scenarioJoinSecurity(NodeCtl node, Dev a, Dev b) throws IOException {
         section("3. 加入码：篡改、冒充、否认、过期");
-        // 节点篡改 ②
+        // 节点篡改 ②：A 解不开，不弹窗、继续等；D 等不到组包；10 分钟后这张码过期
         Dev d = new Dev("devD", "陌生设备D");
         Map<String, Object> o = SyncJson.obj(a.m.joinOpen());
         Map<String, Object> s = SyncJson.obj(d.m.joinScan(SyncJson.s(o, "text")));
         check(SyncJson.b(s, "ok"), "D 扫码，放好 ②", s);
         node.cmd("cmd", "rdv_tamper", "rid", a.m.join.rid, "side", "b");
-        a.m.joinPoll();
+        long next = a.m.joinPoll();
         Map<String, Object> hs = SyncJson.obj(a.m.joinState());
-        check("bad".equals(SyncJson.s(hs, "phase")) && SyncJson.s(hs, "msg").contains("解不开"), "节点篡改 ② 后 A 解不开、这张码作废", hs);
-        check(!SyncJson.b(SyncJson.obj(a.m.joinConfirm(true)), "ok"), "作废后不能再确认");
+        check("wait".equals(SyncJson.s(hs, "phase")) && next > 0 && SyncJson.s(hs, "code").isEmpty(), "节点篡改 ② 后 A 解不开：不弹窗、不作废，继续等", hs);
+        check(!SyncJson.b(SyncJson.obj(a.m.joinConfirm(true)), "ok"), "没有等待确认的设备，确认不了");
         d.m.joinPoll();
         check(!d.m.inGroup(), "D 拿不到组包");
+        if (!node.remote) {
+            node.cmd("cmd", "advance", "sec", 601);
+            a.clock.offset += 601000;
+            a.m.joinPoll();
+            check("expired".equals(SyncJson.s(SyncJson.obj(a.m.joinState()), "phase")), "篡改后一直解不开：10 分钟后这张加入码过期作废");
+            node.cmd("cmd", "advance", "sec", -601);
+            a.clock.offset -= 601000;
+        }
+        a.m.joinClose();
+        NodeClient raw = new NodeClient(node.host, node.port, (gg, at) -> at);
 
-        // 旁观者只看到转交点编号（URL），抢先往 b 边塞垃圾、再原样重放 ①：A 跳过解不开的，照样认出真正的新设备
+        // 只有垃圾：A 仍在等；之后真设备扫码，A 照样认出来
         Dev q = new Dev("devQ", "学生的手机");
         o = SyncJson.obj(a.m.joinOpen());
-        NodeClient raw = new NodeClient(node.host, node.port, (gg, at) -> at);
         String rid0 = a.m.join.rid;
         try {
             raw.rdvPut(rid0, "b", SyncCrypto.rand(120));
-            for (byte[] x : raw.rdvGet(rid0, "b")) raw.rdvPut(rid0, "b", x);
+            for (byte[] x : raw.rdvGet(rid0, "b")) raw.rdvPut(rid0, "b", x);      // 再把 ① 原样重放到 b 边
         } catch (NodeClient.NodeError ignored) { }
+        next = a.m.joinPoll();
+        hs = SyncJson.obj(a.m.joinState());
+        check("wait".equals(SyncJson.s(hs, "phase")) && next > 0, "转交点里只有旁观者塞的垃圾和重放的 ①：A 仍在等（phase=wait）", hs);
         Map<String, Object> sq = SyncJson.obj(q.m.joinScan(SyncJson.s(o, "text")));
         a.m.joinPoll();
         hs = SyncJson.obj(a.m.joinState());
         check("学生的手机".equals(SyncJson.s(hs, "name")) && SyncJson.s(hs, "code").equals(SyncJson.s(sq, "code")),
-            "转交点被旁观者塞了垃圾、重放了 ①：A 仍认出真正的新设备，确认码一致", hs);
+            "之后真设备扫码：A 认出真正的新设备，确认码一致", hs);
+        a.m.joinConfirm(false);
+
+        // 垃圾和真消息交错：垃圾、真 ②、垃圾
+        Dev q2 = new Dev("devQ2", "学生的平板");
+        o = SyncJson.obj(a.m.joinOpen());
+        String rid1 = a.m.join.rid;
+        try { raw.rdvPut(rid1, "b", SyncCrypto.rand(200)); } catch (NodeClient.NodeError ignored) { }
+        Map<String, Object> sq2 = SyncJson.obj(q2.m.joinScan(SyncJson.s(o, "text")));
+        try { raw.rdvPut(rid1, "b", SyncCrypto.rand(90)); raw.rdvPut(rid1, "b", SyncCrypto.rand(5000)); } catch (NodeClient.NodeError ignored) { }
+        a.m.joinPoll();
+        hs = SyncJson.obj(a.m.joinState());
+        check("学生的平板".equals(SyncJson.s(hs, "name")) && SyncJson.s(hs, "code").equals(SyncJson.s(sq2, "code")), "垃圾和真消息交错：A 跳过垃圾认出真设备", hs);
+        a.m.joinConfirm(false);
+
+        // 大量垃圾把转交点塞满（节点上限 8 条 / 16KB）：真设备放不进来，两边都给出「请重新生成」
+        Dev q3 = new Dev("devQ3", "晚到的手机");
+        o = SyncJson.obj(a.m.joinOpen());
+        String rid2 = a.m.join.rid;
+        int put = 0;
+        for (int i = 0; i < 20; i++) { try { raw.rdvPut(rid2, "b", SyncCrypto.rand(1500)); put++; } catch (NodeClient.NodeError e) { break; } }
+        Map<String, Object> sq3 = SyncJson.obj(q3.m.joinScan(SyncJson.s(o, "text")));
+        a.m.joinPoll();
+        hs = SyncJson.obj(a.m.joinState());
+        check(!SyncJson.b(sq3, "ok") && SyncJson.s(sq3, "msg").contains("重新生成") && "full".equals(SyncJson.s(hs, "phase")) && SyncJson.s(hs, "msg").contains("重新生成"),
+            "大量垃圾（塞进 " + put + " 条后节点拒收）：新设备提示「请重新生成」，A 提示「被陌生消息占满了，请重新生成」，不会一直卡着", sq3 + " / " + hs);
+        a.m.joinClose();
+        Dev q4 = new Dev("devQ4", "重新生成后的手机");
+        o = SyncJson.obj(a.m.joinOpen());
+        Map<String, Object> sq4 = SyncJson.obj(q4.m.joinScan(SyncJson.s(o, "text")));
+        a.m.joinPoll();
+        check("confirm".equals(SyncJson.s(SyncJson.obj(a.m.joinState()), "phase")) && SyncJson.b(sq4, "ok"), "重新生成一张加入码就能照常加入");
         a.m.joinConfirm(false);
 
         // 拍到二维码的陌生人抢先扫：A 弹窗里的名字和确认码对不上

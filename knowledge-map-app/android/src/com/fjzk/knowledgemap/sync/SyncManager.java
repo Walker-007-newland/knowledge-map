@@ -60,11 +60,11 @@ public final class SyncManager {
         this.clock = clock;
         loadDevice();
         g = Group.load(st);
-        if (g == null && st.json("group.json") != null) {
+        if (g == null && (new java.io.File(st.dir, "group.json").exists() || new java.io.File(st.dir, "group.json.tmp").exists())) {
             // Keystore 钥匙读不出来（个别机型刷机、换锁屏后会这样，也可能只是暂时的）：当作没加入组，先不删文件，
             // 学生重新建组 / 加入时再清掉。学习数据不受影响
             keyLost = true;
-            notice = "这台设备的同步钥匙读不出来了（系统重置过锁屏或钥匙库），需要重新加入同步组；本机学习数据不受影响";
+            notice = "这台设备的同步文件损坏了或钥匙读不出来了（比如系统重置过锁屏），需要重新加入同步组；本机学习数据不受影响";
         }
         Map<String, Object> ns = st.json("node.json");
         if (ns != null) {
@@ -109,7 +109,9 @@ public final class SyncManager {
      * 旧的同步文件解不开时先清掉。
      */
     void ensureKey() {
-        if (keyLost) { st.wipeGroup(); keyLost = false; }
+        // 不在组里时建组 / 加入：先清掉旧的 group.json、node.json、out/、inbox/（损坏的、以前组留下的），绝不带进新组
+        if (g == null) st.wipeGroup();
+        keyLost = false;
         if (sk != null) return;
         KeyPair kp = newKeyPair();
         sk = kp.getPrivate();
@@ -917,7 +919,7 @@ public final class SyncManager {
         } catch (IOException e) {
             return res(false, "同步节点连不上（" + j.nodeHost + ":" + j.nodePort + "），请检查网络");
         } catch (NodeClient.NodeError e) {
-            if (e.status == 413) return res(false, "这张加入码已经被用过了，请重新生成");
+            if (e.status == 413) return res(false, "这张加入码已经用不了了（被用过或被占满），请在另一台设备上重新生成");
             return res(false, "同步节点出错（" + e.status + " " + e.err + "）");
         }
         j.code = Join.confirmCode(j.s, j.peerPk, pk);
@@ -979,14 +981,26 @@ public final class SyncManager {
             if (j.host) {
                 List<byte[]> bs = nc.rdvGet(j.rid, "a");
                 if (bs.isEmpty()) return 3000;
-                // 取第一条解得开的：路上的旁观者只知道转交点编号、不知道 s，往里塞的垃圾解不开，跳过；全都解不开才判篡改
+                // 解不开的一律忽略、继续等（路上的旁观者只知道转交点编号、不知道 s，塞进来的垃圾解不开），
+                // 直到解开一条或 10 分钟到期。只看节点允许的最多条数、每条超过 4KB 的不解（② 不到 300 字节）
                 Map<String, Object> c = null;
-                for (byte[] b : bs) { c = j.openHello(b, 2); if (c != null) break; }
+                int n = 0, size = 0;
+                for (byte[] b : bs) {
+                    if (++n > Join.RDV_MSGS) break;
+                    size += b.length;
+                    if (b.length > 4096) continue;
+                    c = j.openHello(b, 2);
+                    if (c != null) break;
+                }
                 if (c == null) {
-                    j.phase = "bad";
-                    j.msg = "收到的加入请求解不开（可能被篡改），这张加入码作废了，请重新生成";
-                    emit("join-result", SyncJson.of("ok", false, "role", "host", "msg", j.msg));
-                    return -1;
+                    // 节点上每个转交点最多 8 条、合计 16KB（PROTOCOL.md）：被垃圾占满时真设备也放不进来，只能换一张加入码
+                    if (bs.size() + 1 >= Join.RDV_MSGS || size + 400 > Join.RDV_BYTES) {
+                        j.phase = "full";
+                        j.msg = "这张加入码被陌生消息占满了（可能有人在捣乱），请重新生成一张";
+                        emit("join-result", SyncJson.of("ok", false, "role", "host", "msg", j.msg));
+                        return -1;
+                    }
+                    return 3000;
                 }
                 j.peerDev = SyncJson.s(c, "dev");
                 j.peerName = SyncJson.s(c, "name");

@@ -155,7 +155,8 @@
     st = KMSync.state() || st;
     $('statusCard').hidden = false;
     if (!st) { $('status').textContent = '读取中…'; return; }
-    $('status').textContent = KMSync.statusText(st);
+    // 没加入组且有提示（被移出、文件损坏、暂时不可用）：状态行只写一句短的，完整原因在下面的红字里，不重复
+    $('status').textContent = !st.inGroup && st.notice ? (st.unavailable ? '设备同步暂时不可用' : '没有在同步') : KMSync.statusText(st);
     $('status').className = st.inGroup ? st.status : '';
     show($('notice'), st.inGroup ? '' : st.notice, 'bad');
     // 同步组已过期（超过 60 天没同步、节点上的组也没了）：明确提示，给一个直接的按钮
