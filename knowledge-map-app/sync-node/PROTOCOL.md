@@ -8,7 +8,7 @@
 
 ## 1. 传输与编码
 
-- HTTP/1.1，明文，端口 8787。请求和响应都是 JSON（UTF-8），POST 必须带 `Content-Length`。
+- HTTP/1.1，明文，端口 8787（网页后台另有 443 / 80 / 127.0.0.1:8788，见第 6 节）。请求和响应都是 JSON（UTF-8），POST 必须带 `Content-Length`。
 - 所有二进制字段用 **base64url、不带 `=` 填充**（下文写作 `b64(x)`）。
 - `‖` 表示字节串直接拼接；字符串按 UTF-8 / ASCII 取字节。`HMAC` 都是 HMAC-SHA256。
 - 组号 `gid`：32 个小写十六进制字符（设备从组密钥 HKDF 派生的 16 字节，写成 hex）。节点只当它是不透明的字符串。
@@ -38,7 +38,7 @@
 
 ### `GET /v1/hello`
 ```
-→ 200 {"node":"km-sync","proto":1,"ver":"1.0.0","time":1792138965531}
+→ 200 {"node":"km-sync","proto":1,"ver":"1.1.0","time":1792138965531}
 ```
 `proto` 是协议主版本，不同就提示升级。
 
@@ -58,7 +58,7 @@ mac = HMAC(ik, "km-create" ‖ gid ‖ n ‖ w)
 ```
 ```
 POST /v1/create
-{"gid":"9f3c…(32 hex)","inv":"7g83ttm4","n":b64(n),"w":b64(w),"mac":b64(mac)}
+{"gid":"9f3c…(32 hex)","inv":"h4k7m2qa","n":b64(n),"w":b64(w),"mac":b64(mac)}
 → 200 {"ok":true,"rebuilt":false,"gen":"a1b2c3d4"}        新建（邀请码已用次数 +1）
 → 200 {"ok":true,"rebuilt":true,"gen":"…"}                重建：这个 gid 以前用这张邀请码建过（邀请码过期、用完也行，不占次数）
 → 200 {"ok":true,"existed":true,"gen":"…"}                组本来就在、nodeKey 相同（幂等）
@@ -140,7 +140,7 @@ mail/del {"ids":["…"]}                                     → {"ok":true,"rem
 - `kid = hex(SHA256(K))` 前 8 位；加密钥 `encKey = HMAC(K, "km-admin-enc-v1")`（服务器只存 encKey）。
 - 请求：`POST /admin/v1`，正文
   ```
-  {"v":1,"kid":"7dc74850","ctr":<递增整数>,"iv":b64(12 字节),"ct":b64(AES-256-GCM(encKey, iv, 明文, 附加数据))}
+  {"v":1,"kid":"c0ffee42","ctr":<递增整数>,"iv":b64(12 字节),"ct":b64(AES-256-GCM(encKey, iv, 明文, 附加数据))}
   明文 = {"op":"status","args":{}}      附加数据 = "km-admin-req|" kid "|" ctr
   ```
 - 响应 200：`{"iv":…,"ct":…}`，附加数据 `"km-admin-resp|" kid "|" ctr`，解开是 `{"ok":true,"data":…}` 或 `{"ok":false,"err":"…","msg":"中文原因"}`。
@@ -152,3 +152,73 @@ mail/del {"ids":["…"]}                                     → {"ok":true,"rem
 - 操作（`op`）：`status`、`groups.list`、`groups.clear`、`groups.remove`、`groups.unblock`、`groups.setQuota`、`groups.setNote`、
   `invites.create`、`invites.list`、`invites.revoke`、`limits.set`、`expiry.set`、`access.set`、`log.list`。参数和返回见
   `km_sync_node.py` 里 `op_*` 函数。所有返回都只有元数据，没有任何密文。
+
+## 6. 网页后台（1.1.0 起，#6 第二期）
+
+设备协议不变；网页后台复用第 5 节的管理信封，只多了「登录换会话密钥」这一步。
+
+### 端口
+
+| 端口 | 内容 |
+|---|---|
+| 443（TLS） | 静态页面（白名单：`/`、`/index.html`、`/web.js`、`/web.css`、`/node.js`、`/node.css`、`/vendor/qrcode.js`、`/vendor/jsQR.js`）、`POST /admin/web/login`、`POST /admin/v1` |
+| 127.0.0.1:8788 | 同 443，明文，只给 SSH 隧道用（`http://localhost` 是浏览器的安全上下文） |
+| 80 | 只有 `/.well-known/acme-challenge/<token>`（Let's Encrypt 验证文件）；`/v1/*`、`/admin*` 是 404；其它一律 301 到 `https://<地址>/…` |
+| 8787 | 第 1–5 节，不变。`/admin/web/login` 在这里是 404，网页会话的 kid 在这里一律 403 |
+
+443 和 8788 的所有响应都带 `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`、
+`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`；443 另带 `Strict-Transport-Security: max-age=604800`。
+
+证书：`/etc/km-sync/tls/fullchain.pem`、`privkey.pem`（certbot 签发的 Let's Encrypt IP 证书，约 160 小时，`deploy-hook` 复制过来），
+节点每 60 秒看一次文件修改时间，变了就换新证书（新连接生效，不重启）。新证书加载失败继续用旧的；没有证书时 443 不接受连接。都不影响 8787。
+
+### 登录 `POST /admin/web/login`
+
+```
+{"user":"boss","pw":"<密码>","code":"<6 位验证码，没开二次验证可不填>"}
+→ 200 {"ok":true,"kid":"5e1f0a2b","key":b64(32 字节会话密钥 S),"user":"boss","idle":1800,"expires":<毫秒>}
+→ 403 {"err":"login","msg":"用户名、密码或验证码不对"}     用户名错 / 密码错 / 验证码错或用过 / 没设密码 / 网页登录关闭，一律这一句
+→ 403 {"err":"denied","msg":"…"}                         IP 被封、熔断、不在 IP 名单、关了外网管理（127.0.0.1 不受限）
+→ 403 {"err":"paused","msg":"…"}                         账号 1 小时内失败 10 次，网页登录暂停 1 小时（审批 App 的管理密钥不受影响）
+```
+
+- 失败和第 5 节的认证失败进**同一套计数**（同 IP 10 分钟 5 次封 1 小时；全部外网来源 1 小时 30 次熔断 1 小时），原因只写进管理日志（安全事件）。
+- 密码：`scrypt$15$8$1$<盐 b64>$<哈希 b64>`（N=2^15、r=8、p=1、16 字节盐、32 字节输出），同一时间只算一个。
+  密码 12–128 个字符；不能太常见/太好猜（内置常见弱密码词和规则：全是数字符号、重复、键盘序列）；不能包含用户名、`admin`、`kmsync`、服务器地址。
+- 二次验证：RFC 6238 TOTP（SHA-1、30 秒、6 位），前后各容一个时间步；同一个时间步的码只能用一次。
+
+### 会话 = 一把临时的管理密钥
+
+- 拿到 `kid` 和 `S` 后，`encKey = HMAC(S, "km-admin-enc-v1")`，之后和第 5 节**完全一样**地调 `POST /admin/v1`（信封、计数、`X-KM-Retry`、响应加密）。
+  节点在管理密钥表里找不到这个 kid 时再查网页会话（只在 443 / 8788 上查）。
+- 网页里用 WebCrypto 把 encKey 导入成不可导出的 AES-GCM 密钥，`S` 用完清零，不存任何存储。
+- 空闲 30 分钟、或登录满 12 小时过期（过期的会话回 `403 {}`，但不计入失败次数）；最多同时 5 个，多了踢掉最早的。
+  改密码、关闭网页登录、重置网页登录、「全部踢下线」时所有会话立即失效；退出（`web.logout`）立即删除。
+- 日志「谁」：管理密钥写 `管理员 <kid>`，网页写 `网页 <用户名>（会话 <kid 前 4 位>）`。
+
+### 新增的管理操作
+
+| op | 谁能调 | 参数 → 返回 |
+|---|---|---|
+| `web.status` | 只有管理密钥 | → `{enabled, user, has_password, totp, sessions, pw_changed, url, paused}` |
+| `web.setPassword` | 只有管理密钥 | `{user, pw}` → 同上。设好后网页登录打开，已有会话全部失效 |
+| `web.setEnabled` | 只有管理密钥 | `{enabled}`；关闭时踢掉所有会话 |
+| `web.totpReset` | 只有管理密钥 | 关掉二次验证（手机丢了用） |
+| `web.reset` | 只有管理密钥 | 清空用户名、密码、二次验证和全部会话，网页登录关闭 |
+| `web.sessions` | 都可以 | → `[{kid, user, created, last_used, expires, ip, ua, alive, current}]` |
+| `web.revoke` | 都可以 | `{kid}` 或 `{all:true}` |
+| `web.whoami` | 只有网页会话 | → `{user, kid, created, expires, idle, ip, totp}` |
+| `web.logout` | 只有网页会话 | 删除这个会话 |
+| `web.changePassword` | 只有网页会话 | `{old, new}`；成功后全部会话失效 |
+| `web.totpBegin` | 只有网页会话 | `{pw}` → `{secret（base32）, uri（otpauth://…）}`，还没生效 |
+| `web.totpConfirm` | 只有网页会话 | `{code}`：码对了才生效 |
+| `web.totpDisable` | 只有网页会话 | `{pw, code}` |
+
+权限不对回 `{"ok":false,"err":"perm"}`。网页会话调 `access.set` 时不能改「外网管理」开关（`remote` 必须和现在一样）。
+`status` 多了 `tls:{enabled, not_after, hours_left, issuer, err}` 和 `web:{…同 web.status}`。
+
+### 数据
+
+admin.db 表结构 2（只新增，不动旧表；升级前自动备份成 `admin.db.v1.bak`；回滚到 1.0.0 不受影响）：
+`web_user(id=1, user, pw_hash, totp_secret, totp_pending, totp_last_step, enabled, pw_changed, fail_times)`、
+`web_sessions(kid, enc_key, last_ctr, user, created, last_used, expires, ip, ua)`（存的是 `HMAC(S, …)`，不存 S）。

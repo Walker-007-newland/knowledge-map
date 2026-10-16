@@ -21,8 +21,12 @@ import hmac
 import http.client
 import json
 import os
+import re
 import secrets
 import shutil
+import socket
+import sqlite3
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -55,11 +59,12 @@ def xor(a, b):
 
 
 class Http:
-    def __init__(self, host, port, ip=None):
+    def __init__(self, host, port, ip=None, tls=None):
         self.host, self.port, self.ip = host, port, ip   # ip：本地测试里假装的来源 IP（X-KM-Test-IP）
+        self.tls = tls                                   # ssl.SSLContext：走 https
 
     def send(self, method, path, body=b'', headers=None, ip=None):
-        c = http.client.HTTPConnection(self.host, self.port, timeout=30)
+        c = http.client.HTTPSConnection(self.host, self.port, timeout=30, context=self.tls) if self.tls             else http.client.HTTPConnection(self.host, self.port, timeout=30)
         h = dict(headers or {})
         if body or method == 'POST':
             h['Content-Type'] = 'application/json'
@@ -138,11 +143,15 @@ def new_group():
 # ---------------------------------------------------------------- 管理参考客户端
 
 class AdminClient:
-    def __init__(self, http, text, ip=None):
-        assert text.startswith('kmadmin:1?')
-        q = dict(p.split('=', 1) for p in text[len('kmadmin:1?'):].split('&'))
-        self.k = b64d(q['k'])
-        self.kid = hashlib.sha256(self.k).hexdigest()[:8]
+    """管理接口客户端。管理密钥 K：AdminClient(http, 管理码)；网页会话：AdminClient.session(http, 登录返回的 kid, key)。"""
+    def __init__(self, http, text, ip=None, kid=None, key=None):
+        if key is not None:                     # 网页会话：会话密钥 S 和会话号，信封完全一样
+            self.k, self.kid = key, kid
+        else:
+            assert text.startswith('kmadmin:1?')
+            q = dict(p.split('=', 1) for p in text[len('kmadmin:1?'):].split('&'))
+            self.k = b64d(q['k'])
+            self.kid = hashlib.sha256(self.k).hexdigest()[:8]
         self.enc = H(self.k, b'km-admin-enc-v1')
         self.http, self.ip = http, ip
         self.last = 0
@@ -183,6 +192,18 @@ class AdminClient:
         if st != 200 or not r.get('ok'):
             raise AssertionError(f'{op} 失败：{st} {r}')
         return r['data']
+
+    @classmethod
+    def session(cls, http, kid, key, ip=None):
+        return cls(http, None, ip, kid=kid, key=b64d(key) if isinstance(key, str) else key)
+
+
+def web_login(http, user, pw, code=None, ip=None, ua='km-test'):
+    body = {'user': user, 'pw': pw}
+    if code is not None:
+        body['code'] = code
+    st, res, hdr = http.send('POST', '/admin/web/login', json.dumps(body).encode(), {'User-Agent': ua}, ip=ip)
+    return st, res, hdr
 
 
 # ---------------------------------------------------------------- 结果
@@ -615,6 +636,576 @@ def run_local(java=True):
         ln.cleanup()
 
 
+# ---------------------------------------------------------------- 网页后台（1.1.0）
+
+def find_openssl():
+    for p in (shutil.which('openssl'), r'C:\Program Files\Git\mingw64\bin\openssl.exe', r'C:\Program Files\Git\usr\bin\openssl.exe'):
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def make_cert(d, name, cn='127.0.0.1', days=1):
+    """临时自签证书（只给本地测试的 443 用）。"""
+    os.makedirs(d, exist_ok=True)
+    cert, key = os.path.join(d, name + '.pem'), os.path.join(d, name + '.key')
+    env = dict(os.environ, MSYS_NO_PATHCONV='1')
+    r = subprocess.run([find_openssl(), 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes',
+                        '-keyout', key, '-out', cert, '-days', str(days), '-subj', '/CN=' + cn, '-addext', 'subjectAltName=IP:127.0.0.1'],
+                       capture_output=True, env=env)
+    if r.returncode:
+        raise RuntimeError('openssl 生成证书失败：' + r.stderr.decode(errors='replace')[-300:])
+    return cert, key
+
+
+def copy_web(dst):
+    """和 deploy.ps1 一样把网页文件拼到一个目录：sync-node/web + 审批 App 的 node.js、node.css、两个二维码库。"""
+    www = os.path.join(ROOT, 'team-admin-app', 'www')
+    os.makedirs(os.path.join(dst, 'vendor'), exist_ok=True)
+    for f in ('index.html', 'web.js', 'web.css'):
+        shutil.copy(os.path.join(HERE, 'web', f), os.path.join(dst, f))
+    for f in ('node.js', 'node.css', 'vendor/qrcode.js', 'vendor/jsQR.js'):
+        shutil.copy(os.path.join(www, *f.split('/')), os.path.join(dst, *f.split('/')))
+
+
+class WebNode(LocalNode):
+    """本地节点 + 网页后台三路（https、80 证书验证/跳转、明文 8788），都在 127.0.0.1 随机端口。"""
+    def start(self):
+        super().start()
+        if not hasattr(self, 'webdir'):
+            self.webdir = os.path.join(self.dir, 'web')
+            copy_web(self.webdir)
+            self.acme = os.path.join(self.dir, 'acme')
+            os.makedirs(os.path.join(self.acme, '.well-known', 'acme-challenge'))
+            self.tlsdir = os.path.join(self.dir, 'tls')
+            c, k = make_cert(self.tlsdir, 'a')
+            self.cert, self.key = os.path.join(self.tlsdir, 'fullchain.pem'), os.path.join(self.tlsdir, 'privkey.pem')
+            shutil.copy(c, self.cert)
+            shutil.copy(k, self.key)
+            self.hports = {'https': 0, 'acme': 0, 'web': 0}
+        n = self.node
+        n.web_dir, n.acme_dir = self.webdir, self.acme
+        n.tls = K.TLS(self.cert, self.key, interval=1)
+        self.websrv = {}
+        for name, channel, tls in (('https', 'web', n.tls), ('acme', 'acme', None), ('web', 'web', None)):
+            srv = K.serve(n, '127.0.0.1', self.hports[name], test_ip_header=True, channel=channel, tls=tls)
+            self.hports[name] = srv.server_address[1]
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            self.websrv[name] = srv
+        n.web_url = f'https://127.0.0.1:{self.hports["https"]}'
+
+    def stop(self):
+        for srv in self.websrv.values():
+            srv.shutdown()
+            srv.server_close()
+        super().stop()
+
+    def ctx(self):
+        c = ssl.create_default_context(cafile=self.cert)
+        return c
+
+
+def run_web_local():
+    ln = WebNode()
+    http = Http('127.0.0.1', ln.port)
+    keyinfo = ln.node.new_admin_key()
+    adm = AdminClient(http, keyinfo['admin_qr'])
+    https = Http('127.0.0.1', ln.hports['https'], tls=ln.ctx())
+    local = Http('127.0.0.1', ln.hports['web'])             # 127.0.0.1:8788 那一路（SSH 隧道）
+    acme = Http('127.0.0.1', ln.hports['acme'])
+    secrets_seen = []      # 密码、会话密钥、TOTP 密钥：最后检查日志和响应里都没有
+    responses = []
+    PW = 'Tq7-' + secrets.token_urlsafe(12)
+    PW2 = 'Zr9-' + secrets.token_urlsafe(12)
+    secrets_seen += [PW, PW2]
+    sessions = []
+
+    def login(pw=PW, user='boss', code=None, ip=None, via=None):
+        st, res, hdr = web_login(via or https, user, pw, code, ip)
+        if st == 200:
+            secrets_seen.append(res['key'])
+            s = AdminClient.session(via or https, res['kid'], res['key'], ip)
+            sessions.append(s)
+            return st, res, s
+        return st, res, None
+
+    def S(cli, op, args=None):
+        d = cli.ok(op, args)
+        responses.append(d)
+        return d
+
+    try:
+        # ------------------------------------------------ 账号与密码
+        section('网页后台：密码')
+        st, res, _ = login()
+        check(st == 403 and res == {'err': 'login', 'msg': K.LOGIN_FAIL_MSG}, '没设密码时登录 → 统一错误文案', (st, res))
+        for bad, why in (('short-pw-1', '至少 12'), ('password1234!', '常见'), ('aaaaaaaaaaaaaa', '常见'), ('123456789012345', '常见'),
+                         ('qwertyuiop1234', '常见'), ('myboss-is-great99', '用户名'), ('xxadminxx-2026', 'admin'),
+                         ('kmsync-rocks-77', 'kmsync'), ('ip127.0.0.1zz!', '服务器地址')):
+            st, r = adm.call('web.setPassword', {'user': 'boss', 'pw': bad})
+            if not check(st == 200 and not r['ok'] and why in r['msg'], f'弱密码被拒：「{bad}」→ {r and r.get("msg")}', r):
+                break
+        st, r = adm.call('web.setPassword', {'user': 'b!', 'pw': PW})
+        check(st == 200 and not r['ok'] and '用户名' in r['msg'], '用户名格式不对被拒', r)
+        d = S(adm, 'web.setPassword', {'user': 'boss', 'pw': PW})
+        check(d['enabled'] and d['user'] == 'boss' and d['has_password'], 'K 设置网页用户名和密码后网页登录打开', d)
+        row = ln.node.adb.execute('SELECT pw_hash FROM web_user').fetchone()[0]
+        check(row.startswith('scrypt$15$8$1$') and len(row.split('$')) == 6, '存的是 scrypt$15$8$1$盐$哈希', row[:20])
+        ln.node.adb.commit()
+        raw = b''.join(open(ln.node.adb_path + s_, 'rb').read() for s_ in ('', '-wal') if os.path.exists(ln.node.adb_path + s_))
+        check(PW.encode() not in raw, 'admin.db 文件里搜不到密码明文')
+
+        # ------------------------------------------------ 登录
+        section('网页后台：登录')
+        st, res, s1 = login()
+        check(st == 200 and re.fullmatch(r'[0-9a-f]{8}', res['kid']) and len(b64d(res['key'])) == 32 and res['idle'] == 1800,
+              '正确用户名 + 密码 → 返回会话号和 32 字节会话密钥', (st, res and {k: v for k, v in res.items() if k != 'key'}))
+        same = []
+        for args in ({'pw': PW + 'x'}, {'user': 'bosss'}, {'pw': ''}):
+            a = {'pw': PW, 'user': 'boss', **args}
+            same.append(login(a['pw'], a['user'], ip='198.18.1.1')[:2])
+        S(adm, 'web.setEnabled', {'enabled': False})
+        same.append(login(ip='198.18.1.2')[:2])
+        S(adm, 'web.setEnabled', {'enabled': True})
+        check(all(x == (403, {'err': 'login', 'msg': K.LOGIN_FAIL_MSG}) for x in same), '密码错、用户名错、空密码、网页登录关闭 → 同一个错误文案', same)
+        check(s1.call('status')[0] == 403, '关闭网页登录时已有会话立即失效', '')
+        ln.advance(3700)
+        # 同一 IP 5 次失败 → 封 1 小时（和管理接口同一个计数）
+        ip = '203.0.113.70'
+        for _ in range(5):
+            login(PW + '!', ip=ip)
+        st, res, _ = login(ip=ip)
+        check(st == 403 and res['err'] == 'denied', '同一 IP 登录失败 5 次后，正确密码也被拒（封 1 小时）', (st, res))
+        check(adm.call('status', ip=ip)[0] == 403, '登录失败和管理接口进同一个计数：这个 IP 的管理密钥请求也 403', '')
+        ln.advance(3601)
+        st, res, _ = login(ip=ip)
+        check(st == 200, '1 小时后自动解封', (st, res))
+        # 管理接口失败也算进登录的计数
+        ip = '203.0.113.71'
+        for _ in range(5):
+            _, body = adm.envelope('status', {}, kid='abababab')
+            adm.send_raw(body, ip)
+        check(login(ip=ip)[0] == 403, '管理接口认证失败 5 次后，这个 IP 的网页登录也被拒', '')
+        ln.advance(7200)
+        for i in range(30):
+            login(PW + 'bad', ip=f'198.51.100.{100 + i}', user='nobody')
+        st, res, _ = login(ip='192.0.2.150')
+        check(st == 403 and res['err'] == 'denied', '全局 1 小时失败 30 次 → 熔断，网页登录也被拒', (st, res))
+        st, res, _ = login(via=local)
+        check(st == 200, '熔断时 127.0.0.1（SSH 隧道）照常登录', (st, res))
+        ln.advance(3601)
+        # 账号级：1 小时 10 次失败（每次换一个 IP，不触发封 IP）→ 网页登录暂停，管理密钥不受影响
+        for i in range(10):
+            login(PW + str(i), ip=f'198.51.100.{200 + i}')
+        st, res, _ = login(ip='192.0.2.160')
+        check(st == 403 and res['err'] == 'paused', '账号 1 小时内失败 10 次 → 网页登录暂停（正确密码也不行）', (st, res))
+        check(adm.call('status', ip='192.0.2.161')[0] == 200, '网页登录暂停时，管理密钥 K（审批 App）的请求照常成功', '')
+        check(S(adm, 'web.status')['paused'], 'web.status 显示网页登录已暂停', '')
+        ln.advance(3601)
+        st, res, _ = login(ip='192.0.2.160')
+        check(st == 200, '1 小时后网页登录恢复', (st, res))
+        # IP 名单、关闭外网管理同样管登录
+        S(adm, 'access.set', {'remote': False, 'ips': []})
+        st, res, _ = login(ip='192.0.2.170')
+        st2, _, _ = login()
+        check(st == 403 and res['err'] == 'denied' and st2 == 200, '关闭外网管理后外网来源不能登录、本机照常', (st, st2))
+        S(adm, 'access.set', {'remote': True, 'ips': ['192.0.2.0/24']})
+        check(login(ip='198.18.9.9')[0] == 403 and login(ip='192.0.2.171')[0] == 200, 'IP 名单对网页登录生效：名单外拒绝、名单内可以', '')
+        S(adm, 'access.set', {'remote': True, 'ips': []})
+        ln.advance(7200)
+        for _ in range(7):
+            login(PW + '?')
+        check(login()[0] == 200, '127.0.0.1 失败多次也不会被封', '')
+
+        # ------------------------------------------------ 会话
+        section('网页后台：会话')
+        ln.advance(3700)
+        _, _, s = login()
+        every = {
+            'status': {}, 'groups.list': {}, 'invites.list': {}, 'log.list': {'limit': 5},
+            'invites.create': {'label': '网页', 'days': 1, 'uses': 1}, 'limits.set': dict(K.DEFAULT_LIMITS),
+            'expiry.set': {'date': '2026-11-16'}, 'access.set': {'remote': True, 'ips': []},
+        }
+        okc = [op for op, a in every.items() if s.call(op, a)[1].get('ok')]
+        inv = Invite(s.ok('invites.create', {'label': '网页', 'days': 1, 'uses': 3})['qr'])
+        okc.append('invites.revoke') if s.call('invites.revoke', {'id': s.ok('invites.list')[1]['id']})[1]['ok'] else None
+        gid, key = new_group()
+        DevClient(http, gid, key, 'w1').create(inv)
+        for op in ('groups.setNote', 'groups.setQuota', 'groups.clear', 'groups.remove', 'groups.unblock'):
+            a = {'gid': gid, 'note': '网页备注'} if op == 'groups.setNote' else {'gid': gid, 'mb': 30} if op == 'groups.setQuota' else {'gid': gid}
+            okc.append(op) if s.call(op, a)[1]['ok'] else None
+        check(len(okc) == 14, f'网页会话调第一期全部 14 个管理操作都成功（{len(okc)} 个）', okc)
+        ctr, body = s.envelope('status', {})
+        st1, _, _ = s.send_raw(body)
+        st2, r2, _ = s.send_raw(body)
+        check(st1 == 200 and st2 == 403 and r2 == {}, '会话请求原样重放 → 403 {}', (st1, st2, r2))
+        ctr, body = s.envelope('status', {}, ctr=s.last - 10)
+        check(s.send_raw(body)[:2] == (403, {}), '会话 ctr 变小 → 403 {}', '')
+        ctr, body = s.envelope('status', {})
+        env = json.loads(body)
+        b = bytearray(b64d(env['ct']))
+        b[2] ^= 1
+        env['ct'] = b64e(bytes(b))
+        check(s.send_raw(json.dumps(env).encode())[:2] == (403, {}), '会话密文改一个字节 → 403 {}', '')
+        _, body = s.envelope('status', {}, ctr=int(time.time() * 1000) + 600000)   # 别的标签页用过更大的计数
+        s.send_raw(body)
+        s.last, s.retried = 1, 0
+        check(s.call('status')[0] == 200 and s.retried == 1, '会话的计数落后时也能凭只有自己看得懂的提示重试一次', s.retried)
+        ln.advance(31 * 60)
+        check(s.call('status')[0] == 403, '空闲 30 分钟后会话 403', '')
+        _, _, s = login()
+        alive = True
+        for i in range(40):           # 每 20 分钟用一次，不空闲，到 12 小时也过期
+            ln.advance(20 * 60)
+            alive = s.call('status')[0] == 200
+            if not alive:
+                break
+        check(not alive and 11 * 3 <= i <= 12 * 3 + 1, f'一直在用的会话 12 小时后也 403（第 {(i + 1) * 20 // 60} 小时）', i)
+        ln.advance(3600)
+        made = [login()[2] for _ in range(6)]
+        st0 = made[0].call('status')[0]
+        check(st0 == 403 and all(m.call('status')[0] == 200 for m in made[1:]), '第 6 个会话把最早的踢掉', st0)
+        lst = S(made[1], 'web.sessions')
+        check(len([x for x in lst if x['alive']]) == 5 and sum(1 for x in lst if x['current']) == 1, '会话列表：5 个，标出当前这个', len(lst))
+        S(adm, 'web.revoke', {'kid': made[1].kid})
+        check(made[1].call('status')[0] == 403, 'K 踢下线后这个会话立即 403', '')
+        S(made[2], 'web.revoke', {'kid': made[3].kid})
+        check(made[3].call('status')[0] == 403, '网页上也能踢掉自己的另一个会话', '')
+        S(made[2], 'web.logout')
+        check(made[2].call('status')[0] == 403, '退出后会话立即 403', '')
+        S(adm, 'web.revoke', {'all': True})
+        check(all(m.call('status')[0] == 403 for m in made[4:]), 'K「全部踢下线」后所有会话 403', '')
+        _, _, s = login()
+        on8787 = AdminClient.session(http, s.kid, s.k)
+        check(on8787.call('status')[0] == 403, '会话 kid 拿到 8787 上 → 403（会话不能当审批 App 的管理码用）', '')
+        st, res, _ = http.send('POST', '/admin/web/login', json.dumps({'user': 'boss', 'pw': PW}).encode())
+        check(st == 404, '/admin/web/login 在 8787 上 → 404', (st, res))
+        st, res, _ = login(via=local)
+        check(st == 200 and res['kid'], '127.0.0.1:8788（SSH 隧道）上也能登录', '')
+        check(AdminClient.session(https, res['kid'], res['key']).call('status')[0] == 200, '会话在 443 和 8788 上通用', '')
+        check(adm.call('status')[0] == 200 and AdminClient(https, keyinfo['admin_qr']).call('status')[0] == 200, '管理密钥 K 在 8787 和 443 上都能用', '')
+
+        # ------------------------------------------------ 权限
+        section('网页后台：权限')
+        ln.advance(3700)
+        _, _, s = login()
+        denied = []
+        for op, a in (('web.setPassword', {'user': 'boss', 'pw': PW2}), ('web.totpReset', {}), ('web.setEnabled', {'enabled': False}),
+                      ('web.status', {}), ('web.reset', {}), ('access.set', {'remote': False, 'ips': []})):
+            st, r = s.call(op, a)
+            denied.append(st == 200 and not r['ok'] and r['err'] == 'perm')
+        check(all(denied), '会话调 web.setPassword / totpReset / setEnabled / status / reset、改「外网管理」开关 → 拒绝', denied)
+        check(S(adm, 'status')['remote_admin'], '外网管理开关没被网页改掉', '')
+        denied = []
+        for op, a in (('web.changePassword', {'old': PW, 'new': PW2}), ('web.totpBegin', {'pw': PW}), ('web.totpConfirm', {'code': '123456'}),
+                      ('web.totpDisable', {'pw': PW, 'code': '123456'}), ('web.whoami', {}), ('web.logout', {})):
+            st, r = adm.call(op, a)
+            denied.append(st == 200 and not r['ok'] and r['err'] == 'perm')
+        check(all(denied), 'K 调网页专用的 changePassword / totp* / whoami / logout → 拒绝', denied)
+        me = S(s, 'web.whoami')
+        check(me['user'] == 'boss' and me['kid'] == s.kid and not me['totp'], 'web.whoami 返回自己的用户名和会话号', me)
+
+        # ------------------------------------------------ 改密码
+        _, _, s2 = login()
+        st, r = s.call('web.changePassword', {'old': PW + 'x', 'new': PW2})
+        check(st == 200 and not r['ok'] and r['err'] == 'pw', '改密码时旧密码不对 → 拒绝', r)
+        st, r = s.call('web.changePassword', {'old': PW, 'new': 'password12345'})
+        check(st == 200 and not r['ok'], '改成弱密码 → 拒绝', r)
+        S(s, 'web.changePassword', {'old': PW, 'new': PW2})
+        check(s.call('status')[0] == 403 and s2.call('status')[0] == 403, '改密码后全部旧会话 403', '')
+        check(login()[0] == 403 and login(PW2)[0] == 200, '改密码后旧密码不能登录、新密码可以', '')
+
+        # ------------------------------------------------ 二次验证
+        section('网页后台：二次验证（TOTP）')
+        seed = b'12345678901234567890'
+        vec = [(59, '94287082'), (1111111109, '07081804'), (1111111111, '14050471'), (1234567890, '89005924'), (2000000000, '69279037'),
+               (20000000000, '65353130')]
+        check(all(K.totp(seed, t // 30, 8) == c for t, c in vec), 'RFC 6238 附录 B 标准测试向量（SHA-1）全部通过', '')
+        _, _, s = login(PW2)
+        st, r = s.call('web.totpBegin', {'pw': PW})
+        check(st == 200 and not r['ok'], '开启二次验证要输对当前密码', r)
+        tb = S(s, 'web.totpBegin', {'pw': PW2})
+        responses.pop()        # 这一条响应本来就要带 TOTP 密钥（显示二维码用），不算泄露
+        sec = base64.b32decode(tb['secret'] + '=' * (-len(tb['secret']) % 8))
+        secrets_seen.append(tb['secret'])
+        check(tb['uri'].startswith('otpauth://totp/') and 'issuer=km-sync' in tb['uri'] and len(sec) == 20, '开启时给出二维码内容（otpauth://）和文字密钥', tb['uri'][:30])
+        now = ln.node.now()
+        wrong = '%06d' % ((int(K.totp(sec, int(now // 30))) + 1) % 1000000)
+        st, r = s.call('web.totpConfirm', {'code': wrong})
+        check(st == 200 and not r['ok'] and not S(adm, 'web.status')['totp'], '确认时输错码 → 不生效', r)
+        S(s, 'web.totpConfirm', {'code': K.totp(sec, int(now // 30))})
+        check(S(adm, 'web.status')['totp'], '输对当前码 → 二次验证生效', '')
+        ln.advance(90)
+        now = ln.node.now()
+        st, res, _ = login(PW2)
+        check(st == 403 and res['msg'] == K.LOGIN_FAIL_MSG, '开了二次验证后只输密码 → 统一错误文案', (st, res))
+        check(login(PW2, code=K.totp(sec, int(now // 30) - 1))[0] == 200, '前一个 30 秒的码可以用', '')
+        check(login(PW2, code=K.totp(sec, int(now // 30) - 2))[0] == 403, '再前一个 30 秒的码不行', '')
+        ln.advance(60)
+        now = ln.node.now()
+        c = K.totp(sec, int(now // 30) + 1)
+        st1 = login(PW2, code=c)[0]
+        st2 = login(PW2, code=c)[0]
+        check(st1 == 200 and st2 == 403, '后一个 30 秒的码可以用；同一个码第二次被拒（防重放）', (st1, st2))
+        ln.advance(120)
+        S(adm, 'web.totpReset')
+        check(login(PW2)[0] == 200 and not S(adm, 'web.status')['totp'], 'K 关掉二次验证（手机丢了）后只用密码就能登录', '')
+        _, _, s = login(PW2)
+        tb = S(s, 'web.totpBegin', {'pw': PW2})
+        responses.pop()
+        secrets_seen.append(tb['secret'])
+        sec = base64.b32decode(tb['secret'] + '=' * (-len(tb['secret']) % 8))
+        S(s, 'web.totpConfirm', {'code': K.totp(sec, int(ln.node.now() // 30))})
+        ln.advance(60)
+        S(s, 'web.totpDisable', {'pw': PW2, 'code': K.totp(sec, int(ln.node.now() // 30))})
+        check(not S(adm, 'web.status')['totp'], '网页上输密码 + 当前码关闭二次验证', '')
+
+        # ------------------------------------------------ 日志
+        section('网页后台：日志')
+        _, _, s = login(PW2)
+        S(s, 'groups.setNote', {'gid': gid, 'note': '网页写'})
+        S(adm, 'groups.setNote', {'gid': gid, 'note': 'App 写'})
+        items = S(adm, 'log.list', {'limit': 100})['items']
+        w = next(i for i in items if i['op'] == 'groups.setNote' and i['note'] == '备注改为「网页写」')
+        a = next(i for i in items if i['op'] == 'groups.setNote' and i['note'] == '备注改为「App 写」')
+        check(w['who'].startswith('网页 boss') and a['who'] == f'管理员 {adm.kid}', '网页写操作记「网页 用户名」、App 的记「管理员 kid」', (w['who'], a['who']))
+        allog = S(adm, 'log.list', {'limit': 100})['items']
+        while True:
+            more = S(adm, 'log.list', {'limit': 100, 'before': allog[-1]['id']})
+            allog += more['items']
+            if not more['more']:
+                break
+        ops = {(i['op'], i['result']) for i in allog}
+        need = [('web.login', '成功'), ('web.login', '拒绝'), ('web.logout', '成功'), ('web.revoke', '成功'), ('web.changePassword', '成功'),
+                ('web.totpConfirm', '成功'), ('web.totpDisable', '成功'), ('web.totpReset', '成功'), ('web.setPassword', '成功'),
+                ('web.setEnabled', '成功'), ('web.pause', '成功'), ('web.setPassword', '失败')]
+        miss = [x for x in need if x not in ops]
+        check(not miss, '登录成功/失败、退出、踢下线、改密码、开关二次验证、设密码、暂停都有日志', miss)
+        fl = [i for i in allog if i['op'] == 'web.login' and i['result'] == '拒绝']
+        check(fl and all(i['sec'] for i in fl) and any('密码不对' in i['note'] for i in fl) and any('用户名不对' in i['note'] for i in fl),
+              '登录失败是安全事件，日志里写清原因', fl[:1])
+        dbtext = '\n'.join(str(c_) for r in ln.node.adb.execute('SELECT * FROM log') for c_ in r)
+        texts = dbtext + '\n'.join(s_ for r in responses for s_ in all_strings(r))
+        leak = [x[:6] + '…' for x in secrets_seen if x in texts]
+        check(not leak, f'日志和所有管理响应里都没有密码、会话密钥、TOTP 密钥（检查了 {len(secrets_seen)} 个）', leak)
+
+        # ------------------------------------------------ 80 端口、静态文件、安全头
+        section('网页后台：80 端口、静态文件、安全头')
+        with open(os.path.join(ln.acme, '.well-known', 'acme-challenge', 'tok_ABC-123'), 'w') as f:
+            f.write('tok_ABC-123.thumb')
+        st, res, hdr = acme.send('GET', '/.well-known/acme-challenge/tok_ABC-123')
+        check(st == 200 and res == b'tok_ABC-123.thumb', '80：/.well-known/acme-challenge/<文件> 返回文件内容', (st, res))
+        st, res, hdr = acme.send('GET', '/some/page?x=1')
+        check(st == 301 and hdr.get('Location') == ln.node.web_url + '/some/page?x=1', '80：其它路径 301 到 https', (st, hdr.get('Location')))
+        st1 = acme.send('POST', '/admin/v1', b'{}')[0]
+        st2 = acme.send('GET', '/v1/hello')[0]
+        st3 = acme.send('GET', '/.well-known/acme-challenge/../../km_sync_node.py')[0]
+        check(st1 == 404 and st2 == 404 and st3 == 404, '80：/admin/v1、/v1/hello、跳出目录 都不可用', (st1, st2, st3))
+        got = {}
+        for path in ('/', '/index.html', '/web.js', '/web.css', '/node.js', '/node.css', '/vendor/qrcode.js', '/vendor/jsQR.js'):
+            st, res, hdr = https.send('GET', path)
+            got[path] = (st, hdr)
+        check(all(v[0] == 200 for v in got.values()), '白名单里的 8 个文件都能取到', {k: v[0] for k, v in got.items()})
+        st, res, hdr = https.send('GET', '/')
+        check(b'__V__' not in res and K.VERSION.encode() in res and b'<script>' not in res and b'onclick=' not in res,
+              'index.html：文件名带版本号、没有内联脚本', '')
+        bad = {}
+        for path in ('/../km_sync_node.py', '/%2e%2e/km_sync_node.py', '/opt/km-sync/km_sync_node.py', '/km_sync_node.py', '/web', '/vendor/',
+                     '/.git/config', '/web.js/../node.js', '//etc/passwd'):
+            c_ = http_client_raw('127.0.0.1', ln.hports['https'], ln.ctx(), path)
+            bad[path] = c_
+        check(all(v == 404 for v in bad.values()), '白名单外的路径（../、%2e%2e、/opt/…、源码）都是 404', bad)
+        hs = []
+        for cli, path, method, body in ((https, '/', 'GET', b''), (https, '/admin/v1', 'POST', b'{}'), (https, '/admin/web/login', 'POST', b'{}'),
+                                        (https, '/nope', 'GET', b''), (local, '/', 'GET', b''), (local, '/admin/v1', 'POST', b'{}')):
+            st, res, hdr = cli.send(method, path, body)
+            hs.append((cli is https, hdr))
+        okh = all(h.get('Content-Security-Policy') == K.CSP and h.get('X-Content-Type-Options') == 'nosniff'
+                  and h.get('Referrer-Policy') == 'no-referrer' for _, h in hs)
+        check(okh, '443 和 8788 所有响应都带 CSP、nosniff、no-referrer', [h.get('Content-Security-Policy', '')[:20] for _, h in hs])
+        check(all(('Strict-Transport-Security' in h) == is443 for is443, h in hs) and hs[0][1]['Strict-Transport-Security'] == 'max-age=604800',
+              '443 带 HSTS（7 天），8788 不带', '')
+        st, res, hdr = https.send('POST', '/admin/web/login', json.dumps({'user': 'boss', 'pw': 'x'}).encode())
+        check(hdr.get('Cache-Control') == 'no-store', '接口响应 Cache-Control: no-store', hdr.get('Cache-Control'))
+        check(http.send('GET', '/')[0] == 404 and http.send('GET', '/web.js')[0] == 404, '8787 上没有网页文件', '')
+
+        # ------------------------------------------------ 证书
+        section('网页后台：证书热更新、证书出问题不影响 App 和同步')
+        der1 = peer_cert(ln.hports['https'])
+        srv_before = ln.websrv['https']
+        c2, k2 = make_cert(ln.tlsdir, 'b', cn='km-new')
+        shutil.copy(k2, ln.key)
+        shutil.copy(c2, ln.cert)
+        time.sleep(1.2)
+        der2 = peer_cert(ln.hports['https'])
+        check(der1 and der2 and der1 != der2 and der2 == ssl.PEM_cert_to_DER_cert(open(c2).read()), '换证书文件后，新连接拿到新证书', '')
+        check(ln.websrv['https'] is srv_before and K.TLS(ln.cert, ln.key).interval == 60, '进程没有重启（同一个服务）；正式运行每 60 秒检查一次', '')
+        with open(ln.cert, 'w') as f:
+            f.write('-----BEGIN CERTIFICATE-----\nbroken\n-----END CERTIFICATE-----\n')
+        time.sleep(1.2)
+        der3 = peer_cert(ln.hports['https'])
+        st = AdminClient(http, keyinfo['admin_qr']).call('status')
+        check(der3 == der2 and 'loaded' not in str(ln.node.tls.err) and ln.node.tls.err, '证书文件坏了：443 继续用旧证书', ln.node.tls.err)
+        check(http.send('GET', '/v1/hello')[0] == 200 and st[0] == 200 and st[1]['data']['tls']['err'], '证书文件坏了：8787 设备接口和 App 管理接口照常，status 里报告证书错误', '')
+        # 过期证书：浏览器打不开网页后台，App 和同步不受影响，status 报告剩余小时为负
+        ce, ke = make_cert(ln.tlsdir, 'old', days=1)
+        shutil.copy(ke, ln.key)
+        shutil.copy(ce, ln.cert)
+        time.sleep(1.2)
+        ln.node.tls.check(force=True)
+        ln.advance(3 * 86400)
+        s_ = A_ok(adm, 'status')
+        check(s_['tls']['enabled'] and s_['tls']['hours_left'] < 0, f'证书过期：status 显示剩余 {s_["tls"]["hours_left"]} 小时（节点标签会出红点）', s_['tls'])
+        gid2, key2 = new_group()
+        inv2 = Invite(A_ok(adm, 'invites.create', {'label': '证书过期', 'days': 7, 'uses': 1})['qr'])
+        d_ = DevClient(http, gid2, key2, 'x')
+        st1, _ = d_.create(inv2)
+        st2, _ = d_.push([('s', 1, 'c', b'abc')])
+        check(st1 == 200 and st2 == 200, '证书过期时学生同步（建组、push）照常', (st1, st2))
+        ln.advance(-3 * 86400)
+        # 没有证书：443 不接受连接，其它照常
+        for p_ in (ln.cert, ln.key):
+            os.remove(p_)
+        t2 = K.TLS(ln.cert, ln.key, interval=1)
+        srv = K.serve(ln.node, '127.0.0.1', 0, channel='web', tls=t2)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            refused = peer_cert(srv.server_address[1]) is None
+        finally:
+            srv.shutdown()
+            srv.server_close()
+        check(refused and not t2.status(ln.node.ms())['enabled'] and http.send('GET', '/v1/hello')[0] == 200,
+              '还没有证书：443 不接受连接、status 显示未启用，8787 照常', t2.err)
+        # 443 端口被占用起不来：只打印原因，8787 照常
+        busy = socket.socket()
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            busy.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)   # Windows：不让别人复用这个端口
+        busy.bind(('127.0.0.1', 0))
+        busy.listen(1)
+        cfg = {'listen': '127.0.0.1', 'public_host': '127.0.0.1', 'https_port': busy.getsockname()[1], 'http_port': 0, 'local_web_port': 0,
+               'tls_cert': ln.cert, 'tls_key': ln.key, 'web_dir': ln.webdir, 'acme_dir': ln.acme}
+        n2 = K.Node(os.path.join(ln.dir, 'n2'), '127.0.0.1', 0, aes=K._AESGCM or K.PyAESGCM)
+        started = K.start_web(n2, cfg)
+        busy.close()
+        n2.ndb.close()
+        n2.adb.close()
+        check(started == [] and http.send('GET', '/v1/hello')[0] == 200, '443 端口起不来时 start_web 不抛错，同步照常', started)
+    finally:
+        ln.cleanup()
+
+
+def A_ok(adm, op, args=None):
+    return adm.ok(op, args)
+
+
+def peer_cert(port):
+    """连 https 拿对方证书（不校验），连不上返回 None。"""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection(('127.0.0.1', port), timeout=5) as raw:
+            with ctx.wrap_socket(raw, server_hostname='127.0.0.1') as s:
+                return s.getpeercert(binary_form=True)
+    except (OSError, ssl.SSLError):
+        return None
+
+
+def http_client_raw(host, port, ctx, path):
+    """原样发路径（http.client 会原样发，不规范化 ../）。"""
+    c = http.client.HTTPSConnection(host, port, timeout=10, context=ctx)
+    c.putrequest('GET', path, skip_accept_encoding=True)
+    c.endheaders()
+    st = c.getresponse().status
+    c.close()
+    return st
+
+
+def run_migration():
+    section('admin.db 从 1.0.0（表结构 1）升级到 1.1.0（表结构 2）')
+    d = tempfile.mkdtemp(prefix='km-sync-mig-')
+    try:
+        saved = K.ADMIN_SCHEMA
+        K.ADMIN_SCHEMA = saved[:1]           # 模拟 1.0.0 的库
+        try:
+            n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            key = n.new_admin_key()
+            inv = n.create_invite('旧邀请码', 30, 5)
+            n.adb.execute("INSERT INTO known_groups(gid, invite_id, created, blocked_at, note) VALUES(?,?,1,2,'旧备注')", ('ab' * 16, inv['id']))
+            n.adb.execute("INSERT INTO bans VALUES('192.0.2.1', 99999999999999)")
+            n.log('管理员 x', '1.2.3.4', 'groups.setNote', 'ababab', '成功', '旧日志')
+            n.adb.commit()
+            ver1 = n.adb.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0]
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
+        n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+        ver2 = n.adb.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0]
+        check(ver1 == '1' and ver2 == '2', '表结构 1 → 2', (ver1, ver2))
+        ok = (n.adb.execute('SELECT label FROM invites WHERE id=?', (inv['id'],)).fetchone() == ('旧邀请码',)
+              and n.known('ab' * 16)['note'] == '旧备注' and n.known('ab' * 16)['blocked_at'] == 2
+              and n.adb.execute("SELECT 1 FROM bans WHERE ip='192.0.2.1'").fetchone()
+              and n.adb.execute('SELECT kid FROM admin_keys').fetchone()[0] == key['kid']
+              and n.adb.execute("SELECT 1 FROM log WHERE note='旧日志'").fetchone())
+        check(ok, '升级后邀请码、组登记、封禁、管理密钥、日志都在', '')
+        check(os.path.exists(os.path.join(d, 'admin.db.v1.bak')), '升级前备份了 admin.db.v1.bak', os.listdir(d))
+        b = sqlite3.connect(os.path.join(d, 'admin.db.v1.bak'))
+        check(b.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0] == '1' and b.execute('SELECT COUNT(*) FROM invites').fetchone()[0] == 1,
+              '备份是升级前的表结构 1', '')
+        b.close()
+        check(n.adb.execute("SELECT 1 FROM log WHERE op='migrate' AND note LIKE '%1 → 2%'").fetchone(), '迁移写了一条日志', '')
+        n.ndb.close()
+        n.adb.close()
+        # 回滚到 1.0.0 的程序：它只认表结构 1 的表，多出来的两张表不影响
+        K.ADMIN_SCHEMA = saved[:1]
+        try:
+            n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            check(n.adb.execute('SELECT COUNT(*) FROM invites').fetchone()[0] == 1, '用只认表结构 1 的程序打开新库也正常（模拟回滚到 1.0.0）', '')
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def serve_dev(port):
+    """浏览器里手动试网页后台：在 127.0.0.1:<port> 起一个本地节点的网页后台（明文，localhost 是安全上下文），
+    临时目录、随机密码（只打印在这个窗口里，Ctrl+C 退出后连同数据一起删掉），并造一些假数据。"""
+    ln = LocalNode()
+    n = ln.node
+    n.web_dir = os.path.join(ln.dir, 'web')
+    copy_web(n.web_dir)
+    srv = K.serve(n, '127.0.0.1', port, test_ip_header=False, channel='web')
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    http = Http('127.0.0.1', ln.port)
+    adm = AdminClient(http, n.new_admin_key()['admin_qr'])
+    pw = 'dev-' + secrets.token_urlsafe(12)
+    adm.ok('web.setPassword', {'user': 'boss', 'pw': pw})
+    for label, uses in (('小明', 3), ('小红', 1)):
+        inv = Invite(adm.ok('invites.create', {'label': label, 'days': 7, 'uses': uses})['qr'])
+        gid, key = new_group()
+        for d in ('padA', 'padB'):
+            c = DevClient(http, gid, key, d)
+            c.create(inv)
+            c.push([('s1', 1, 'c', secrets.token_bytes(20000)), ('s2', 1, 'c', secrets.token_bytes(5000))])
+    adm.ok('invites.create', {'label': '作废的', 'days': 1, 'uses': 1})
+    adm.ok('invites.revoke', {'id': adm.ok('invites.list')[0]['id']})
+    print('')
+    print(f'网页后台：http://127.0.0.1:{port}/   用户名 boss   临时密码 {pw}')
+    print(f'管理码（审批 App 用，8787 在 127.0.0.1:{ln.port}）只在内存里。Ctrl+C 退出并删除临时数据。', flush=True)
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        ln.cleanup()
+
+
 def inv_text_with_secret(inv, secret):
     return f'kmnode:1?h={inv.host}&p={inv.port}&i={inv.id}&s={base64.b32encode(secret).decode().rstrip("=")}'
 
@@ -666,7 +1257,44 @@ def signing_dir():
     return os.path.join(ROOT, 'knowledge-map-app', 'signing')
 
 
-def run_remote(addr):
+def run_remote_web(http, adm, pub):
+    """公网网页后台（1.1.0）：证书由系统信任的 CA 校验（不跳过校验）。
+    只在「网页登录还没设置」时用一个临时密码走完整登录流程，结束时 web.reset 恢复成没设置；
+    管理员已经设过密码时只测「错误密码被拒、记进日志」，不动管理员的设置。临时密码只在内存里，不打印。"""
+    section(f'远程网页后台 https://{pub}/')
+    https = Http(pub, 443, tls=ssl.create_default_context())
+    st, res, hdr = https.send('GET', '/')
+    check(st == 200 and hdr.get('Server', '').startswith('km-sync/') and hdr.get('Content-Security-Policy') == K.CSP
+          and 'max-age' in hdr.get('Strict-Transport-Security', ''), f'https 证书校验通过、是 km-sync 的页面（{hdr.get("Server")}），带安全头', (st, hdr.get('Server')))
+    st, res, hdr = Http(pub, 80).send('GET', '/abc')
+    check(st == 301 and hdr.get('Location') == f'https://{pub}/abc', '80 端口跳转 https', (st, hdr.get('Location')))
+    w = adm.ok('status')['web']
+    tls = adm.ok('status')['tls']
+    check(tls['enabled'] and tls['hours_left'] > 48 and "Let's Encrypt" in tls['issuer'], f'status 里的证书：剩 {tls["hours_left"]} 小时，{tls["issuer"]}', tls)
+    if not w['has_password']:
+        pw = 'auto-' + secrets.token_urlsafe(18)
+        try:
+            adm.ok('web.setPassword', {'user': 'autotest', 'pw': pw})
+            st, res, _ = web_login(https, 'autotest', pw)
+            check(st == 200 and res.get('kid'), '临时密码登录成功（自动测试）', st)
+            sess = AdminClient.session(https, res['kid'], res['key'])
+            s = sess.ok('status')
+            check(s['version'] == K.VERSION or s['version'], f'网页会话调 status 成功（{s["version"]}）', '')
+            check(AdminClient.session(http, res['kid'], res['key']).call('status')[0] == 403, '会话 kid 拿到 8787 上 → 403', '')
+            sess.ok('web.logout')
+            check(sess.call('status')[0] == 403, '退出后会话 403', '')
+        finally:
+            adm.ok('web.reset')
+            pw = None
+        check(not adm.ok('web.status')['has_password'], '临时密码已作废：网页登录恢复成「没设置」', '')
+    else:
+        st, res, _ = web_login(https, w['user'], 'wrong-' + secrets.token_urlsafe(12))
+        check(st == 403 and res.get('msg') == K.LOGIN_FAIL_MSG, '管理员已设密码：只测错误密码被拒（不改管理员的设置）', (st, res))
+        logs = adm.ok('log.list', {'limit': 20, 'sec': True})['items']
+        check(any(i['op'] == 'web.login' and i['result'] == '拒绝' for i in logs), '错误密码记进了安全日志', '')
+
+
+def run_remote(addr, web=True):
     host, port = addr.rsplit(':', 1)
     port = int(port)
     path = os.path.join(signing_dir(), 'sync-node.json')
@@ -729,6 +1357,8 @@ def run_remote(addr):
         check(st == 403 and r == {}, '设备签名访问管理接口 → 403 {}', (st, r))
         logs = adm.ok('log.list', {'limit': 30})['items']
         check(any(i['op'] == 'groups.remove' and i['obj'] == gid[:6] for i in logs), '管理日志里有刚才的操作', '')
+        if web:
+            run_remote_web(http, adm, info.get('host') or '43.142.41.27')
     finally:
         # 清理：设备删组（连同登记一起删），作废邀请码
         for g, k in made_groups:
@@ -754,16 +1384,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--remote', help='host:port，经 SSH 隧道测真实服务器')
     ap.add_argument('--no-java', action='store_true')
+    ap.add_argument('--no-web', action='store_true', help='跳过网页后台部分')
+    ap.add_argument('--serve', type=int, metavar='PORT', help='在 127.0.0.1:PORT 起一个带假数据的本地网页后台，浏览器里手动试')
     a = ap.parse_args()
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
     if not K._AESGCM:
         print('（本机没装 cryptography，本地节点和客户端改用内置的纯 Python AES-GCM；服务器上用的是 cryptography）')
     t = time.time()
+    if a.serve:
+        return serve_dev(a.serve)
     if a.remote:
-        run_remote(a.remote)
+        run_remote(a.remote, web=not a.no_web)
     else:
         run_local(java=not a.no_java)
+        if not a.no_web:
+            run_web_local()
+            run_migration()
     bad = [n for ok, n in RESULTS if not ok]
     print(f'\n共 {len(RESULTS)} 项，通过 {len(RESULTS) - len(bad)} 项，失败 {len(bad)} 项，用时 {time.time() - t:.1f} 秒')
     for n in bad:
