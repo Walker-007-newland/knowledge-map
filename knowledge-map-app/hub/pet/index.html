@@ -28,10 +28,10 @@
 
   #stage { position: relative; flex: 1; min-width: 0; background: linear-gradient(var(--stage-top), var(--stage-bot)); touch-action: none; }
   #stage canvas { display: block; width: 100%; height: 100%; }
-  .topbar { position: absolute; left: 16px; right: 16px; top: 14px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
+  .topbar { position: absolute; left: 16px; right: 16px; top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; pointer-events: none; }
   .topbar > * { pointer-events: auto; }
   .back { display: inline-flex; align-items: center; gap: 4px; padding: 8px 14px; border-radius: 999px; background: var(--surface);
-    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; box-shadow: var(--shadow); }
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; box-shadow: var(--shadow); white-space: nowrap; }
   .bones { margin-left: auto; padding: 8px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
     font-size: 16px; font-weight: 600; box-shadow: var(--shadow); }
   .bubble { position: absolute; transform: translate(-50%, -100%); padding: 8px 12px; border-radius: 14px; background: var(--surface);
@@ -133,6 +133,7 @@
     <div class="topbar">
       <a class="back" href="../index.html">‹ 返回</a>
       <a class="back" href="study.html">📊 学习统计</a>
+      <a class="back" href="../data.html">💾 我的数据</a>
       <div class="bones" id="bones" hidden>🦴 0</div>
     </div>
     <div class="bubble" id="bubble"></div>
@@ -174,6 +175,7 @@
 <script src="lib/GLTFLoader.js"></script>
 <script src="lib/RoomEnvironment.js"></script>
 <script src="refine.js"></script>
+<script src="../km-data.js"></script>
 <script src="../km-study.js"></script>
 <script src="pet-core.js"></script>
 <script src="pet.js"></script>

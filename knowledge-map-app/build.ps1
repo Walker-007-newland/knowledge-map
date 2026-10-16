@@ -40,6 +40,8 @@ foreach ($m in $maps) {
 $hub = [IO.File]::ReadAllText("$here\hub\index.html", [Text.Encoding]::UTF8).Replace('__VERSION__', $versionName)
 [IO.File]::WriteAllText("$work\assets\www\index.html", $hub, (New-Object Text.UTF8Encoding $false))
 Copy-Item "$here\hub\km-shim.js" "$work\assets\www\km-shim.js"
+Copy-Item "$here\hub\km-data.js" "$work\assets\www\km-data.js"
+Copy-Item "$here\hub\data.html" "$work\assets\www\data.html"
 Copy-Item "$here\hub\km-study.js" "$work\assets\www\km-study.js"
 Copy-Item "$here\hub\km-narrate.js" "$work\assets\www\km-narrate.js"
 Copy-Item "$here\hub\km-reward.js" "$work\assets\www\km-reward.js"
@@ -51,18 +53,19 @@ Get-ChildItem $petSrc -Recurse -File | Where-Object { $_.Extension -ne '.py' } |
   Copy-Item $_.FullName $dst
 }
 
-# 每个页面：<head> 里最先加载 km-shim.js（下载、朗读补丁）、km-study.js（学习计时，重复加载会自动跳过）、km-narrate.js（知识点语音讲解，只在讲解页出现）、pet/pet-core.js + km-reward.js（掌握知识点当场发骨头，并同步桌面小狗）；去掉 ?v= 缓存参数，避免 file:// 下找不到文件
+# 每个页面：<head> 里最先加载 km-shim.js（下载、朗读补丁）、km-data.js（学习数据中枢：修改记录、设备编号、听写词单互通，「我的数据」页用）、km-study.js（学习计时，重复加载会自动跳过）、km-narrate.js（知识点语音讲解，只在讲解页出现）、pet/pet-core.js + km-reward.js（掌握知识点当场发骨头，并同步桌面小狗）；去掉 ?v= 缓存参数，避免 file:// 下找不到文件
 $utf8 = New-Object Text.UTF8Encoding $false
 Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
   $depth = $_.DirectoryName.Substring("$work\assets\www".Length).Split('\', [StringSplitOptions]::RemoveEmptyEntries).Count
   $shim = ('../' * $depth) + 'km-shim.js'
   $html = [IO.File]::ReadAllText($_.FullName, $utf8)
   $html = [regex]::Replace($html, '((?:src|href)="[^"?#]+)\?v=[^"]*"', '$1"')
+  $data = ('../' * $depth) + 'km-data.js'
   $study = ('../' * $depth) + 'km-study.js'
   $narrate = ('../' * $depth) + 'km-narrate.js'
   $petCore = ('../' * $depth) + 'pet/pet-core.js'
   $reward = ('../' * $depth) + 'km-reward.js'
-  $tag = "<script src=`"$shim`"></script>`n<script src=`"$study`"></script>`n<script src=`"$narrate`"></script>`n<script src=`"$petCore`"></script>`n<script src=`"$reward`"></script>"
+  $tag = "<script src=`"$shim`"></script>`n<script src=`"$data`"></script>`n<script src=`"$study`"></script>`n<script src=`"$narrate`"></script>`n<script src=`"$petCore`"></script>`n<script src=`"$reward`"></script>"
   $html = if ($html -match '<head>') { ([regex]'<head>').Replace($html, "<head>`n$tag", 1) } else { "$tag`n$html" }
   if ($html -notmatch [regex]::Escape($shim)) { throw "没能在 $($_.FullName) 注入 km-shim.js" }
   [IO.File]::WriteAllText($_.FullName, $html, $utf8)
@@ -125,7 +128,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   $arsc = $zip.GetEntry('resources.arsc')

@@ -22,10 +22,21 @@
   function readJSON(key) {
     try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; }
   }
-  // { days: { 'YYYY-MM-DD': { 进度键: 秒 } }, first: { 进度键: { 知识点 id: 'YYYY-MM-DD' } }, totals: { 进度键: 知识点总数 } }
+  // { days: { 'YYYY-MM-DD': { 进度键: 秒 } }, first: { 进度键: { 知识点 id: 'YYYY-MM-DD' } }, totals: { 进度键: 知识点总数 },
+  //   byDev: { 设备编号: { 'YYYY-MM-DD': { 进度键: 秒 } } }, migrated: 1 }
+  // days 是所有设备的合计（各页面读它）；byDev 按设备分开记，导入合并时两边取大、再求和，同一个文件导入两次不会翻倍（见 km-data.js）
+  const devId = () => window.KMData ? KMData.device().id : null;
   function load() {
     const st = readJSON(STORE) || {};
     st.days = st.days || {}; st.first = st.first || {}; st.totals = st.totals || {};
+    // 升级后第一次：把已有的 days 整体记到本机名下（只做一次）
+    if (!st.migrated && devId()) {
+      st.byDev = st.byDev || {};
+      const me = devId();
+      if (!st.byDev[me] && Object.keys(st.days).length) st.byDev[me] = JSON.parse(JSON.stringify(st.days));
+      st.migrated = 1;
+      save(st);
+    }
     return st;
   }
   function save(st) {
@@ -93,6 +104,12 @@
       if (active && dt > 0) {
         const d = st.days[dayKey(now)] = st.days[dayKey(now)] || {};
         d[src.key] = Math.round(((d[src.key] || 0) + dt / 1000) * 10) / 10;
+        const me = st.migrated && devId();
+        if (me) {
+          const bd = ((st.byDev = st.byDev || {})[me] = st.byDev[me] || {});
+          const e = bd[dayKey(now)] = bd[dayKey(now)] || {};
+          e[src.key] = Math.round(((e[src.key] || 0) + dt / 1000) * 10) / 10;
+        }
       }
       if (rescan) scan(st);
       save(st);

@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>km-data 单元测试</title>
+<style>
+  :root { --bg: #f6f4ef; --text: #1f2328; --good: #2f8a4c; --bad: #c23f2e; --muted: #6b6f76; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #17181b; --text: #e8e6e1; --good: #5cbf7a; --bad: #ef7a68; --muted: #9a9ca3; } }
+  body { margin: 0; padding: 20px 16px; background: var(--bg); color: var(--text); font: 15px/1.6 "Microsoft YaHei", system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  #sum { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+  .ok { color: var(--good); } .bad { color: var(--bad); }
+  li { margin: 2px 0; } small { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>km-data.js 合并引擎单元测试</h1>
+<p><small>用法：用本地服务器打开本页（如 http://localhost:8781/issue-2/knowledge-map-app/hub/tests/test.html）。会临时清空本页所在网址的 localStorage，跑完自动还原。结果也在 window.__results。</small></p>
+<div id="sum">运行中…</div>
+<ol id="out"></ol>
+<script src="../km-data.js"></script>
+<script src="../km-study.js"></script>
+<script src="../pet/pet-core.js"></script>
+<script>
+(async function () {
+  const D = KMData, P = KMPet, S = KMStudy;
+  const out = document.getElementById('out');
+  const res = { pass: 0, fail: 0, failures: [] };
+  window.__results = res;
+  const canon = D._canon;
+  let cur = '';
+  function log(ok, msg) {
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'bad';
+    li.textContent = (ok ? '✓ ' : '✗ ') + cur + '：' + msg;
+    out.appendChild(li);
+    if (ok) res.pass++; else { res.fail++; res.failures.push(cur + '：' + msg); }
+  }
+  function eq(a, b, msg) { const ok = canon(a) === canon(b); log(ok, msg + (ok ? '' : '　实际 ' + canon(a) + '　期望 ' + canon(b))); }
+  function ok(v, msg) { log(!!v, msg); }
+  const NOW = Date.UTC(2026, 9, 20, 8, 0, 0);
+  const pk = (dev, keys, meta) => ({ device: { id: dev, name: dev }, keys: keys || {}, meta: meta || {} });
+  const M = (a, b) => D.merge(a, b, { now: NOW });
+  // 对称 + 幂等：A 合 B = B 合 A；结果再合 A、再合 B 都不变
+  function law(name, A, B, C) {
+    const ab = M(A, B).result, ba = M(B, A).result;
+    if (C) {
+      const r1 = M(pk('X', ab.keys, ab.meta), C).result, bc = M(B, C).result, r2 = M(A, pk('Y', bc.keys, bc.meta)).result;
+      eq(r1, r2, name + ' 结合律：(A合B)合C = A合(B合C)');
+    }
+    eq(ab.keys, ba.keys, name + ' 对称（keys）');
+    eq(ab.meta, ba.meta, name + ' 对称（meta）');
+    const R = pk('R', ab.keys, ab.meta);
+    eq(M(R, B).result.keys, ab.keys, name + ' 幂等（结果再合 B 不变）');
+    eq(M(R, A).result.keys, ab.keys, name + ' 幂等（结果再合 A 不变）');
+    ok(!M(R, B).report.changed, name + ' 再导入一次报告“没有变化”');
+    return ab;
+  }
+  async function test(name, fn) { cur = name; try { await fn(); } catch (e) { log(false, '抛出异常 ' + (e && e.stack || e)); } }
+
+  // 备份本页 localStorage，测试完还原
+  const saved = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); saved[k] = localStorage.getItem(k); }
+  function resetLS() { localStorage.clear(); }
+
+  try {
+    await test('进度（非数学）', () => {
+      const A = pk('A', { 'fjzk-zh-progress-v1': { n1: { viewed: 100, best: 90, last: 60, attempts: 3, updated: 2000 } } });
+      const B = pk('B', { 'fjzk-zh-progress-v1': { n1: { viewed: 50, best: 70, last: 85, attempts: 2, updated: 1000 }, n2: { viewed: 10, last: null, best: null, attempts: 0 } } });
+      const r = law('进度', A, B).keys['fjzk-zh-progress-v1'];
+      eq(r.n1, { viewed: 50, best: 90, last: 60, attempts: 3, updated: 2000 }, '验收 5：best=90、last=60（最近一次为准，最好成绩不降），viewed 取早、attempts 取大');
+      eq(r.n2, { viewed: 10, last: null, best: null, attempts: 0 }, '只一边有的知识点保留');
+      const C = pk('C', { 'fjzk-zh-progress-v1': { n1: { viewed: 5, diag: 'pass', diagInferred: true, diagAt: 3000 } } });
+      const E = pk('E', { 'fjzk-zh-progress-v1': { n1: { viewed: 9, diag: 'fail', diagInferred: false, diagAt: 4000 } } });
+      eq(law('诊断', C, E).keys['fjzk-zh-progress-v1'].n1, { viewed: 5, diag: 'fail', diagInferred: false, diagAt: 4000 }, 'diag 三项一起取 diagAt 新的');
+      const rep = M(B, A).report;
+      ok(rep.items.some(x => x.key === 'fjzk-zh-progress-v1' && /1 个最好成绩提高/.test(x.text)), '报告写明最好成绩提高：' + rep.items.map(x => x.name + x.text).join(' / '));
+    });
+
+    await test('数学进度', () => {
+      const A = pk('A', { 'mathmap-progress-v1': { m1: { best: 0.9, last: 0.5, at: 3000 }, m2: { best: 0.4, last: 0.4, at: 1 } } });
+      const B = pk('B', { 'mathmap-progress-v1': { m1: { best: 0.7, last: 0.7, at: 1000 }, m3: { best: 1, last: 1, at: 5 } } });
+      const r = law('数学进度', A, B).keys['mathmap-progress-v1'];
+      eq(r.m1, { best: 0.9, last: 0.5, at: 3000 }, 'best 取大，last+at 取 at 新的');
+      ok(r.m2 && r.m3, '两边各自的知识点都在');
+    });
+
+    await test('数学错题本', () => {
+      const A = pk('A', { 'mathmap-wrong-v1': { 'a#1': { n: 2, at: 100 }, 'b#0': { n: 1, at: 50 } } }, { 'mathmap-wrong-v1': { 'c#2': { x: 9000, v: { n: 2, at: 500 } } } });
+      const B = pk('B', { 'mathmap-wrong-v1': { 'a#1': { n: 1, at: 300 }, 'c#2': { n: 3, at: 2000 }, 'd#4': { n: 1, at: 8000 } } }, { 'mathmap-wrong-v1': { 'c#2': { t: 2000 }, 'd#4': { t: 9500 } } });
+      const ab = law('错题', A, B, pk('C', { 'mathmap-wrong-v1': { 'c#2': { n: 5, at: 100 }, 'e#1': { n: 1, at: 7 } } }));
+      const r = ab.keys['mathmap-wrong-v1'];
+      eq(r['a#1'], { n: 2, at: 300 }, '两边都有：n 取大、at 取新');
+      ok(!r['c#2'], '验收 7：A 答对删掉（删除记录更晚），B 还在 → 合并后不回来');
+      ok(r['d#4'] && r['b#0'], '只一边有且没有更晚删除记录 → 保留');
+      eq(ab.meta['mathmap-wrong-v1']['c#2'], { t: 2000, x: 9000, v: { n: 3, at: 2000 } }, '删除记录（删除时间、删除前内容）保留在合并结果里');
+      // 老数据（没有修改记录）也成立：B 的错题 at 早于 A 的删除
+      const B0 = pk('B0', { 'mathmap-wrong-v1': { 'c#2': { n: 1, at: 1000 } } });
+      ok(!M(A, B0).result.keys['mathmap-wrong-v1']['c#2'], '没有修改记录的老数据按时间 0 / 自带 at 处理');
+      // B 后来又做错了（比删除更晚）→ 保留
+      const B2 = pk('B2', { 'mathmap-wrong-v1': { 'c#2': { n: 1, at: 9900 } } }, { 'mathmap-wrong-v1': { 'c#2': { t: 9900, by: 'B2' } } });
+      ok(M(A, B2).result.keys['mathmap-wrong-v1']['c#2'], '删除之后又做错 → 保留');
+      const rep = M(B, A).report.items.find(x => x.key === 'mathmap-wrong-v1');
+      ok(rep && /\+1、−1/.test(rep.text), '报告写明错题 +、−：' + (rep && rep.text));
+    });
+
+    await test('草稿', () => {
+      const K = 'fjzk-zh-drafts-v1';
+      const tOld = new Date(2026, 9, 18, 21, 5).getTime(), tNew = new Date(2026, 9, 19, 8, 0).getTime();
+      // 每题按设备各存一份版本（watcher 在本机改动时写入 km-meta）
+      const ver = (dev, t, node) => { const v = {}; Object.keys(node).forEach(q => { v[q] = { [dev]: Object.assign({ t, text: node[q].text, seen: {} }, node[q].checks ? { checks: node[q].checks } : {}) }; }); return { t, by: dev, vers: v }; };
+      const a1 = { 0: { text: '同一段', checks: [true] }, 1: { text: '我的开头', checks: [] }, 2: { text: '新版本作文', checks: [true, true] } };
+      const b1 = { 0: { text: '同一段', checks: [false] }, 1: { text: '我的开头，后面写了更多', checks: [true] }, 2: { text: '旧版本作文', checks: [false] }, 3: { text: '只在 B 这题' } };
+      const A = pk('A', { [K]: { w1: a1, w2: { 0: { text: '只在 A' } } } }, { [K]: { w1: ver('A', tNew, a1) } });
+      const B = pk('B', { [K]: { w1: b1 } }, { [K]: { w1: ver('B', tOld, b1) } });
+      const c1 = { 2: { text: '第三台设备写的' } };
+      const C = pk('C', { [K]: { w1: c1 } }, { [K]: { w1: ver('C', tOld - 3600000, c1) } });
+      const ab = law('草稿', A, B, C);
+      const w1 = ab.keys[K].w1;
+      eq(w1[0], { text: '同一段', checks: [true] }, '文字相同：保留，checks 取较新的');
+      eq(w1[1].text, '我的开头，后面写了更多', '一份是另一份的开头：取长的');
+      eq(w1[2].text, '新版本作文\n\n【另一台设备 10-18 21:05 保存的版本】\n旧版本作文', '验收 8：正文为较新的，后面附较旧的');
+      eq(w1[2].checks, [true, true], '冲突时 checks 取较新的');
+      ok(w1[3] && ab.keys[K].w2, '只一边有的题、知识点都保留');
+      const r = M(A, B).report;
+      eq(r.conflicts, 1, '报告里草稿冲突数 = 1');
+      ok(r.items.some(x => x.key === K && /两份都保留/.test(x.text)), '报告文字提示两份都保留');
+      // 三台设备按不同顺序合并：不会重复追加
+      const ba = M(B, A).result;
+      const abc = M(pk('X', ab.keys, ab.meta), C).result, cba = M(C, pk('Y', ba.keys, ba.meta)).result;
+      eq(abc.keys[K].w1[2].text, cba.keys[K].w1[2].text, '三方草稿不同顺序结果相同');
+      eq(abc.keys[K].w1[2].text.split('【另一台设备').length - 1, 2, '三份各不相同 → 正文 + 2 份附在后面，不重复');
+      const again = M(pk('Z', abc.keys, abc.meta), A).result;
+      eq(again.keys[K].w1[2].text, abc.keys[K].w1[2].text, '再合并一次不会越接越长');
+      // 在合并后的设备上改了这题：本机版本把其它版本标成看过，正文只剩本机写的
+      const vs = JSON.parse(JSON.stringify(abc.meta[K].w1.vers[2]));
+      vs.A = { t: tNew + 1000, text: '我改好了', seen: { B: vs.B.t, C: vs.C.t } };
+      eq(D.computeDraft(vs).text, '我改好了', '本机改过（看过其它版本）后，正文只有本机这份');
+    });
+
+    await test('入门诊断 / 朗读语速 / 不认识的键', () => {
+      const A = pk('A', { 'fjzk-en-diag-v1': { done: false, state: { a: 1 } }, 'km-narrate-rate': '1.2', 'fjzk-future-v1': { x: 1 } }, { 'fjzk-en-diag-v1': { '*': { t: 500 } }, 'km-narrate-rate': { '*': { t: 100 } } });
+      const B = pk('B', { 'fjzk-en-diag-v1': { done: true, state: { b: 2 } }, 'km-narrate-rate': '0.8', 'fjzk-other-v9': [1, 2] }, { 'fjzk-en-diag-v1': { '*': { t: 400 } }, 'km-narrate-rate': { '*': { t: 200 } } });
+      const r = law('整键', A, B).keys;
+      eq(r['fjzk-en-diag-v1'], { done: false, state: { a: 1 } }, '诊断取修改时间较新的整份');
+      eq(r['km-narrate-rate'], '0.8', '语速取较新的');
+      eq([r['fjzk-future-v1'], r['fjzk-other-v9']], [{ x: 1 }, [1, 2]], '清单里没有的键原样保留');
+    });
+
+    await test('学习时长', () => {
+      const day = '2026-10-18';
+      const A = pk('A', { 'km-study-v1': { days: { [day]: { 'fjzk-zh-progress-v1': 1200 } }, byDev: { A: { [day]: { 'fjzk-zh-progress-v1': 1200 } } }, first: { 'fjzk-zh-progress-v1': { n1: '2026-10-18', n2: '2026-10-01' } }, totals: { 'fjzk-zh-progress-v1': 100 }, migrated: 1 } });
+      const B = pk('B', { 'km-study-v1': { days: { [day]: { 'fjzk-zh-progress-v1': 900 } }, first: { 'fjzk-zh-progress-v1': { n1: '2026-10-10' } }, totals: { 'fjzk-zh-progress-v1': 120 } } });  // 老格式：没有 byDev
+      const r = law('学习时长', A, B).keys['km-study-v1'];
+      eq(r.days[day]['fjzk-zh-progress-v1'], 2100, '验收 9：A 20 分钟 + B 15 分钟 = 35 分钟');
+      eq(r.first['fjzk-zh-progress-v1'], { n1: '2026-10-10', n2: '2026-10-01' }, 'first 取较早');
+      eq(r.totals['fjzk-zh-progress-v1'], 120, 'totals 取较大');
+      const R = pk('A', { 'km-study-v1': r });
+      eq(M(R, B).result.keys['km-study-v1'].days[day]['fjzk-zh-progress-v1'], 2100, '再导入一次仍是 35 分钟');
+      eq(M(R, pk('A', A.keys)).result.keys['km-study-v1'].days[day]['fjzk-zh-progress-v1'], 2100, '导入自己以前的文件不翻倍');
+    });
+
+    await test('小狗', () => {
+      const shop = P.ITEMS.find(x => x.id === 'collar').price + P.ITEMS.find(x => x.id === 'party').price;   // 5 + 8
+      const A = pk('A', { 'km-pet-v1': { breed: 'shiba', name: '旺财', born: 1000, tick: NOW - 10 * 3600000, fullness: 80, xp: 3, bones: 3 * 3 - 2 - 5,
+        claimed: { 'fjzk-zh-progress-v1': ['x', 'y'], 'mathmap-progress-v1': ['m'] }, owned: ['collar'], equip: { neck: 'collar' }, spent: { A: 2 }, legacy: { A: 0 }, petDay: '2026-10-9', petCount: 3, lastStudy: 50 } },
+        { 'km-pet-v1': { '*': { t: 900 } } });
+      const B = pk('B', { 'km-pet-v1': { breed: 'husky', name: '二哈', born: 2000, tick: NOW, fullness: 40, xp: 2, bones: 3 * 2 - 1 - 8,
+        claimed: { 'fjzk-zh-progress-v1': ['x', 'z'] }, owned: ['party'], equip: { head: 'party' }, equipT: 5, spent: { B: 1 }, legacy: {}, petDay: '2026-10-16', petCount: 1, lastStudy: 80 } },
+        { 'km-pet-v1': { '*': { t: 800 } } });
+      B.keys['km-pet-v1'].bones = Math.max(0, B.keys['km-pet-v1'].bones);   // 6−1−8 < 0 → 0（B 的数据本身就是“负数”时公式也不出负）
+      const r = law('小狗', A, B).keys['km-pet-v1'];
+      eq(r.claimed, { 'fjzk-zh-progress-v1': ['x', 'y', 'z'], 'mathmap-progress-v1': ['m'] }, '验收 6：同一个知识点 x 两边都领过，只算一次');
+      eq(r.xp, 4, 'xp = 已领知识点并集个数');
+      eq(r.bones, Math.max(0, 3 * 4 - (2 + 1) - 0 - shop), 'bones = 3×xp − Σspent − Σlegacy − 已购装扮总价');
+      ok(r.bones >= 0, '骨头不为负');
+      eq([r.name, r.breed], ['旺财', 'shiba'], '名字、品种取最早领养的那只（born 最小）');
+      eq(r.owned, ['collar', 'party'], '装扮取并集');
+      eq(r.equip, { head: 'party' }, '穿戴取 equipT（换装时间）较新的');
+      eq([r.born, r.tick, r.fullness], [1000, NOW - 10 * 3600000, 80], 'born 取早；饱食度按同一时刻折算后取更饱的那份（A 折算到 B 的 tick 是 70 > 40）');
+      eq([r.petDay, r.petCount, r.lastStudy], ['2026-10-16', 1, 80], 'petDay 取较晚的那天，lastStudy 取大');
+      const rep = M(A, B).report.items.find(x => x.key === 'km-pet-v1');
+      ok(rep && /两只小狗合并为「旺财」/.test(rep.text), '报告写明两只小狗合并：' + (rep && rep.text));
+      // 同一只狗（换平板恢复）：不重复发骨头
+      const R = pk('B', { 'km-pet-v1': JSON.parse(JSON.stringify(A.keys['km-pet-v1'])) });
+      eq(M(A, R).result.keys['km-pet-v1'].bones, A.keys['km-pet-v1'].bones, '同一只狗合并两次骨头不变');
+      // 只一边有小狗：按公式重算，迁移前的老数据（没有 spent/legacy）骨头数不变
+      const old = pk('C', { 'km-pet-v1': { breed: 'shiba', name: '小柴', born: 1, tick: NOW, fullness: 50, xp: 5, bones: 4, claimed: { 'fjzk-en-progress-v1': ['a', 'b', 'c', 'd', 'e'] }, owned: ['collar'], equip: {} } });
+      const r2 = M(pk('D', {}), old).result.keys['km-pet-v1'];
+      eq(r2.bones, 4, '老小狗（没有花费记录）导入到空设备：骨头数不变');
+      eq(r2.legacy, { C: 15 - 4 - 5 }, 'legacy = 3×已领 − 当前骨头 − 已购装扮');
+    });
+
+    await test('三只狗：任意顺序合并名字一样，改名不丢', () => {
+      const dog = (dev, born, name) => pk(dev, { 'km-pet-v1': { breed: born === 300 ? 'shiba' : 'husky', name, born, tick: born, fullness: 50, xp: 0, bones: 0, claimed: {}, owned: [], equip: {}, spent: {}, legacy: {}, nameT: born } });
+      const a = dog('A', 500, '阿黄'), b = dog('B', 300, '小柴'), c = dog('C', 900, '二哈');
+      const orders = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]];
+      const pets = orders.map(o => { const r1 = M(o[0], o[1]).result; return M(pk('X', r1.keys, r1.meta), o[2]).result.keys['km-pet-v1']; });
+      eq(pets.map(p => p.name + '/' + p.breed), Array(6).fill('小柴/shiba'), '验收：6 种顺序都是最早领养的「小柴」');
+      eq(pets.map(p => canon(p)), Array(6).fill(canon(pets[0])), '6 种顺序得到完全相同的小狗');
+      // 合并后在设备 C 上改名（同一只狗，nameT 更新）；设备 B 后来喂了狗（整键修改时间更晚）。再和 A 合并
+      const m0 = pets[0];
+      const renamed = pk('C', { 'km-pet-v1': Object.assign({}, m0, { name: '豆豆', nameT: 99999 }) }, { 'km-pet-v1': { '*': { t: 99999, by: 'C' } } });
+      const fed = pk('B', { 'km-pet-v1': Object.assign({}, m0, { tick: 200000, fullness: 90 }) }, { 'km-pet-v1': { '*': { t: 200000, by: 'B' } } });
+      const fr = M(fed, renamed).result;
+      const back = M(pk('Y', fr.keys, fr.meta), a).result.keys['km-pet-v1'];
+      eq(back.name, '豆豆', '验收：改名以后再合并，新名字不丢（不会被别的设备喂狗盖掉）');
+    });
+
+    await test('随机三方：三种合并顺序结果完全相同', () => {
+      let seed = +new URLSearchParams(location.search).get('seed') || 20261016;   // 可以在网址后加 ?seed=数字 换一批随机数据
+      const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+      const pickOne = arr => arr[rnd(arr.length)];
+      const devs = ['A', 'B', 'C'];
+      function gen(dev) {
+        const keys = {}, meta = {};
+        const put = (k, id, e) => { (meta[k] = meta[k] || {})[id] = e; };
+        // 进度 / 数学进度 / 错题：每条随机是“有 / 删了 / 没有”
+        [['fjzk-zh-progress-v1', () => ({ viewed: rnd(50), best: pickOne([null, rnd(100)]), last: pickOne([null, rnd(100)]), attempts: rnd(5), updated: rnd(30), ...(rnd(2) ? { diag: pickOne(['pass', 'fail']), diagInferred: !!rnd(2), diagAt: rnd(30) } : {}) })],
+         ['mathmap-progress-v1', () => ({ best: rnd(10) / 10, last: rnd(10) / 10, at: rnd(30) })],
+         ['mathmap-wrong-v1', () => ({ n: 1 + rnd(4), at: rnd(40) })]].forEach(([k, mk]) => {
+          const o = {};
+          ['i1', 'i2', 'i3', 'i4'].forEach(id => {
+            const s = rnd(3);
+            if (s === 0) { o[id] = mk(); if (rnd(2)) put(k, id, { t: 10 + rnd(50), by: dev, ...(rnd(3) ? {} : { x: rnd(10) }) }); }
+            else if (s === 1) put(k, id, { t: rnd(10), by: dev, x: 20 + rnd(50), v: mk() });
+          });
+          keys[k] = o;
+        });
+        // 草稿：要么老数据（没有版本），要么有各设备版本
+        const dr = {}, dm = {};
+        ['w1', 'w2'].forEach(id => {
+          if (!rnd(3)) return;
+          if (rnd(2)) { dr[id] = { 0: { text: pickOne(['', '甲', '甲乙', '丙']) } }; return; }
+          const vers = { 0: {} };
+          devs.forEach(d => { if (d === dev || rnd(2)) vers[0][d] = { t: rnd(20), text: pickOne(['', '甲', '甲乙', '丙', '丁']), seen: rnd(2) ? { [pickOne(devs)]: rnd(20) } : {} }; });
+          dm[id] = { t: rnd(30), by: dev, vers };
+          dr[id] = { 0: { text: D.computeDraft(vers[0]).text } };
+        });
+        keys['fjzk-zh-drafts-v1'] = dr; meta['fjzk-zh-drafts-v1'] = dm;
+        if (rnd(2)) { keys['fjzk-zh-diag-v1'] = { s: rnd(5) }; put('fjzk-zh-diag-v1', '*', { t: rnd(5), by: dev }); }
+        if (rnd(2)) keys['km-narrate-rate'] = pickOne(['0.8', '1', '1.2']);
+        if (rnd(2)) keys['fjzk-x-v1'] = { r: rnd(5) };
+        keys['km-study-v1'] = rnd(2) ? { days: { d1: { k: rnd(100) } }, first: { k: { a: 'd' + rnd(9) } }, totals: { k: rnd(9) } }
+          : { days: {}, byDev: { [dev]: { d1: { k: rnd(100) } }, [pickOne(devs)]: { d2: { k: rnd(100) } } }, first: {}, totals: {}, migrated: 1 };
+        if (rnd(4)) keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙', '丙']), born: rnd(3), nameT: rnd(5), tick: rnd(1e6), fullness: rnd(100), xp: 0, bones: rnd(20),
+          claimed: { k: ['a', 'b', 'c', 'd'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)), equip: { neck: pickOne(['collar', null]) }, equipT: rnd(5),
+          ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}), petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
+        const lists = [];
+        ['L1', 'L2'].forEach(id => {
+          const s = rnd(3);
+          const mk = () => ({ id, name: pickOne(['一', '二']), words: [{ en: pickOne(['cat', 'dog']) }], wrong: { cat: rnd(3) }, history: [{ at: rnd(5), c: rnd(2) }], created: rnd(3) });
+          if (s === 0) { lists.push(mk()); if (rnd(2)) put('fjzk-en-dictation-v1', id, { t: 10 + rnd(20), by: dev }); }
+          else if (s === 1) put('fjzk-en-dictation-v1', id, { t: rnd(5), x: 10 + rnd(30), v: mk() });
+        });
+        keys['fjzk-en-dictation-v1'] = { lists, settings: { reps: String(rnd(3)) } };
+        put('fjzk-en-dictation-v1', '@settings', { t: rnd(5), by: dev });
+        return pk(dev, keys, meta);
+      }
+      const P2 = r => pk('R', r.keys, r.meta);
+      let bad = 0, first = '';
+      for (let i = 0; i < 200; i++) {
+        const a = gen('A'), b = gen('B'), c = gen('C');
+        const r1 = M(P2(M(a, b).result), c).result;
+        const r2 = M(a, P2(M(b, c).result)).result;
+        const r3 = M(P2(M(a, c).result), b).result;
+        const r4 = M(P2(M(c, b).result), a).result;
+        const s1 = JSON.stringify(r1);
+        if (s1 !== JSON.stringify(r2) || s1 !== JSON.stringify(r3) || s1 !== JSON.stringify(r4)) { bad++; if (!first) first = '第 ' + i + ' 组：' + s1.slice(0, 300) + ' ≠ ' + JSON.stringify(r2).slice(0, 300); }
+        if (JSON.stringify(M(P2(r1), a).result) !== s1) { bad++; if (!first) first = '第 ' + i + ' 组再合 a 变了'; }
+      }
+      ok(!bad, '追加验收 1：200 组随机三份数据，(a,b),c / a,(b,c) / (a,c),b / (c,b),a 四种顺序结果逐字节相同' + (bad ? '；失败 ' + bad + ' 次，' + first : ''));
+    });
+
+    await test('单词听写', () => {
+      const K = 'fjzk-en-dictation-v1';
+      const A = pk('A', { [K]: { lists: [
+        { id: 'L1', name: '新名字', words: [{ en: 'apple' }, { en: 'pear' }], wrong: { apple: 2 }, history: [{ at: 10, total: 2, correct: 1 }, { at: 30, total: 2, correct: 2 }], created: 5 },
+        { id: 'L3', name: '只在 A', words: [], wrong: {}, history: [], created: 7 }
+      ], settings: { reps: '3' } } }, { [K]: { L1: { t: 500 }, '@settings': { t: 100 }, L2: { t: 100, x: 400, v: { id: 'L2', name: 'A 删掉了', words: [], wrong: {}, history: [], created: 3 } } } });
+      const B = pk('B', { [K]: { lists: [
+        { id: 'L1', name: '旧名字', words: [{ en: 'apple' }], wrong: { apple: 1, pear: 4 }, history: [{ at: 10, total: 2, correct: 1 }, { at: 20, total: 1, correct: 0 }], created: 5 },
+        { id: 'L2', name: 'A 删掉了', words: [], wrong: {}, history: [], created: 3 }
+      ], settings: { reps: '1' } } }, { [K]: { L1: { t: 300 }, '@settings': { t: 200 }, L2: { t: 300 } } });
+      const r = law('听写', A, B, pk('C', { [K]: { lists: [{ id: 'L2', name: '更早的', words: [], wrong: { cat: 1 }, history: [], created: 3 }], settings: { reps: '9' } } }, { [K]: { L2: { t: 50 }, '@settings': { t: 50 } } })).keys[K];
+      const L1 = r.lists.find(l => l.id === 'L1');
+      eq([L1.name, L1.words.length], ['新名字', 2], '名称和单词表取较新的');
+      eq(L1.wrong, { apple: 2, pear: 4 }, '错词取并集、次数取大');
+      eq(L1.history.map(h => h.at), [10, 20, 30], 'history 按 at 去重合并');
+      ok(!r.lists.some(l => l.id === 'L2'), 'A 后来删掉的词单不会回来');
+      ok(r.lists.some(l => l.id === 'L3'), '只一边有的词单保留');
+      eq(r.settings, { reps: '1' }, '听写设置取较新的');
+      const many = pk('X', { [K]: { lists: [{ id: 'L1', name: 'n', words: [], wrong: {}, history: Array.from({ length: 40 }, (_, i) => ({ at: 1000 + i })), created: 5 }] } });
+      const many2 = pk('Y', { [K]: { lists: [{ id: 'L1', name: 'n', words: [], wrong: {}, history: Array.from({ length: 40 }, (_, i) => ({ at: 2000 + i })), created: 5 }] } });
+      const h = M(many, many2).result.keys[K].lists[0].history;
+      eq([h.length, h[0].at, h[49].at], [50, 1030, 2039], 'history 只保留最近 50 条');
+    });
+
+    await test('综合：一大份数据的对称与幂等', () => {
+      const A = pk('A', {
+        'fjzk-zh-progress-v1': { a: { viewed: 1, best: 80, last: 80, attempts: 1, updated: 10 } }, 'mathmap-wrong-v1': { 'q#1': { n: 1, at: 5 } },
+        'fjzk-en-drafts-v1': { e1: { 0: { text: 'Hello A' } } }, 'km-study-v1': { days: { d: { k: 60 } }, byDev: { A: { d: { k: 60 } } }, first: {}, totals: {}, migrated: 1 },
+        'km-narrate-rate': '1'
+      }, { 'fjzk-en-drafts-v1': { e1: { t: 50 } } });
+      const B = pk('B', {
+        'fjzk-zh-progress-v1': { a: { viewed: 2, best: 60, last: 60, attempts: 4, updated: 10 }, b: { viewed: 3 } }, 'mathmap-wrong-v1': {},
+        'fjzk-en-drafts-v1': { e1: { 0: { text: 'Hello B' } } }, 'km-study-v1': { days: { d: { k: 30 } }, byDev: { B: { d: { k: 30 } } }, first: {}, totals: {}, migrated: 1 }
+      }, { 'fjzk-en-drafts-v1': { e1: { t: 50 } }, 'mathmap-wrong-v1': { 'q#1': { x: 7 } } });
+      const r = law('综合', A, B);
+      ok(!r.keys['mathmap-wrong-v1']['q#1'], '错题删除记录生效');
+      eq(r.keys['fjzk-zh-progress-v1'].a.last, 80, 'updated 相同时取较高的 last（确定性）');
+    });
+
+    await test('识别导入文件', () => {
+      eq(D.parseFile('不是 JSON').ok, false, '非 JSON → 拒绝');
+      eq(D.parseFile('{"a":1}').error, '这个文件不是知识图谱的备份文件', '别的 JSON → 中文提示');
+      eq(D.parseFile('[1,2]').ok, false, '数组 → 拒绝');
+      eq(D.parseFile(JSON.stringify({ app: 'km-all', schema: 2, keys: {} })).error, '这个文件来自更新版本的 App，请先升级', 'schema 更大 → 提示升级');
+      const l = D.parseFile(JSON.stringify({ app: 'fjzk-chinese-map', version: 1, progress: { n: { best: 90, last: 90 } }, drafts: { n: { 0: { text: 'x' } } } }));
+      ok(l.ok && l.pkg.keys['fjzk-zh-progress-v1'] && l.pkg.keys['fjzk-zh-drafts-v1'] && Object.keys(l.pkg.keys).length === 2, '验收 10：语文旧单科文件 → 只换算成语文进度和草稿');
+      const s = D.parseFile(JSON.stringify({ app: 'fjzk-physics', version: 1, progress: {}, drafts: {} }));
+      ok(s.ok && s.pkg.keys['fjzk-physics-progress-v1'], '物理旧单科文件');
+      ok(D.parseFile(JSON.stringify({ app: 'fjzk-english-map', progress: {} })).pkg.keys['fjzk-en-progress-v1'], '英语旧单科文件');
+    });
+
+    /* ---------------- 下面用真实 localStorage ---------------- */
+    await test('修改记录（km-meta-v1）', () => {
+      resetLS();
+      localStorage.setItem('mathmap-wrong-v1', JSON.stringify({ 'a#1': { n: 1, at: 1 }, 'b#2': { n: 1, at: 2 } }));
+      D._flush();
+      let meta = JSON.parse(localStorage.getItem('km-meta-v1'));
+      ok(meta['mathmap-wrong-v1']['a#1'].t > 0 && meta['mathmap-wrong-v1']['a#1'].by === D.device().id, '新增条目记下修改时间和设备');
+      localStorage.setItem('mathmap-wrong-v1', JSON.stringify({ 'b#2': { n: 1, at: 2 } }));   // 答对删掉 a#1
+      D._flush();
+      meta = JSON.parse(localStorage.getItem('km-meta-v1'));
+      ok(meta['mathmap-wrong-v1']['a#1'].x > 0, '删掉的条目记删除时间');
+      eq(meta['mathmap-wrong-v1']['a#1'].v, { n: 1, at: 1 }, '同时记下删除前的内容');
+      localStorage.setItem('km-narrate-rate', '1.5');
+      D._flush();
+      meta = JSON.parse(localStorage.getItem('km-meta-v1'));
+      ok(meta['km-narrate-rate']['*'].t > 0, '整键数据记一条 *');
+      localStorage.setItem('unrelated', 'x');
+      D._flush();
+      ok(!JSON.parse(localStorage.getItem('km-meta-v1')).unrelated, '清单外的键不记');
+      // 删除记录 180 天后清理
+      const m2 = JSON.parse(localStorage.getItem('km-meta-v1'));
+      m2['mathmap-wrong-v1']['old#1'] = { x: Date.now() - 181 * 86400000 };
+      localStorage.setItem('km-meta-v1', JSON.stringify(m2));
+      localStorage.setItem('mathmap-wrong-v1', JSON.stringify({}));
+      D._flush();
+      ok(!JSON.parse(localStorage.getItem('km-meta-v1'))['mathmap-wrong-v1']['old#1'], '超过 180 天的删除记录被清理');
+      // 长作文输入不卡：1000 次写入只在 1 秒后比对一次
+      const big = { n: { 0: { text: 'x'.repeat(5000) } } };
+      const t0 = performance.now();
+      for (let i = 0; i < 1000; i++) { big.n[0].text += 'y'; localStorage.setItem('fjzk-zh-drafts-v1', JSON.stringify(big)); }
+      const t1 = performance.now();
+      D._flush();
+      ok(t1 - t0 < 1500, '1000 次草稿写入耗时 ' + Math.round(t1 - t0) + ' ms（包装只记脏标记，不逐次比对）');
+    });
+
+    await test('草稿版本记录（本机改动 → 本机版本，看过其它版本）', () => {
+      resetLS();
+      const me = D.device().id, K = 'fjzk-zh-drafts-v1';
+      localStorage.setItem(K, JSON.stringify({ n: { 0: { text: '第一稿' } } }));
+      D._flush();
+      let e = JSON.parse(localStorage.getItem('km-meta-v1'))[K].n;
+      eq([e.vers[0][me].text, Object.keys(e.vers[0][me].seen).length], ['第一稿', 0], '本机写草稿 → 记一份本机版本');
+      // 导入另一台设备的版本（apply 不产生新的修改时间）
+      const r = D.merge(D.collect(), { device: { id: 'other' }, keys: { [K]: { n: { 0: { text: '别的设备写的' } } } }, meta: { [K]: { n: { t: Date.now() + 5000, by: 'other', vers: { 0: { other: { t: Date.now() + 5000, text: '别的设备写的', seen: {} } } } } } } });
+      D.apply(r.result);
+      const shown = JSON.parse(localStorage.getItem(K)).n[0].text;
+      ok(/^别的设备写的\n\n【另一台设备 .* 保存的版本】\n第一稿$/.test(shown), '合并后正文：较新的 + 附上本机旧稿：' + JSON.stringify(shown));
+      e = JSON.parse(localStorage.getItem('km-meta-v1'))[K].n;
+      eq(e.vers[0][me].text, '第一稿', 'apply 不改本机版本、不产生新修改时间');
+      // 学生在本机接着改
+      localStorage.setItem(K, JSON.stringify({ n: { 0: { text: shown + '（我又补了一句）' } } }));
+      D._flush();
+      e = JSON.parse(localStorage.getItem('km-meta-v1'))[K].n;
+      ok(e.vers[0][me].seen.other > 0, '本机改动后把其它设备的版本标成看过');
+      eq(D.computeDraft(e.vers[0]).text, shown + '（我又补了一句）', '正文就是学生改后的文字，不会再重复附加');
+      let fired = null;
+      addEventListener('km-data-change', ev => { fired = ev.detail; }, { once: true });
+      localStorage.setItem('km-narrate-rate', '0.9');
+      D._flush();
+      ok(fired && fired.keys.indexOf('km-narrate-rate') >= 0, 'meta 更新后发出 km-data-change 事件 {keys}');
+    });
+
+    await test('再导入不误报：未排序数据、只一边有', () => {
+      // pet-core 领奖励、买装扮都是 push，真实数据里 claimed / owned 不是排好序的；听写 history、学习时长 days 也可能不规范
+      const day = '2026-10-18';
+      const raw = () => ({
+        'km-pet-v1': { breed: 'shiba', name: '旺财', born: 1000, tick: NOW, fullness: 60, xp: 4, bones: 0,
+          claimed: { 'fjzk-zh-progress-v1': ['z', 'b', 'a', 'b'], 'mathmap-progress-v1': ['m2', 'm1'] }, owned: ['party', 'collar'], equip: { neck: 'collar' }, spent: { A: 1 }, legacy: { A: 0 } },
+        'km-study-v1': { days: { [day]: { 'fjzk-zh-progress-v1': 300 } }, byDev: { A: { [day]: { 'fjzk-zh-progress-v1': 300 } } }, first: {}, totals: {} },
+        'fjzk-en-dictation-v1': { lists: [{ id: 'L1', name: '一单元', words: [{ en: 'cat' }], wrong: { cat: 1 }, history: [{ at: 30, ok: 1 }, { at: 10, ok: 0 }, { at: 30, ok: 1 }], created: 3 }], settings: { reps: '2' } },
+        'fjzk-zh-progress-v1': { b: { viewed: 1, last: 90, best: 90, attempts: 1, updated: 5 } }
+      });
+      const F = pk('A', raw(), { 'km-pet-v1': { '*': { t: 900, by: 'A' } }, 'fjzk-en-dictation-v1': { L1: { t: 40, by: 'A' } } });
+      const E = pk('N', {});
+      // 只一边有：输出与“自己和自己合并”完全相同（规范化）
+      eq(M(E, F).result, M(F, F).result, '只一边有时输出与两边都有时一样规范');
+      eq(M(E, F).result, M(F, E).result, '只一边有：对称');
+      const pet = M(E, F).result.keys['km-pet-v1'];
+      eq([pet.claimed, pet.owned, pet.xp], [{ 'fjzk-zh-progress-v1': ['a', 'b', 'z'], 'mathmap-progress-v1': ['m1', 'm2'] }, ['collar', 'party'], 5], '只一边有小狗：claimed 每科、owned 去重排序，xp 按去重后个数');
+      eq(M(E, F).result.keys['fjzk-en-dictation-v1'].lists[0].history.map(h => h.at), [10, 30], '只一边有词单：history 去重排序');
+      // 1. 新设备导入后再导入同一个文件
+      const R1 = M(E, F).result;
+      const r2 = M(pk('N', R1.keys, R1.meta), F).report;
+      ok(!r2.changed, '验收 4：新设备导入一次后再导入同一文件 → 没有变化：' + r2.items.map(x => x.name + x.text).join(' / '));
+      // 2. 导入自己刚导出的文件（本机数据就是未排序的）
+      const r3 = M(F, JSON.parse(JSON.stringify(F))).report;
+      ok(!r3.changed, '导入自己刚导出的文件 → 没有变化：' + r3.items.map(x => x.name + x.text).join(' / '));
+      // 3. 只有一边有小狗、另一边有别的数据
+      const G = pk('B', { 'fjzk-zh-progress-v1': { c: { viewed: 2, last: 80, best: 80, attempts: 1, updated: 6 } } });
+      const R4 = M(G, F).result;
+      ok(!M(pk('B', R4.keys, R4.meta), F).report.changed, '只一边有小狗：合并后再导入小狗那边的文件 → 没有变化');
+      ok(!M(pk('B', R4.keys, R4.meta), G).report.changed, '只一边有小狗：合并后再导入另一边的文件 → 没有变化');
+      // 报告文字：说清改了什么；类别总数
+      const F2 = JSON.parse(JSON.stringify(F));
+      F2.keys['km-pet-v1'].claimed['fjzk-zh-progress-v1'].push('c', 'd', 'e');
+      const it = M(F, F2).report.items.find(x => x.key === 'km-pet-v1');
+      ok(it && /已领知识点 \+3（共 8 个）/.test(it.text), '小狗变化写明「已领知识点 +3」：' + (it && it.text));
+      const rp = M(E, F).report;
+      eq([rp.items.length, rp.total], [4, 4], '报告给出类别总数（全部有变化时页面不写「其余没有变化」）');
+      const F3 = JSON.parse(JSON.stringify(F));
+      F3.keys['fjzk-zh-progress-v1'].b.viewed = 0;
+      const it3 = M(F, F3).report.items.find(x => x.key === 'fjzk-zh-progress-v1');
+      ok(it3 && /1 个知识点的最近成绩、浏览时间等有更新/.test(it3.text), '进度只改了浏览时间：不写含糊的「已更新」：' + (it3 && it3.text));
+    });
+
+    await test('设备编号', () => {
+      resetLS();
+      const d = D.device();
+      ok(/^[0-9a-f]{16}$/.test(d.id) && d.name === '浏览器', '16 位编号，浏览器里名称为「浏览器」');
+      eq(JSON.parse(localStorage.getItem('km-device-v1')).id, d.id, '存在 km-device-v1');
+    });
+
+    await test('升级迁移：小狗骨头不变、学习时长不变', () => {
+      resetLS();
+      const me = D.device().id;
+      // 升级前的老数据：领过 6 个知识点（18 根），买了项圈（5），喂过 4 次 → 剩 9 根
+      localStorage.setItem('fjzk-zh-progress-v1', JSON.stringify({ a: { last: 90 }, b: { last: 90 }, c: { last: 90 }, d: { last: 90 }, e: { last: 90 }, f: { last: 90 }, g: { last: 95 } }));
+      const old = { breed: 'shiba', name: '小柴', born: 1, tick: Date.now(), fullness: 50, xp: 6, bones: 9, claimed: { 'fjzk-zh-progress-v1': ['a', 'b', 'c', 'd', 'e', 'f'] }, owned: ['collar'], equip: { neck: 'collar' }, petDay: '', petCount: 0, lastStudy: 0 };
+      localStorage.setItem('km-pet-v1', JSON.stringify(old));
+      localStorage.setItem('km-study-v1', JSON.stringify({ days: { '2026-10-15': { 'fjzk-zh-progress-v1': 1234.5 } }, first: {}, totals: {} }));
+      const st = P.load();
+      eq(st.bones, 9, '验收 13：迁移后骨头仍是 9');
+      eq(JSON.parse(localStorage.getItem('km-pet-v1-backup')), old, '迁移前原数据备份到 km-pet-v1-backup');
+      eq(st.legacy, { [me]: 18 - 9 - 5 }, 'legacy[本机] = 3×已领 − 骨头 − 装扮');
+      eq(D.petBones(st), st.bones, '恒等式成立');
+      P.feed(st);
+      eq([st.bones, st.spent[me], D.petBones(st)], [8, 1, 8], '喂食：骨头 −1、spent+1，恒等式成立');
+      st.fullness = 10;
+      P.buy(st, 'party');
+      eq(D.petBones(st), st.bones, '买装扮后恒等式成立');
+      P.claim(st);
+      eq([st.xp, D.petBones(st) === st.bones], [7, true], '领新掌握的知识点后恒等式成立');
+      eq(P.load().legacy, st.legacy, '迁移只做一次');
+      const sst = S.load();
+      eq([sst.migrated, sst.byDev[me]['2026-10-15']['fjzk-zh-progress-v1'], S.secondsOn(sst, '2026-10-15')], [1, 1234.5, 1234.5], '学习时长迁移：byDev[本机] = 原 days，统计页读的 days 不变');
+    });
+
+    await test('导出 → 空白设备导入 → 一致；再导入一次没有变化', () => {
+      resetLS();
+      localStorage.setItem('mathmap-progress-v1', JSON.stringify({ m1: { best: 0.9, last: 0.9, at: 5 } }));
+      localStorage.setItem('mathmap-wrong-v1', JSON.stringify({ 'm2#0': { n: 2, at: 6 } }));
+      localStorage.setItem('fjzk-zh-progress-v1', JSON.stringify({ z1: { viewed: 1, last: 85, best: 85, attempts: 1, updated: 9 } }));
+      localStorage.setItem('fjzk-zh-drafts-v1', JSON.stringify({ z1: { 0: { text: '我的作文', checks: [true] } } }));
+      localStorage.setItem('fjzk-zh-diag-v1', JSON.stringify({ done: true, scope: ['z1'], state: {} }));
+      localStorage.setItem('km-narrate-rate', '1.2');
+      localStorage.setItem('fjzk-en-dictation-v1', JSON.stringify({ lists: [{ id: 'L1', name: '一单元', words: [{ en: 'cat' }], wrong: {}, history: [], created: 3 }], settings: { reps: '2' } }));
+      localStorage.setItem('km-study-v1', JSON.stringify({ days: { '2026-10-15': { 'fjzk-zh-progress-v1': 600 } }, first: {}, totals: {} }));
+      S.load();
+      P.adopt('husky', '二哈');
+      let st = P.load(); P.claim(st); st = P.load(); P.feed(st);
+      D._flush();
+      const file = JSON.parse(JSON.stringify(D.collect()));
+      ['mathmap-progress-v1', 'mathmap-wrong-v1', 'fjzk-zh-progress-v1', 'fjzk-zh-drafts-v1', 'fjzk-zh-diag-v1', 'km-narrate-rate', 'fjzk-en-dictation-v1', 'km-study-v1', 'km-pet-v1']
+        .forEach(k => ok(k in file.keys, '验收 2：导出文件包含 ' + k));
+      eq([file.app, file.schema, file.device.id.length], ['km-all', 1, 16], '文件格式 app/schema/device');
+      const before = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); before[k] = localStorage.getItem(k); }
+      // 空白设备
+      resetLS();
+      const info = D.parseFile(JSON.stringify(file));
+      const r = D.merge(D.collect(), info.pkg);
+      ok(r.report.changed, '预览有变化');
+      D.apply(r.result);
+      ['mathmap-progress-v1', 'mathmap-wrong-v1', 'fjzk-zh-progress-v1', 'fjzk-zh-drafts-v1', 'fjzk-zh-diag-v1', 'km-narrate-rate', 'fjzk-en-dictation-v1'].forEach(k =>
+        eq(JSON.parse(localStorage.getItem(k)), JSON.parse(before[k]), '验收 3：' + k + ' 与导出前一致'));
+      const p0 = JSON.parse(before['km-pet-v1']), p1 = P.load();
+      eq([p1.name, P.level(p1.xp), p1.bones, p1.equip, p1.owned], [p0.name, P.level(p0.xp), p0.bones, p0.equip, p0.owned], '小狗名字、等级、骨头、装扮一致');
+      eq(S.secondsOn(S.load(), '2026-10-15'), 600, '学习统计时长一致');
+      ok(!P.pending(p1).length, '验收 6：导入后不会再为已领过的知识点发骨头');
+      const snapshot = JSON.stringify(Object.keys(localStorage).sort().filter(k => k !== 'km-meta-v1').map(k => [k, localStorage.getItem(k)]));
+      const r2 = D.merge(D.collect(), D.parseFile(JSON.stringify(file)).pkg);
+      ok(!r2.report.changed, '验收 4：同一个文件再导入，预览“没有变化”：' + r2.report.items.map(x => x.name + x.text).join(' / '));
+      D.apply(r2.result);
+      const p2 = P.load();
+      eq([p2.bones, S.secondsOn(S.load(), '2026-10-15')], [p0.bones, 600], '再导入一次骨头、学习时长不翻倍');
+      const after = JSON.stringify(Object.keys(localStorage).sort().filter(k => k !== 'km-meta-v1').map(k => [k, k === 'km-pet-v1' ? JSON.stringify(Object.assign(JSON.parse(localStorage.getItem(k)), { tick: 0, fullness: 0 })) : localStorage.getItem(k)]));
+      const snapN = JSON.stringify(JSON.parse(snapshot).map(([k, v]) => [k, k === 'km-pet-v1' ? JSON.stringify(Object.assign(JSON.parse(v), { tick: 0, fullness: 0 })) : v]));
+      eq(after, snapN, '再导入一次后所有数据不变（小狗饱食度随时间自然下降除外）');
+      // 不认识的键：写回，并在下次导出时带上
+      const f2 = JSON.parse(JSON.stringify(file)); f2.keys['fjzk-future-v1'] = { hello: 1 };
+      D.apply(D.merge(D.collect(), D.parseFile(JSON.stringify(f2)).pkg).result);
+      eq(D.collect().keys['fjzk-future-v1'], { hello: 1 }, '新版本带来的键写回后，再导出也带上');
+    });
+
+    await test('取消导入不改数据', () => {
+      resetLS();
+      localStorage.setItem('fjzk-zh-progress-v1', JSON.stringify({ a: { last: 50, best: 50 } }));
+      D._flush();
+      const snap = JSON.stringify(Object.assign({}, localStorage));
+      D.merge(D.collect(), D.parseFile(JSON.stringify({ app: 'fjzk-chinese-map', progress: { a: { last: 90, best: 90, updated: 9e12 } } })).pkg);
+      D._flush();
+      eq(JSON.stringify(Object.assign({}, localStorage)), snap, '验收 11：只预览（merge）不写任何存储');
+    });
+
+    await test('App 里两个存储空间互通（模拟 KMBridge.sharedGet/sharedPut）', async () => {
+      resetLS();
+      const store = {};
+      const bridge = {
+        sharedGet: k => store[k] ? JSON.stringify(store[k]) : '',
+        sharedPut: (k, json, t) => { store[k] = { v: json, t }; return true; },
+        deviceName: () => 'Xiaomi Pad', saveFile: () => {}
+      };
+      // 在同源 iframe 里装一份带模拟原生桥的 km-data.js（相当于听写页）
+      async function frame() {
+        const f = document.createElement('iframe');
+        f.style.display = 'none';
+        document.body.appendChild(f);
+        f.contentWindow.KMBridge = bridge;
+        await new Promise((ok, bad) => { const s = f.contentDocument.createElement('script'); s.src = new URL('../km-data.js', location.href).href; s.onload = ok; s.onerror = bad; f.contentDocument.head.appendChild(s); });
+        return f;
+      }
+      const K = 'fjzk-en-dictation-v1';
+      // 1. 听写页新建词单 → 写进共享存储
+      let f = await frame();
+      const dev = f.contentWindow.KMData.device();
+      eq(JSON.parse(JSON.parse(store['km-device-v1'].v).value.id ? store['km-device-v1'].v : '{}').value.id, dev.id, '设备编号存进共享存储（两边同一个编号）');
+      f.contentWindow.localStorage.setItem(K, JSON.stringify({ lists: [{ id: 'L9', name: '新词单', words: [{ en: 'dog' }], wrong: {}, history: [], created: 99 }], settings: {} }));
+      f.contentWindow.KMData._flush();
+      ok(store[K] && JSON.parse(store[K].v).value.lists[0].id === 'L9', '听写页写入后同步到共享存储');
+      // 2. 「我的数据」页导出：从共享存储读听写
+      const exp = f.contentWindow.KMData.collect();
+      ok(exp.keys[K] && exp.keys[K].lists[0].id === 'L9' && exp.meta[K] && exp.meta[K].L9, '验收 14：导出的文件里能看到听写页新建的词单（含修改记录）');
+      // 3. 导入后写回共享存储；听写页下次打开时合并进本地
+      f.contentWindow.KMData.apply({ keys: { [K]: { lists: [{ id: 'L9', name: '新词单', words: [{ en: 'dog' }], wrong: {}, history: [], created: 99 }, { id: 'L5', name: '导入的', words: [], wrong: {}, history: [], created: 50 }], settings: {} } }, meta: { [K]: { L5: { t: 5 } } } });
+      ok(JSON.parse(store[K].v).value.lists.length === 2, '导入写回共享存储');
+      f.remove();
+      f = await frame();      // 重新打开听写页
+      eq(JSON.parse(localStorage.getItem(K)).lists.map(l => l.id), ['L9', 'L5'], '听写页打开时把共享存储里的词单合并进本地');
+      f.remove();
+    });
+  } finally {
+    D._resetDevice();       // 测试里换过设备编号：清掉缓存，还原后用回原来的编号
+    localStorage.clear();
+    Object.keys(saved).forEach(k => localStorage.setItem(k, saved[k]));
+    D._flush();
+    localStorage.clear();
+    Object.keys(saved).forEach(k => Storage.prototype.setItem.call(localStorage, k, saved[k]));
+    D._flush();
+  }
+  document.getElementById('sum').innerHTML = res.fail ? `<span class="bad">${res.fail} 项失败</span>，${res.pass} 项通过` : `<span class="ok">全部 ${res.pass} 项通过</span>`;
+  res.done = true;
+})();
+</script>
+</body>
+</html>
