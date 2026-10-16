@@ -805,7 +805,7 @@
 
   $('btnRename').onclick = () => {
     const n = prompt('给小狗改个名字（最多 8 个字）', st.name);
-    if (n && n.trim()) { st.name = n.trim().slice(0, 8); P.save(st); refresh(); }
+    if (n && n.trim()) { st.name = n.trim().slice(0, 8); st.nameT = Date.now(); P.save(st); refresh(); }   // nameT：改名时间，导入合并时名字取较新的
   };
 
   /* ---------------- 领养 ---------------- */

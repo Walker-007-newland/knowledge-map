@@ -34,7 +34,8 @@
   .group { grid-column: 1 / -1; margin: 10px 0 -4px; color: var(--muted); font-size: 14px; letter-spacing: 1px; }
   footer { margin-top: auto; padding-top: 28px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 12px; }
   footer button { font: inherit; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; }
-  footer button:active { background: var(--line); }
+  footer button:active, footer .data:active { background: var(--line); }
+  footer .data { color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; }
   .pet { display: flex; align-items: center; gap: 16px; width: 100%; max-width: 980px; margin-top: 24px; padding: 16px 22px; border-radius: 16px;
     background: var(--surface); border: 1px solid var(--line); color: var(--text); text-decoration: none; box-shadow: var(--shadow);
     -webkit-tap-highlight-color: transparent; transition: transform .12s, border-color .12s; }
@@ -66,7 +67,8 @@
     <div class="group">其它技能</div>
     <a class="card" href="skills-map/notes.html"><span class="ico" style="background:#fde8ef">📝</span><div><h2>学做笔记</h2><p>康奈尔 · 导图 · 错题本</p></div></a>
   </div>
-  <footer><span>版本 __VERSION__</span><button id="btnUpdate" hidden>检查更新</button></footer>
+  <footer><span>版本 __VERSION__</span><a class="data" href="data.html">💾 我的数据</a><button id="btnUpdate" hidden>检查更新</button></footer>
+<script src="km-data.js"></script>
 <script src="km-study.js"></script>
 <script src="pet/pet-core.js"></script>
 <script>

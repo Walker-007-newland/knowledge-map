@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的数据</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --good: #2f8a4c; --warn: #b8641a; --bad: #c23f2e; --soft: #f1ede4;
+    --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --good: #5cbf7a; --warn: #e3a05a; --bad: #ef7a68; --soft: #2a2b30;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100vh; padding: 20px 16px 40px; }
+  main { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .back { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; background: var(--surface);
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: 1px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 10px; font-size: 19px; }
+  .card p { margin: 0 0 10px; line-height: 1.6; color: var(--muted); font-size: 15px; }
+  .rows { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; font-size: 16px; }
+  .rows .k { white-space: nowrap; }
+  .rows .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .rows .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 4px 0; }
+  .dev { margin-top: 12px; color: var(--muted); font-size: 13px; }
+  .btn { display: block; width: 100%; padding: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--soft);
+    color: var(--text); font: 600 18px var(--font); text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:active { transform: scale(.98); }
+  .btn + .btn { margin-top: 10px; }
+  .msg { margin-top: 10px; font-size: 15px; line-height: 1.6; }
+  .msg.err { color: var(--bad); }
+  .msg.ok { color: var(--good); }
+  ul.changes { margin: 0 0 12px; padding: 0; list-style: none; }
+  ul.changes li { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 16px; line-height: 1.5; }
+  ul.changes li:last-child { border-bottom: none; }
+  ul.changes b { margin-right: 6px; }
+  .note { padding: 10px 12px; border-radius: 10px; background: var(--soft); color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 12px; }
+  .note.warn { color: var(--warn); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="index.html">‹ 总入口</a><h1>我的数据</h1></div>
+
+  <section class="card" id="overview">
+    <h2>本机数据</h2>
+    <div class="rows" id="rows"></div>
+    <div class="dev" id="dev"></div>
+  </section>
+
+  <section class="card">
+    <h2>导出全部学习数据</h2>
+    <p>所有科目的进度、数学错题本、作文草稿、入门诊断、学习时长、小狗、单词听写词单都存进一个文件。换平板、重置或卸载前先导出一份。</p>
+    <button class="btn primary" id="btnExport">导出全部学习数据</button>
+    <div class="msg" id="exportMsg"></div>
+  </section>
+
+  <section class="card" id="importCard">
+    <h2>导入并合并</h2>
+    <p>选一个导出的文件（也可以是以前在各科页面导出的单科进度文件）。和这台设备上已有的数据<b>合并</b>，不会覆盖：成绩取更好的，学习时长、小狗骨头不会重复计算。</p>
+    <label class="btn" for="fileImport">选择文件…</label>
+    <input type="file" id="fileImport" accept=".json,application/json" hidden>
+    <div class="msg" id="importMsg"></div>
+  </section>
+
+  <section class="card" id="preview" hidden>
+    <h2 id="pvTitle">合并预览</h2>
+    <p id="pvFrom"></p>
+    <ul class="changes" id="pvList"></ul>
+    <div class="note" id="pvRest" hidden></div>
+    <div class="note warn" id="pvConflict" hidden></div>
+    <div class="note" id="pvBackup">确认后会先自动导出一份「导入前备份」文件，再合并。</div>
+    <button class="btn primary" id="btnConfirm">确认合并</button>
+    <button class="btn" id="btnCancel">取消</button>
+  </section>
+
+  <section class="card" id="done" hidden>
+    <h2>合并完成</h2>
+    <ul class="changes" id="doneList"></ul>
+    <div class="note" id="doneBackup"></div>
+    <button class="btn" id="btnDone">好的</button>
+  </section>
+</main>
+
+<script src="km-data.js"></script>
+<script src="km-study.js"></script>
+<script src="pet/pet-core.js"></script>
+<script>
+(function () {
+  const D = window.KMData, $ = id => document.getElementById(id);
+  const inApp = !!(window.KMBridge && KMBridge.saveFile);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const where = inApp ? '下载/知识图谱/' : '浏览器「下载」文件夹里的 ';
+
+  function download(name, obj) {
+    const text = JSON.stringify(obj, null, 1);
+    if (inApp) { KMBridge.saveFile(name, text); return; }     // 原生保存到 下载/知识图谱/，并弹出提示
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function minutes(m) { return m >= 60 ? Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分钟' : m + ' 分钟'; }
+
+  function renderOverview() {
+    const s = D.summary(D.collect()), dev = D.device();
+    const row = (k, v) => `<span class="k">${k}</span><span class="v">${v}</span>`;
+    let html = s.subjects.map(x => row(esc(x.name), `已掌握 ${x.mastered} / 有记录 ${x.records} 个知识点`)).join('');
+    html += '<span class="sep"></span>';
+    html += row('数学错题本', s.wrong + ' 道');
+    html += row('草稿', s.drafts + ' 篇');
+    html += row('学习总时长', minutes(s.minutes));
+    html += row('小狗', s.pet ? esc(s.pet.name) + ' · Lv.' + s.pet.level + ' · 🦴 ' + s.pet.bones : '还没领养');
+    html += row('单词听写词单', s.lists + ' 个');
+    $('rows').innerHTML = html;
+    $('dev').textContent = '这台设备：' + dev.name + ' · 编号 …' + String(dev.id).slice(-4);
+  }
+
+  $('btnExport').onclick = () => {
+    const name = D.fileName();
+    download(name, D.collect());
+    $('exportMsg').className = 'msg ok';
+    $('exportMsg').textContent = '已导出：' + where + name;
+  };
+
+  let pending = null;   // { pkg, info }
+  function fromText(pkg, info) {
+    const dev = pkg.device || {};
+    if (info.legacy) return '来自以前在「' + info.legacy + '」页面导出的单科进度文件。';
+    const when = pkg.exported ? new Date(pkg.exported) : null;
+    const t = when && !isNaN(when) ? when.toLocaleString('zh-CN', { hour12: false }) : '';
+    const self = dev.id && dev.id === D.device().id ? '（就是这台设备）' : '';
+    return '来自：' + (dev.name || '未知设备') + self + (t ? ' · 导出于 ' + t : '');
+  }
+  function listHtml(items) {
+    return items.map(x => `<li><b>${esc(x.name)}</b>${esc(x.text)}</li>`).join('');
+  }
+
+  $('fileImport').onchange = e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    $('importMsg').textContent = '';
+    $('done').hidden = true;
+    if (!f) return;
+    f.text().then(text => {
+      const info = D.parseFile(text);
+      if (!info.ok) { showErr(info.error); return; }
+      const r = D.merge(D.collect(), info.pkg);
+      pending = { pkg: info.pkg, info };
+      $('pvFrom').textContent = fromText(info.pkg, info);
+      const ch = r.report.items;
+      $('pvList').innerHTML = listHtml(ch);
+      $('pvList').hidden = !ch.length;
+      $('pvTitle').textContent = ch.length ? '合并预览：' + ch.length + ' 类数据有变化' : '没有变化';
+      $('pvRest').hidden = false;
+      $('pvRest').textContent = ch.length ? '其余没有变化。' : '这个文件里的数据，这台设备上都已经有了，不用合并。';
+      $('pvConflict').hidden = !r.report.conflicts;
+      $('pvConflict').textContent = '草稿冲突 ' + r.report.conflicts + ' 篇：两台设备写的内容不一样，合并后正文是较新的那份，较旧的接在后面（标有「【另一台设备 … 保存的版本】」），可以自己再删改。';
+      $('pvBackup').hidden = !ch.length;
+      $('btnConfirm').hidden = !ch.length;
+      $('btnCancel').textContent = ch.length ? '取消' : '关闭';
+      $('preview').hidden = false;
+      $('preview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }).catch(() => showErr('这个文件读不出来，换一个试试'));
+  };
+  function showErr(t) {
+    pending = null;
+    $('preview').hidden = true;
+    $('importMsg').className = 'msg err';
+    $('importMsg').textContent = t;
+  }
+
+  $('btnCancel').onclick = () => { pending = null; $('preview').hidden = true; };
+
+  $('btnConfirm').onclick = () => {
+    if (!pending) return;
+    const local = D.collect();
+    const r = D.merge(local, pending.pkg);
+    const name = D.backupName();
+    download(name, local);                // 先备份，再合并
+    D.apply(r.result);
+    pending = null;
+    $('preview').hidden = true;
+    $('doneList').innerHTML = listHtml(r.report.items) || '<li>没有变化</li>';
+    $('doneBackup').textContent = '刚才的备份文件在 ' + where + name + '，里面是合并前这台设备的全部数据，留着以防万一。';
+    $('done').hidden = false;
+    renderOverview();
+    $('done').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  $('btnDone').onclick = () => { $('done').hidden = true; };
+
+  renderOverview();
+  window.addEventListener('pageshow', renderOverview);
+})();
+</script>
+</body>
+</html>
