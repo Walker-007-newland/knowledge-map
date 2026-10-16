@@ -12,7 +12,10 @@ token 读 knowledge-map-app/signing/github-token.txt（已 gitignore，不要打
   python team/gh.py state <编号> <新状态>        切换状态标签，如 state 12 待测试
   python team/gh.py close <编号> [状态]          关闭需求单（可同时打上最终状态）
   python team/gh.py history [天数]              最近关闭的需求单（去重用），默认 60 天
-  python team/gh.py setup                       建仓库标签（只需一次）
+  python team/gh.py status <角色> <状态> <在做什么> [编号]
+                                                上报自己的状态，管理员 App「办公室」页实时显示
+                                                角色：需求员/产品/开发/测试；状态：工作中/空闲/阻塞
+  python team/gh.py setup                       建仓库标签和团队状态单（只需一次）
 正文文件写成 UTF-8 的 .md，避免命令行中文编码问题。
 """
 import json, os, sys, urllib.request, urllib.error, urllib.parse, datetime
@@ -37,6 +40,9 @@ STATES = {
     '阻塞':   ('000000', '需要人工处理'),
 }
 PREFIX = '状态:'
+STATUS_LABEL = '团队状态'          # 这张单只存团队成员的实时状态，不是需求
+ROLES = ['需求员', '产品', '开发', '测试']
+MEMBER_STATES = {'工作中': 'working', '空闲': 'idle', '阻塞': 'blocked'}
 
 
 def token():
@@ -75,6 +81,10 @@ def state_of(issue):
     return ''
 
 
+def is_status(i):
+    return any((l['name'] if isinstance(l, dict) else l) == STATUS_LABEL for l in i.get('labels', []))
+
+
 def brief(i):
     return {'number': i['number'], 'title': i['title'], 'state': state_of(i),
             'updated': i['updated_at'], 'url': i['html_url']}
@@ -95,6 +105,46 @@ def set_state(n, new):
     api('POST', f'/repos/{REPO}/issues/{n}/labels', {'labels': [PREFIX + new]})
 
 
+def status_issue():
+    items = api('GET', f'/repos/{REPO}/issues?state=open&labels={q(STATUS_LABEL)}&per_page=5')
+    if items:
+        return items[0]
+    return api('POST', f'/repos/{REPO}/issues', {
+        'title': '【团队状态】AI 团队实时状态（自动更新，请勿关闭）',
+        'body': status_body({'members': {}, 'log': []}), 'labels': [STATUS_LABEL]})
+
+
+def status_body(data):
+    return ('AI 团队成员用 `python team/gh.py status` 自动更新这张单，管理员 App 的「办公室」页读取它。请勿手动编辑或关闭。\n\n'
+            '```json\n' + json.dumps(data, ensure_ascii=False, indent=1) + '\n```\n')
+
+
+def status_data(issue):
+    body = issue.get('body') or ''
+    try:
+        return json.loads(body.split('```json', 1)[1].split('```', 1)[0])
+    except Exception:
+        return {'members': {}, 'log': []}
+
+
+def set_status(role, st, text, issue_no=None):
+    if role not in ROLES:
+        raise SystemExit(f'未知角色 {role}，可选：{"/".join(ROLES)}')
+    if st not in MEMBER_STATES:
+        raise SystemExit(f'未知状态 {st}，可选：{"/".join(MEMBER_STATES)}')
+    now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    iss = status_issue()
+    data = status_data(iss)
+    m = {'state': MEMBER_STATES[st], 'text': text[:120], 'at': now}
+    if issue_no:
+        m['issue'] = int(issue_no)
+    data.setdefault('members', {})[role] = m
+    log = data.setdefault('log', [])
+    log.insert(0, {'role': role, 'state': m['state'], 'text': m['text'], 'issue': m.get('issue'), 'at': now})
+    del log[40:]
+    api('PATCH', f'/repos/{REPO}/issues/{iss["number"]}', {'body': status_body(data)})
+
+
 def main(argv):
     if not argv:
         print(__doc__); return
@@ -104,18 +154,23 @@ def main(argv):
         for name, (color, desc) in STATES.items():
             if PREFIX + name not in have:
                 api('POST', f'/repos/{REPO}/labels', {'name': PREFIX + name, 'color': color, 'description': desc})
-        print('labels ok')
+        if STATUS_LABEL not in have:
+            api('POST', f'/repos/{REPO}/labels', {'name': STATUS_LABEL, 'color': 'ededed', 'description': '团队成员实时状态，不是需求'})
+        print('labels ok; 团队状态单 #%d' % status_issue()['number'])
+    elif cmd == 'status':
+        set_status(a[0], a[1], a[2], a[3] if len(a) > 3 else None)
+        print(f'{a[0]}：{a[1]} {a[2]}')
     elif cmd == 'list':
         items = api('GET', f'/repos/{REPO}/issues?state=open&per_page=100')
-        items = [brief(i) for i in items if 'pull_request' not in i]
+        items = [brief(i) for i in items if 'pull_request' not in i and not is_status(i)]
         if a:
             items = [i for i in items if i['state'] == a[0]]
         print(json.dumps(items, ensure_ascii=False, indent=1))
     elif cmd == 'history':
         days = int(a[0]) if a else 60
-        since = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        since = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
         items = api('GET', f'/repos/{REPO}/issues?state=all&since={since}&per_page=100')
-        print(json.dumps([brief(i) for i in items if 'pull_request' not in i], ensure_ascii=False, indent=1))
+        print(json.dumps([brief(i) for i in items if 'pull_request' not in i and not is_status(i)], ensure_ascii=False, indent=1))
     elif cmd == 'show':
         n = a[0]
         i = api('GET', f'/repos/{REPO}/issues/{n}')

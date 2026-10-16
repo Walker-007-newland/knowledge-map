@@ -63,6 +63,24 @@
   .row button { flex: 1; min-width: 96px; }
   .form label { display: block; font-weight: 600; margin: 12px 0 4px; }
   .form textarea { min-height: 160px; }
+  .office { padding: 8px; }
+  .room { position: relative; width: 100%; aspect-ratio: 224 / 136; border-radius: 8px; overflow: hidden; }
+  .room canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .tag { position: absolute; transform: translate(-50%, 0); font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+    background: rgba(0,0,0,.55); color: #fff; white-space: nowrap; pointer-events: none; }
+  .bub { position: absolute; transform: translateY(-100%); font-size: 10px; line-height: 1.3; padding: 2px 6px; border-radius: 6px;
+    background: #fff; color: #1d1f23; border: 1px solid #1d1f23; white-space: nowrap; pointer-events: none; box-shadow: 1px 1px 0 #1d1f23; }
+  .bub.bad { background: #ffe1de; border-color: #b3261e; color: #b3261e; }
+  .board { width: 100%; margin-top: 8px; text-align: left; }
+  .board.hot { border-color: var(--warn); color: var(--warn); font-weight: 600; }
+  .mcard { display: flex; gap: 12px; align-items: flex-start; }
+  .ava { width: 30px; height: 51px; image-rendering: pixelated; flex: none; margin-top: 2px; }
+  .mtext { margin-top: 2px; }
+  .chip.ms-working { background: var(--accent); color: var(--accent-ink); }
+  .chip.ms-blocked { background: var(--bad); color: #fff; }
+  .chip.ms-stale { background: var(--warn); color: #fff; }
+  .feed { font-size: 14px; padding: 3px 0; border-top: 1px dashed var(--line); }
+  .feed:first-child { border-top: 0; }
   .toast { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
     padding: 8px 16px; border-radius: 10px; z-index: 20; font-size: 14px; max-width: 90vw; }
   .hint { color: var(--muted); font-size: 14px; }
@@ -105,12 +123,15 @@ const hasToken = () => MOCK || (window.Native && Native.hasToken());
 
 // ---------- 状态 ----------
 const TABS = [
+  { key: 'office', name: '办公室', office: true },
   { key: 'approve', name: '待审批', states: ['待审批', '阻塞'] },
   { key: 'doing', name: '进行中', states: ['已批准', '开发中', '待测试', '返工', '需修改'] },
   { key: 'review', name: '待评审', states: ['待评审'] },
   { key: 'done', name: '已结束', closed: true },
 ];
-let tab = 'approve', issues = [], closed = [], current = null;
+let tab = 'office', issues = [], closed = [], current = null, team = { members: {}, log: [] };
+const STATUS_LABEL = '团队状态';
+const isStatus = i => i.labels.some(l => l.name === STATUS_LABEL);
 const stateOf = i => (i.labels.map(l => l.name).find(n => n.startsWith(P)) || '').slice(P.length);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const when = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -161,7 +182,7 @@ function md(src) {
 // ---------- 列表 ----------
 function renderTabs() {
   $('tabs').innerHTML = TABS.map(t => {
-    const n = t.closed ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
+    const n = t.closed || t.office ? 0 : issues.filter(i => t.states.includes(stateOf(i))).length;
     const badge = t.key === 'approve' && n ? `<span class="badge">${n}</span>` : (n && !t.closed ? ` ${n}` : '');
     return `<button data-k="${t.key}" class="${t.key === tab ? 'on' : ''}">${t.name}${badge}</button>`;
   }).join('');
@@ -172,6 +193,8 @@ function renderList() {
   $('tabs').hidden = false; $('actions').hidden = true; $('newReq').hidden = false;
   renderTabs();
   const t = TABS.find(x => x.key === tab);
+  if (t.office) return renderOffice();
+  stopOffice();
   const list = t.closed ? closed : issues.filter(i => t.states.includes(stateOf(i)));
   $('main').innerHTML = list.length ? list.map(i => `
     <div class="card item" data-n="${i.number}">
@@ -181,20 +204,210 @@ function renderList() {
   $('main').querySelectorAll('.item').forEach(el => el.onclick = () => openIssue(+el.dataset.n));
   window.scrollTo(0, 0);
 }
-async function load() {
+async function load(quiet) {
   if (!hasToken()) return renderSetup();
-  $('main').innerHTML = '<div class="empty">加载中…</div>';
+  if (!quiet) $('main').innerHTML = '<div class="empty">加载中…</div>';
   try {
     const [open, done] = await Promise.all([
       gh('GET', `/repos/${REPO}/issues?state=open&per_page=100&sort=updated`),
       gh('GET', `/repos/${REPO}/issues?state=closed&per_page=30&sort=updated`),
     ]);
-    issues = open.filter(i => !i.pull_request); closed = done.filter(i => !i.pull_request);
+    const st = open.find(isStatus);
+    team = st ? parseTeam(st.body) : { members: {}, log: [] };
+    issues = open.filter(i => !i.pull_request && !isStatus(i)); closed = done.filter(i => !i.pull_request && !isStatus(i));
+    if (quiet && tab === 'office' && !current) return updateOffice();
     if (current) openIssue(current.number, true); else renderList();
   } catch (e) {
+    if (quiet) return;
     $('main').innerHTML = `<div class="card">加载失败：${esc(e.message)}<div class="row"><button id="retok">重新设置 token</button></div></div>`;
     $('retok').onclick = renderSetup;
   }
+}
+
+// ---------- 办公室（像素风，看每个成员在做什么） ----------
+const W = 224, H = 136;
+const MEMBERS = [
+  { role: '需求员', name: '小需', hair: '#6b3e1f', shirt: '#e8833a', desk: [14, 60], seat: [164, 90], look: 'short', queue: [] },
+  { role: '产品', name: '小品', hair: '#1c1c22', shirt: '#8a5cd1', desk: [80, 60], seat: [176, 90], look: 'long', queue: ['待评审', '需修改', '已驳回'] },
+  { role: '开发', name: '小开', hair: '#22232a', shirt: '#2f6fde', desk: [14, 104], seat: [188, 90], look: 'phones', queue: ['已批准', '返工', '开发中'] },
+  { role: '测试', name: '小测', hair: '#9a3b22', shirt: '#2e9e6a', desk: [80, 104], seat: [200, 90], look: 'glasses', queue: ['待测试'] },
+];
+const MS = { working: '工作中', idle: '空闲', blocked: '阻塞', stale: '可能已中断' };
+const STALE_MS = 3 * 3600e3;
+let office = null;
+
+function parseTeam(body) {
+  try { return JSON.parse(String(body).split('```json')[1].split('```')[0]); } catch (e) { return { members: {}, log: [] }; }
+}
+function ago(t) {
+  if (!t) return '';
+  const m = Math.round((Date.now() - new Date(t)) / 60000);
+  return m < 1 ? '刚刚' : m < 60 ? `${m} 分钟前` : m < 1440 ? `${Math.round(m / 60)} 小时前` : `${Math.round(m / 1440)} 天前`;
+}
+function memberState(m) {
+  const s = team.members[m.role];
+  if (!s) return { state: 'idle', text: '还没上报过状态' };
+  if (s.state === 'working' && Date.now() - new Date(s.at) > STALE_MS) return { ...s, state: 'stale' };
+  return s;
+}
+const atDesk = st => st === 'working' || st === 'blocked';
+const seatOf = (m, st) => atDesk(st) ? [m.desk[0] + 8, m.desk[1] - 15] : m.seat;
+
+function renderOffice() {
+  const counts = s => issues.filter(i => s.includes(stateOf(i))).length;
+  $('main').innerHTML = `
+    <div class="office card">
+      <div class="room" id="room"><canvas id="oc" width="${W}" height="${H}"></canvas><div id="tags"></div></div>
+      <button class="board" id="board" title="看待审批"></button>
+    </div>
+    <div id="mcards"></div>
+    <div class="card"><div style="font-weight:700;margin-bottom:6px">最近动态</div><div id="feed"></div></div>`;
+  $('board').onclick = () => { tab = 'approve'; renderList(); };
+  const ctx = $('oc').getContext('2d');
+  office = { ctx, raf: 0, frame: 0, people: MEMBERS.map(m => { const p = seatOf(m, memberState(m).state); return { m, x: p[0], y: p[1] }; }) };
+  $('tags').innerHTML = MEMBERS.map((m, k) => `<div class="tag" id="tag${k}">${m.name}</div><div class="bub" id="bub${k}" hidden></div>`).join('');
+  updateOffice();
+  const loop = () => { if (!office) return; office.frame++; drawOffice(); office.raf = requestAnimationFrame(loop); };
+  loop();
+}
+function stopOffice() { if (office) cancelAnimationFrame(office.raf); office = null; }
+
+function updateOffice() {
+  if (!office || !$('mcards')) return renderList();
+  renderTabs();
+  const counts = s => issues.filter(i => s.includes(stateOf(i))).length;
+  const pending = counts(['待审批']), blocked = counts(['阻塞']);
+  $('board').innerHTML = pending || blocked ? `📋 待你审批 <b>${pending}</b>${blocked ? ` · 阻塞 <b>${blocked}</b>` : ''}` : '📋 没有待审批';
+  $('board').className = 'board' + (pending || blocked ? ' hot' : '');
+  $('mcards').innerHTML = MEMBERS.map((m, k) => {
+    const s = memberState(m), q = counts(m.queue);
+    const iss = s.issue ? issues.concat(closed).find(i => i.number === s.issue) : null;
+    return `<div class="card mcard ${iss ? 'item' : ''}" ${iss ? `data-n="${iss.number}"` : ''}>
+      <canvas class="ava" width="10" height="17" data-k="${k}"></canvas>
+      <div style="flex:1;min-width:0">
+        <div><b>${m.name}</b> <span class="hint">${m.role}</span> <span class="chip ms-${s.state}">${MS[s.state]}</span></div>
+        <div class="mtext">${esc(s.text || '')}</div>
+        <div class="meta">${iss ? `<span>#${iss.number} ${esc(iss.title)}</span>` : ''}${s.at ? `<span>${ago(s.at)}</span>` : ''}${q ? `<span>队列 ${q} 个</span>` : ''}</div>
+      </div></div>`;
+  }).join('');
+  $('mcards').querySelectorAll('canvas.ava').forEach(c => {
+    const g = c.getContext('2d'); drawPerson(g, MEMBERS[+c.dataset.k], 1, 1, { stand: true, frame: 0 });
+  });
+  $('mcards').querySelectorAll('.item').forEach(el => el.onclick = () => openIssue(+el.dataset.n));
+  const log = (team.log || []).slice(0, 15);
+  const nameOf = r => (MEMBERS.find(m => m.role === r) || { name: r }).name;
+  $('feed').innerHTML = log.length ? log.map(e => `<div class="feed"><span class="hint">${when(e.at)}</span> <b>${nameOf(e.role)}</b> ${esc(e.text)}${e.issue ? ` <span class="hint">#${e.issue}</span>` : ''}</div>`).join('')
+    : '<div class="hint">还没有动态</div>';
+}
+
+// 画一个小人：8×16 像素，左上角 (x,y)
+function drawPerson(g, m, x, y, o) {
+  const R = (c, a, b, w, h) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
+  const skin = '#f2c9a0', pants = '#3b4252', f = o.frame;
+  const blink = (f + m.desk[0] * 7) % 220 < 6;
+  if (!o.seated) {               // 腿（坐着时被桌子/沙发挡住）
+    const step = o.walking ? (Math.floor(f / 8) % 2) : 0;
+    R(pants, 1, 12, 2, 3 - step); R(pants, 5, 12, 2, 3 - (1 - step) * (o.walking ? 1 : 0));
+    R('#222', 1, 15 - step, 2, 1); R('#222', 5, 15 - (o.walking ? 1 - step : 0), 2, 1);
+  } else { R(pants, 1, 12, 6, 2); }
+  R(m.shirt, 1, 7, 6, 5);                          // 身体
+  const type = o.typing ? Math.floor(f / 6) % 2 : 0;
+  R(m.shirt, 0, 8, 1, 3); R(m.shirt, 7, 8, 1, 3);  // 手臂
+  R(skin, 0, 11 - type, 1, 1); R(skin, 7, 10 + type, 1, 1);
+  R(skin, 1, 2, 6, 5);                             // 脸
+  R(m.hair, 1, 0, 6, 2); R(m.hair, 1, 2, 1, 1); R(m.hair, 6, 2, 1, 1);
+  if (m.look === 'long') { R(m.hair, 0, 1, 1, 7); R(m.hair, 7, 1, 1, 7); }
+  if (m.look === 'short') R(m.hair, 2, 2, 3, 1);
+  if (!blink) { R('#222', 2, 4, 1, 1); R('#222', 5, 4, 1, 1); } else { R('#c49a78', 2, 4, 1, 1); R('#c49a78', 5, 4, 1, 1); }
+  if (m.look === 'glasses') { R('#333', 1, 4, 3, 1); R('#333', 4, 4, 3, 1); R('#9fd3f5', 2, 4, 1, 1); R('#9fd3f5', 5, 4, 1, 1); }
+  if (m.look === 'phones') { R('#e04848', 0, 3, 1, 3); R('#e04848', 7, 3, 1, 3); R('#555', 1, -1, 6, 1); }
+  R('#d9776b', 3, 6, 2, 1);                        // 嘴
+  if (o.cup) { R('#fff', 8, 9, 2, 3); R('#7a4a2a', 8, 9, 2, 1); }
+}
+
+function drawOffice() {
+  const o = office, g = o.ctx, f = o.frame;
+  const R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  // 墙和地板
+  R('#eadfc8', 0, 0, W, 36); R('#d8c9aa', 0, 33, W, 3); R('#a8875e', 0, 36, W, 2);
+  for (let y = 38; y < H; y += 7) { R(y % 14 < 7 ? '#d7bf96' : '#d1b88e', 0, y, W, 7); for (let x = (y * 3) % 40; x < W; x += 40) R('#bfa47a', x, y, 1, 7); }
+  // 窗户：天色跟着真实时间变
+  const hr = new Date().getHours(), night = hr < 6 || hr >= 19;
+  R('#fff', 10, 5, 44, 24); R(night ? '#1d2b53' : (hr < 8 || hr >= 17) ? '#f6b26b' : '#9fd3f5', 12, 7, 40, 20);
+  if (night) { [[16, 10], [30, 13], [44, 9], [38, 20]].forEach(([a, b]) => R('#fff', a, b, 1, 1)); R('#f5f0c8', 44, 11, 4, 4); }
+  else { const cx = 12 + ((f / 20) % 50) - 6; R('#fff', cx, 12, 8, 3); R('#fff', cx + 2, 10, 4, 2); }
+  R('#fff', 31, 7, 2, 20); R('#fff', 12, 16, 40, 2);
+  // 看板：便利贴数量 = 各状态需求单数
+  R('#8d8d8d', 68, 4, 66, 26); R('#fbfbfb', 69, 5, 64, 24);
+  const cols = [['待评审', '#c5def5'], ['待审批', '#fbca04'], ['已批准', '#7ed6a5'], ['开发中', '#8fb6ff'], ['待测试', '#c3a6ff'], ['阻塞', '#ff8a80']];
+  cols.forEach(([st, c], k) => {
+    const n = Math.min(4, issues.filter(i => stateOf(i) === st || (st === '开发中' && stateOf(i) === '返工')).length);
+    R('#e3e3e3', 72 + k * 10, 8, 8, 1);
+    for (let j = 0; j < n; j++) R(c, 72 + k * 10, 11 + j * 4, 7, 3);
+  });
+  // 时钟
+  const now = new Date(), cx = 152, cy = 15;
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill(); g.strokeStyle = '#555'; g.lineWidth = 1; g.stroke();
+  const hand = (a, l, c) => { g.strokeStyle = c; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(a) * l, cy - Math.cos(a) * l); g.stroke(); };
+  hand((now.getHours() % 12 + now.getMinutes() / 60) / 12 * 6.283, 4, '#333'); hand(now.getMinutes() / 60 * 6.283, 6, '#777');
+  // 咖啡机、植物
+  R('#555', 196, 14, 14, 22); R('#333', 198, 17, 10, 6); R(f % 60 < 30 ? '#4cc38a' : '#2a7a55', 206, 26, 2, 2); R('#fff', 200, 30, 4, 4);
+  R('#8b5a2b', 214, 28, 8, 8); R('#3f9b4f', 213, 18, 4, 10); R('#4fb35f', 217, 14, 4, 14); R('#3f9b4f', 220, 20, 3, 8);
+  // 休息区：地毯 + 沙发靠背
+  R('#c98b7a', 152, 84, 66, 44); R('#d9a090', 154, 86, 62, 40);
+  R('#5a8f7b', 158, 88, 58, 10);
+  // 人：先移动，再按 y 排序画
+  o.people.forEach(p => {
+    const st = memberState(p.m).state, [tx, ty] = seatOf(p.m, st);
+    const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
+    p.walking = d > 0.6;
+    if (p.walking) { p.x += dx / d * 0.6; p.y += dy / d * 0.6; } else { p.x = tx; p.y = ty; }
+    p.st = st;
+  });
+  // 桌子、显示器（画在人前面，挡住腿）
+  const drawDesk = (p) => {
+    const [x, y] = p.m.desk, on = atDesk(p.st) && !p.walking;
+    R('#5b5b66', x + 4, y - 18, 16, 2);  // 椅背
+    return () => {
+      R('#a5713f', x, y, 46, 4); R('#8a5a30', x, y + 4, 46, 2); R('#6d4524', x + 2, y + 6, 2, 8); R('#6d4524', x + 42, y + 6, 2, 8);
+      R('#333', x + 26, y - 12, 16, 11); R('#555', x + 32, y - 1, 4, 1);
+      const scr = !on ? '#20242b' : p.st === 'blocked' ? (f % 40 < 20 ? '#b3261e' : '#7a1a14') : '#1f3b5c';
+      R(scr, x + 27, y - 11, 14, 9);
+      if (on && p.st === 'working') for (let k = 0; k < 4; k++) { const w = 3 + ((k * 5 + Math.floor(f / 10)) % 8); R(k % 2 ? '#7ee0a1' : '#9fd3f5', x + 28, y - 10 + k * 2, w, 1); }
+      R('#ddd', x + 12, y + 1, 10, 2);   // 键盘
+      R('#f0e6d0', x + 2, y - 2, 6, 2);  // 文件
+    };
+  };
+  const fronts = o.people.map(drawDesk);
+  o.people.slice().sort((a, b) => a.y - b.y).forEach(p => {
+    const seated = !p.walking, desk = atDesk(p.st);
+    drawPerson(g, p.m, Math.round(p.x), Math.round(p.y), { frame: f, walking: p.walking, seated, typing: seated && desk && p.st === 'working', cup: seated && !desk });
+  });
+  fronts.forEach(fn => fn());
+  // 沙发坐垫（挡住坐着的人的腿）+ 扶手 + 茶几
+  R('#6fa894', 156, 102, 62, 8); R('#4b7a68', 154, 92, 4, 18); R('#4b7a68', 216, 92, 4, 18);
+  R('#8a5a30', 170, 116, 32, 4); R('#6d4524', 172, 120, 2, 5); R('#6d4524', 198, 120, 2, 5);
+  // 头顶特效
+  o.people.forEach((p, k) => {
+    const x = Math.round(p.x), y = Math.round(p.y);
+    if (p.st === 'blocked' && f % 50 < 35) { R('#e53935', x + 3, y - 9, 2, 4); R('#e53935', x + 3, y - 4, 2, 1); }
+    if ((p.st === 'idle' || p.st === 'stale') && !p.walking) {
+      const s = team.members[p.m.role], long = !s || Date.now() - new Date(s.at) > 90 * 60e3;
+      if (long) { const t = (f + k * 40) % 120; g.fillStyle = 'rgba(80,80,120,' + (1 - t / 120) + ')'; g.font = '6px monospace'; g.fillText('z', x + 8 + t / 30, y - 2 - t / 12); }
+    }
+    // HTML 名牌和气泡跟着人走
+    const tag = $('tag' + k); if (!tag) return;
+    tag.style.left = ((x + 4) / W * 100) + '%'; tag.style.top = ((y + 17) / H * 100) + '%';
+    const bub = $('bub' + k), s = memberState(p.m);
+    bub.style.top = ((y - 3) / H * 100) + '%';
+    const txt = (p.st === 'working' || p.st === 'blocked') && !p.walking ? (s.issue ? `#${s.issue} ` : '') + String(s.text || '').replace(/#\d+[：:\s]*/g, '').slice(0, 6) : '';
+    if (bub.textContent !== txt) bub.textContent = txt;
+    bub.hidden = !txt; bub.className = 'bub' + (p.st === 'blocked' ? ' bad' : '');
+    if (txt) {   // 气泡别超出房间
+      const rw = $('room').clientWidth, bw = bub.offsetWidth, c = (x + 4) / W * rw;
+      bub.style.left = Math.max(2, Math.min(rw - bw - 2, c - bw / 2)) + 'px';
+    }
+  });
 }
 
 // ---------- 详情 ----------
@@ -207,7 +420,7 @@ const roleOf = body => (ROLE.find(([re]) => re.test((body || '').trim())) || [0,
 async function openIssue(n, keepScroll) {
   const all = issues.concat(closed); const i = all.find(x => x.number === n);
   if (!i) return renderList();
-  current = i; $('back').hidden = false; $('tabs').hidden = true; $('newReq').hidden = true;
+  stopOffice(); current = i; $('back').hidden = false; $('tabs').hidden = true; $('newReq').hidden = true;
   $('title').textContent = `#${n}`;
   if (!keepScroll) $('main').innerHTML = '<div class="empty">加载中…</div>';
   let comments = [];
@@ -272,6 +485,7 @@ async function act(i, a, btn) {
 
 // ---------- 管理员自己提需求 ----------
 function renderNew() {
+  stopOffice();
   current = { number: -1 }; $('back').hidden = false; $('tabs').hidden = true; $('newReq').hidden = true; $('actions').hidden = true;
   $('title').textContent = '提一个需求';
   $('main').innerHTML = `<div class="card form">
@@ -292,6 +506,7 @@ function renderNew() {
 
 // ---------- 首次设置 token ----------
 function renderSetup() {
+  stopOffice();
   current = { number: -2 }; $('tabs').hidden = true; $('actions').hidden = true; $('back').hidden = !window.Native || !Native.hasToken();
   $('title').textContent = '设置';
   $('main').innerHTML = `<div class="card form">
@@ -313,6 +528,7 @@ function renderSetup() {
 // ---------- 导航 ----------
 window.goBack = () => { if (current) { current = null; renderList(); return true; } return false; };
 window.onAppResume = () => { if (!current && hasToken()) load(); };
+setInterval(() => { if (tab === 'office' && !current && hasToken() && !document.hidden) load(true); }, 30000);
 $('back').onclick = () => (current && current.number === -2 && hasToken()) ? (current = null, load()) : window.goBack();
 $('refresh').onclick = () => load();
 $('newReq').onclick = renderNew;
@@ -324,6 +540,13 @@ function mockApi(method, path, body) {
   const L = s => [{ name: P + s }];
   window.__mock = window.__mock || {
     issues: [
+      { number: 5, title: '【团队状态】', state: 'open', labels: [{ name: '团队状态' }], comments: 0, created_at: now, updated_at: now,
+        body: '说明\n\n```json\n' + JSON.stringify({ members: {
+          需求员: { state: 'idle', text: '今天提了 #3 浮力实验题', at: new Date(Date.now() - 2 * 3600e3).toISOString(), issue: 3 },
+          产品: { state: 'working', text: '评审 #3 浮力实验题', issue: 3, at: now },
+          开发: { state: 'working', text: '开发 #2：改听写选词界面', issue: 2, at: now },
+          测试: { state: 'blocked', text: '#4 打包失败，等管理员', issue: 4, at: now } },
+          log: [{ role: '开发', text: '开发 #2：改听写选词界面', issue: 2, at: now }, { role: '测试', text: '#4 打包失败，等管理员', issue: 4, at: now }, { role: '产品', text: '评审 #3 浮力实验题', issue: 3, at: now }] }) + '\n```' },
       { number: 3, title: '物理浮力章节缺少阿基米德原理实验题', state: 'open', labels: L('待审批'), comments: 1, created_at: now, updated_at: now,
         body: '## 背景\n福建中考物理实验题占比高。\n\n## 问题或机会\n`science-map/data/phys-g8b.js` 浮力一节只有概念题，没有实验探究题。\n\n## 期望效果\n补 3–5 道实验题。\n\n## 优先级\n高：中考必考' },
       { number: 2, title: '英语听写支持按单元选词', state: 'open', labels: L('开发中'), comments: 3, created_at: now, updated_at: now, body: '## 背景\n…' },
