@@ -242,6 +242,18 @@
         emit('state', mockState);
         ok(re.test($('status').textContent), status + ' 状态显示：' + $('status').textContent);
       }
+      // 同步组已过期（60 天限制）
+      mockState = Object.assign({}, mockState, { status: 'error', error: '同步组已过期，请重新加入：这台设备超过 60 天没同步，你的其它设备可能已经换了同步钥匙。请点下面的「退出同步组」……',
+        node: Object.assign({}, mockState.node, { error: 'expired', msg: '同步组已过期，请重新加入' }) });
+      emit('state', mockState);
+      ok(/同步组已过期，请重新加入/.test($('status').textContent) && !$('btnRejoin').hidden, '同步组已过期：顶部明确提示，并显示「退出同步组，重新加入」按钮');
+      w.confirm = () => true;
+      $('btnRejoin').click();
+      ok(called('syncLeave').length === 1, '点「退出同步组，重新加入」→ syncLeave');
+      calls.length = 0;
+      mockState = Object.assign({}, mockState, { status: 'ok', error: '', node: Object.assign({}, mockState.node, { error: '', msg: '' }) });
+      emit('state', mockState);
+      ok($('btnRejoin').hidden, '恢复正常后不再显示重新加入按钮');
       // 移除 / 改名 / 退出（confirm 由测试替换成同意）
       w.confirm = () => true;
       d.querySelector('[data-remove="devB"]').click();

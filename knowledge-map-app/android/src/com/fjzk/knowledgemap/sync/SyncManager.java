@@ -30,6 +30,10 @@ public final class SyncManager {
     static final int PUSH_BATCH = 6 << 20;
     static final int MAX_SECTION = 4 << 20;
     static final long PREV_MEMBER_DAYS = 14, PREV_REKEYER_DAYS = 60;
+    /** 节点 60 天后自动删掉换钥前的旧组；超过这么久没同步、组又不在了，就当同步组已过期 */
+    static final long EXPIRE_DAYS = 60;
+    static final String EXPIRED_MSG = "同步组已过期，请重新加入：这台设备超过 60 天没同步，你的其它设备可能已经换了同步钥匙。"
+        + "请点下面的「退出同步组」，再扫另一台设备上的加入码（本机学习数据都在，不会丢）";
 
     final SyncStore st;
     final Clock clock;
@@ -296,6 +300,13 @@ public final class SyncManager {
                     lastOk = now();
                     break;
                 } catch (NodeClient.NodeError e) {
+                    if (e.status == 404 && "nogroup".equals(e.err) && g != null && lastOk > 0 && now() - lastOk > EXPIRE_DAYS * DAY) {
+                        // 超过 60 天没同步、节点上的组也没了：多半是别的设备早已换钥、旧组被节点自动删掉。
+                        // 不用邀请码重建（那样会建出一个只有自己的组），提示学生重新加入
+                        errCode = "expired";
+                        errMsg = EXPIRED_MSG;
+                        break;
+                    }
                     if (e.status == 404 && "nogroup".equals(e.err) && !rebuilt && g != null) { rebuilt = true; continue; }
                     fail(e);
                     break;

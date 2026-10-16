@@ -600,6 +600,22 @@ public class SyncHarness {
         check(SyncJson.s(a.state(), "error").contains("拒绝了这个同步组") && SyncJson.canon(a.data).equals(keep) && a.m.cids().equals(keepC),
             "groups.remove 封禁：显示「同步节点拒绝了这个同步组」，本机数据不变", a.m.state());
         node.cmd("cmd", "unblock", "gid", gid);
+
+        section("8b. 超过 60 天没同步、节点上的组也没了：提示「同步组已过期，请重新加入」，不自己重建");
+        Map<String, Object> rj = SyncJson.obj(a.m.nodeJoin(fixPort(invite(node), node)));
+        a.sync();
+        check(SyncJson.b(rj, "ok") && "ok".equals(SyncJson.s(a.state(), "status")), "解除封禁、重新扫邀请码后恢复同步", a.m.state());
+        a.clock.offset += 61 * 86400000L;
+        node.cmd("cmd", "lose_db");
+        resetCounts();
+        a.sync();
+        Map<String, Object> ex = a.state();
+        check(SyncJson.s(ex, "error").contains("同步组已过期，请重新加入") && "expired".equals(SyncJson.s(SyncJson.m(ex.get("node")), "error")) && count("create") == 0,
+            "显示「同步组已过期，请重新加入」，没有用邀请码建出只有自己的组", a.m.state() + " " + PATHS);
+        check(SyncJson.canon(a.data).equals(keep) || !a.data.isEmpty(), "本机数据还在");
+        Map<String, Object> lv = SyncJson.obj(a.m.leave());
+        check(SyncJson.b(lv, "ok") && !a.m.inGroup(), "按提示退出同步组（本机数据保留），之后可以重新扫加入码", lv);
+        a.clock.offset -= 61 * 86400000L;
     }
 
     // ================================================================ 清理（真实节点：不留测试组）

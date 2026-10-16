@@ -84,6 +84,7 @@
     <p id="status">读取中…</p>
     <div class="small">数据只在你自己的设备之间传，加密保存；同步节点上只有看不懂的密文。</div>
     <div class="msg" id="notice" hidden></div>
+    <button class="btn primary" id="btnRejoin" hidden>退出同步组，重新加入</button>
   </section>
 
   <section class="card" id="start" hidden>
@@ -156,6 +157,8 @@
     $('status').textContent = KMSync.statusText(st);
     $('status').className = st.inGroup ? st.status : '';
     show($('notice'), st.inGroup ? '' : st.notice, 'bad');
+    // 同步组已过期（超过 60 天没同步、节点上的组也没了）：明确提示，给一个直接的按钮
+    $('btnRejoin').hidden = !(st.inGroup && st.node && st.node.error === 'expired');
     $('start').hidden = st.inGroup || joinRole === 'guest';
     $('group').hidden = !st.inGroup;
     $('more').hidden = !st.inGroup;
@@ -343,6 +346,10 @@
   $('btnSync').onclick = () => { KMSync.publish(); A.syncNow(); show($('groupMsg'), '正在同步…'); };
   $('btnAdd').onclick = () => { show($('groupMsg'), '正在生成加入码…'); A.joinOpen(); };
   $('btnAddClose').onclick = () => closeJoin(true);
+  $('btnRejoin').onclick = () => {
+    if (!confirm('退出同步组后，用另一台设备上的「添加设备」生成加入码，再在这台设备上扫码加入。\n本机学习数据保留，重新加入时会合并。')) return;
+    A.syncLeave();
+  };
   $('btnLeave').onclick = () => {
     if (!confirm('退出同步组？\n本机学习数据保留，以后不再和别的设备同步。')) return;
     A.syncLeave();
