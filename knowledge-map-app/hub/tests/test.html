@@ -16,7 +16,7 @@
 </head>
 <body>
 <h1>km-data.js 合并引擎单元测试</h1>
-<p><small>用法：用本地服务器打开本页（如 http://localhost:8781/issue-2/knowledge-map-app/hub/tests/test.html）。会临时清空本页所在网址的 localStorage，跑完自动还原。结果也在 window.__results。</small></p>
+<p><small>用法：用本地服务器打开本页（如 http://localhost:8781/issue-2/knowledge-map-app/hub/tests/test.html）。会临时清空本页所在网址的 localStorage，跑完自动还原。结果也在 window.__results。<br>网址后加 <code>?seed=数字</code> 换一批随机数据；加 <code>?seeds=1-200</code>（或 <code>?seeds=1,5,9</code>）只批量跑随机三方类用例和删除记录穷举，汇总失败的 seed（失败的 seed 也在 window.__results.failedSeeds）。</small></p>
 <div id="sum">运行中…</div>
 <ol id="out"></ol>
 <script src="../km-data.js"></script>
@@ -63,6 +63,206 @@
   const saved = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); saved[k] = localStorage.getItem(k); }
   function resetLS() { localStorage.clear(); }
+
+  // 随机三方（#2）：200 组随机三份数据，四种合并顺序 + 再合 a。返回 { bad, first }；?seeds= 批量模式也跑它
+  function rand3(seed0) {
+    let seed = seed0;
+    const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const pickOne = arr => arr[rnd(arr.length)];
+    const devs = ['A', 'B', 'C'];
+    function gen(dev) {
+      const keys = {}, meta = {};
+      const put = (k, id, e) => { (meta[k] = meta[k] || {})[id] = e; };
+      // 进度 / 数学进度 / 错题：每条随机是“有 / 删了 / 没有”
+      [['fjzk-zh-progress-v1', () => ({ viewed: rnd(50), best: pickOne([null, rnd(100)]), last: pickOne([null, rnd(100)]), attempts: rnd(5), updated: rnd(30), ...(rnd(2) ? { diag: pickOne(['pass', 'fail']), diagInferred: !!rnd(2), diagAt: rnd(30) } : {}) })],
+       ['mathmap-progress-v1', () => ({ best: rnd(10) / 10, last: rnd(10) / 10, at: rnd(30) })],
+       ['mathmap-wrong-v1', () => ({ n: 1 + rnd(4), at: rnd(40) })]].forEach(([k, mk]) => {
+        const o = {};
+        ['i1', 'i2', 'i3', 'i4'].forEach(id => {
+          const s = rnd(3);
+          if (s === 0) { o[id] = mk(); if (rnd(2)) put(k, id, { t: 10 + rnd(50), by: dev, ...(rnd(3) ? {} : { x: rnd(10) }) }); }
+          else if (s === 1) put(k, id, { t: rnd(10), by: dev, x: 20 + rnd(50), v: mk() });
+        });
+        keys[k] = o;
+      });
+      // 草稿：要么老数据（没有版本），要么有各设备版本
+      const dr = {}, dm = {};
+      ['w1', 'w2'].forEach(id => {
+        if (!rnd(3)) return;
+        if (rnd(2)) { dr[id] = { 0: { text: pickOne(['', '甲', '甲乙', '丙']) } }; return; }
+        const vers = { 0: {} };
+        devs.forEach(d => { if (d === dev || rnd(2)) vers[0][d] = { t: rnd(20), text: pickOne(['', '甲', '甲乙', '丙', '丁']), seen: rnd(2) ? { [pickOne(devs)]: rnd(20) } : {} }; });
+        dm[id] = { t: rnd(30), by: dev, vers };
+        dr[id] = { 0: { text: D.computeDraft(vers[0]).text } };
+      });
+      keys['fjzk-zh-drafts-v1'] = dr; meta['fjzk-zh-drafts-v1'] = dm;
+      if (rnd(2)) { keys['fjzk-zh-diag-v1'] = { s: rnd(5) }; put('fjzk-zh-diag-v1', '*', { t: rnd(5), by: dev }); }
+      if (rnd(2)) keys['km-narrate-rate'] = pickOne(['0.8', '1', '1.2']);
+      if (rnd(2)) keys['fjzk-x-v1'] = { r: rnd(5) };
+      keys['km-study-v1'] = rnd(2) ? { days: { d1: { k: rnd(100) } }, first: { k: { a: 'd' + rnd(9) } }, totals: { k: rnd(9) } }
+        : { days: {}, byDev: { [dev]: { d1: { k: rnd(100) } }, [pickOne(devs)]: { d2: { k: rnd(100) } } }, first: {}, totals: {}, migrated: 1 };
+      if (rnd(4)) keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙', '丙']), born: rnd(3), nameT: rnd(5), tick: rnd(1e6), fullness: rnd(100), xp: rnd(7), bones: rnd(20),
+        claimed: { k: ['a', 'b', 'c', 'd'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)), equip: { neck: pickOne(['collar', null]) }, equipT: rnd(5),
+        ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}), petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
+      const lists = [];
+      ['L1', 'L2'].forEach(id => {
+        const s = rnd(3);
+        const mk = () => ({ id, name: pickOne(['一', '二']), words: [{ en: pickOne(['cat', 'dog']) }], wrong: { cat: rnd(3) }, history: [{ at: rnd(5), c: rnd(2) }], created: rnd(3) });
+        if (s === 0) { lists.push(mk()); if (rnd(2)) put('fjzk-en-dictation-v1', id, { t: 10 + rnd(20), by: dev }); }
+        else if (s === 1) put('fjzk-en-dictation-v1', id, { t: rnd(5), x: 10 + rnd(30), v: mk() });
+      });
+      keys['fjzk-en-dictation-v1'] = { lists, settings: { reps: String(rnd(3)) } };
+      put('fjzk-en-dictation-v1', '@settings', { t: rnd(5), by: dev });
+      return pk(dev, keys, meta);
+    }
+    const P2 = r => pk('R', r.keys, r.meta);
+    let bad = 0, first = '';
+    for (let i = 0; i < 200; i++) {
+      const a = gen('A'), b = gen('B'), c = gen('C');
+      const r1 = M(P2(M(a, b).result), c).result;
+      const r2 = M(a, P2(M(b, c).result)).result;
+      const r3 = M(P2(M(a, c).result), b).result;
+      const r4 = M(P2(M(c, b).result), a).result;
+      const s1 = JSON.stringify(r1);
+      if (s1 !== JSON.stringify(r2) || s1 !== JSON.stringify(r3) || s1 !== JSON.stringify(r4)) { bad++; if (!first) first = '第 ' + i + ' 组：' + s1.slice(0, 300) + ' ≠ ' + JSON.stringify(r2).slice(0, 300); }
+      if (JSON.stringify(M(P2(r1), a).result) !== s1) { bad++; if (!first) first = '第 ' + i + ' 组再合 a 变了'; }
+    }
+    return { bad, first };
+  }
+  // 等级不倒退（#7）的随机部分：150 组含 claimed 重复、xp 比去重数大的小狗
+  function randPet(seed0) {
+    const Z = 'fjzk-zh-progress-v1';
+    let seed = seed0 + 7;
+    const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    const pickOne = arr => arr[rnd(arr.length)];
+    function gen(dev) {
+      const keys = {}, meta = {};
+      keys[Z] = {};
+      ['a', 'b', 'c'].forEach(id => { if (rnd(2)) { keys[Z][id] = { last: rnd(100), best: rnd(100), updated: rnd(9) }; if (rnd(2)) (meta[Z] = meta[Z] || {})[id] = { t: rnd(20), by: dev }; } });
+      if (rnd(2)) keys['km-narrate-rate'] = pickOne(['0.8', '1', '1.2']);
+      if (rnd(2)) keys['km-study-v1'] = { days: { d1: { k: rnd(100) } }, first: {}, totals: {} };
+      if (rnd(5)) {
+        const cl = ['a', 'b', 'c', 'd', 'e'].filter(() => rnd(2));
+        const dup = rnd(3) ? cl.concat(cl.slice(0, 1 + rnd(3))) : cl;
+        keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙']), born: rnd(3), tick: rnd(1e6), fullness: rnd(100),
+          xp: new Set(cl).size + rnd(4), bones: rnd(15), claimed: { [Z]: dup, k: ['p', 'q'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)),
+          equip: rnd(2) ? { neck: 'collar' } : {}, ...(rnd(2) ? { equipT: rnd(5) } : {}), ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}),
+          petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
+      }
+      return pk(dev, keys, meta);
+    }
+    const P2 = r => pk('R', r.keys, r.meta);
+    const xpOf = p => { const v = p.keys['km-pet-v1']; return v && v.breed ? +v.xp || 0 : 0; };
+    let bad = 0, first = '';
+    const fail = m => { bad++; if (!first) first = m; };
+    for (let i = 0; i < 150; i++) {
+      const a = gen('A'), b = gen('B'), c = gen('C');
+      const orders = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]];
+      const rs = orders.map(o => M(P2(M(o[0], o[1]).result), o[2]).result);
+      const s0 = JSON.stringify(rs[0]);
+      if (rs.some(r => JSON.stringify(r) !== s0)) fail('第 ' + i + ' 组：6 种顺序结果不同');
+      if (JSON.stringify(M(a, P2(M(b, c).result)).result) !== s0) fail('第 ' + i + ' 组：a,(b,c) 结果不同');
+      if (JSON.stringify(M(P2(rs[0]), a).result) !== s0 || JSON.stringify(M(P2(rs[0]), P2(rs[0])).result) !== s0) fail('第 ' + i + ' 组：合并再合并变了');
+      const pet = rs[0].keys['km-pet-v1'];
+      if (pet) {
+        if (!(pet.xp >= xpOf(a) && pet.xp >= xpOf(b) && pet.xp >= xpOf(c))) fail('第 ' + i + ' 组：xp ' + pet.xp + ' 小于某一边');
+        if (pet.xp < D.uniqClaimed(pet)) fail('第 ' + i + ' 组：xp 小于去重数');
+        if (pet.bones !== D.petBones(pet)) fail('第 ' + i + ' 组：骨头 ' + pet.bones + ' ≠ 公式 ' + D.petBones(pet));
+      }
+      [a, c].forEach(x => { const r2 = M(x, b).result.keys['km-pet-v1']; if (r2 && P.level(r2.xp) < P.level(xpOf(x))) fail('第 ' + i + ' 组：导入后等级低于导入前'); });
+    }
+    return { bad, first };
+  }
+  const SEED = +new URLSearchParams(location.search).get('seed') || 20261016;   // 可以在网址后加 ?seed=数字 换一批随机数据
+
+  // 删除记录（墓碑）× 各种条目的穷举（#8）：每种按条目合并的键（错题、数学进度、进度、草稿、听写词单）
+  // 每一边取下面 10 种状态之一，三边所有组合 × 6 种顺序 + a,(b,c) 逐字节相同，结果再合任一边 / 自己不变。返回 { bad, first, n }
+  const TOMB_KINDS = [
+    ['mathmap-wrong-v1', at => ({ n: 1 + at % 3, at })],
+    ['mathmap-progress-v1', at => ({ best: 0.5, last: (at % 10) / 10, at })],
+    ['fjzk-zh-progress-v1', at => ({ viewed: at, best: 50 + at % 7, last: 50, attempts: 1, updated: at })],
+    ['fjzk-zh-drafts-v1', at => ({ 0: { text: '作文' + at } })],
+    ['fjzk-en-dictation-v1', at => ({ id: 'L1', name: '单元' + at % 2, words: [{ en: 'cat' }], wrong: { cat: at % 3 }, history: [{ at, c: 1 }], created: 1 })]
+  ];
+  // 状态：[说明, 条目内容的时间 at 或 null（这一边没有这一条）, 这一条的修改记录或 null]
+  const TOMB_STATES = [
+    ['没有', null, null],
+    ['旧条目 at 8（无修改记录）', 8, null],
+    ['旧条目 at 40（无修改记录）', 40, null],
+    ['新条目 t 40', 40, d => ({ t: 40, by: d })],
+    ['新条目 t 20', 20, d => ({ t: 20, by: d })],
+    ['墓碑 x 30', null, (d, mk) => ({ t: 5, by: d, x: 30, v: mk(10) })],
+    ['墓碑 x 30、删除前内容 at 32（时钟不准）', null, (d, mk) => ({ t: 0, x: 30, v: mk(32) })],
+    ['墓碑 x 30、t 50（时钟不准）', null, (d, mk) => ({ t: 50, by: d, x: 30, v: mk(10) })],
+    ['墓碑 x 8（与旧条目同一时刻）', null, (d, mk) => ({ x: 8, v: mk(8) })],
+    ['只有修改记录 t 12、没有条目', null, d => ({ t: 12, by: d })]
+  ];
+  function tombSide(key, mk, s, dev) {
+    const [, at, me] = TOMB_STATES[s];
+    const keys = {}, meta = {};
+    const isList = key === 'fjzk-en-dictation-v1';
+    keys[key] = isList ? { lists: [] } : {};
+    if (at !== null) { if (isList) keys[key].lists.push(mk(at)); else keys[key].w1 = mk(at); }
+    if (me) meta[key] = { [isList ? 'L1' : 'w1']: me(dev, mk) };
+    return pk(dev, keys, meta);
+  }
+  function tombCombos() {
+    const P2 = r => pk('R', r.keys, r.meta);
+    const S1 = r => JSON.stringify(r);
+    let bad = 0, first = '', n = 0;
+    TOMB_KINDS.forEach(([key, mk]) => {
+      const N = TOMB_STATES.length;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) for (let k = 0; k < N; k++) {
+        n++;
+        const a = tombSide(key, mk, i, 'A'), b = tombSide(key, mk, j, 'B'), c = tombSide(key, mk, k, 'C');
+        const orders = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]];
+        const rs = orders.map(o => S1(M(P2(M(o[0], o[1]).result), o[2]).result));
+        const r0 = JSON.parse(rs[0]);
+        const why = rs.some(s => s !== rs[0]) ? '6 种顺序结果不同'
+          : S1(M(a, P2(M(b, c).result)).result) !== rs[0] ? 'a,(b,c) 结果不同'
+          : [a, b, c, P2(r0)].some(x => S1(M(P2(r0), x).result) !== rs[0]) ? '结果再合并变了'
+          : M(P2(r0), a).report.changed ? '结果再导入报告有变化' : '';
+        if (why) { bad++; if (!first) first = key + '：' + [i, j, k].map(s => TOMB_STATES[s][0]).join(' × ') + ' → ' + why; }
+      }
+    });
+    return { bad, first, n };
+  }
+
+  // 批量模式：?seeds=1-200（或 ?seeds=1,5,9）只跑随机三方类用例，汇总失败的 seed
+  const seedsArg = new URLSearchParams(location.search).get('seeds');
+  if (seedsArg) {
+    const seeds = [];
+    seedsArg.split(',').forEach(part => {
+      const m = /^\s*(\d+)\s*(?:-\s*(\d+))?\s*$/.exec(part);
+      if (!m) return;
+      const lo = +m[1], hi = m[2] ? +m[2] : lo;
+      for (let s = Math.min(lo, hi); s <= Math.max(lo, hi); s++) seeds.push(s);
+    });
+    const sum = document.getElementById('sum');
+    const bySeed = [];
+    const t0 = Date.now();
+    cur = '删除记录穷举（#8）';
+    const tc = tombCombos();
+    log(!tc.bad, tc.n + ' 种三方组合 × 6 种顺序逐字节相同' + (tc.bad ? '；失败 ' + tc.bad + ' 次，' + tc.first : ''));
+    for (const s of seeds) {
+      sum.textContent = '批量运行中… seed ' + s + '（' + (seeds.indexOf(s) + 1) + ' / ' + seeds.length + '）';
+      await new Promise(r => setTimeout(r, 0));
+      const r1 = rand3(s), r2 = randPet(s);
+      const msgs = [];
+      if (r1.bad) msgs.push('随机三方：失败 ' + r1.bad + ' 次，' + r1.first);
+      if (r2.bad) msgs.push('等级不倒退随机：失败 ' + r2.bad + ' 次，' + r2.first);
+      cur = 'seed ' + s;
+      if (msgs.length) { bySeed.push(s); log(false, msgs.join('；')); } else res.pass++;
+    }
+    res.failedSeeds = bySeed;
+    res.seeds = seeds.length;
+    sum.innerHTML = (bySeed.length || tc.bad)
+      ? `<span class="bad">批量 ${seeds.length} 个 seed：${bySeed.length} 个失败</span>（${bySeed.join('、') || '无'}）${tc.bad ? '；删除记录穷举失败' : ''}`
+      : `<span class="ok">批量 ${seeds.length} 个 seed 全部通过</span>（随机三方 + 等级不倒退随机，另加删除记录穷举 ${tc.n} 组）`;
+    sum.innerHTML += ` <small>用时 ${Math.round((Date.now() - t0) / 1000)} 秒</small>`;
+    res.done = true;
+    return;
+  }
 
   try {
     await test('进度（非数学）', () => {
@@ -209,68 +409,77 @@
     });
 
     await test('随机三方：三种合并顺序结果完全相同', () => {
-      let seed = +new URLSearchParams(location.search).get('seed') || 20261016;   // 可以在网址后加 ?seed=数字 换一批随机数据
-      const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
-      const pickOne = arr => arr[rnd(arr.length)];
-      const devs = ['A', 'B', 'C'];
-      function gen(dev) {
-        const keys = {}, meta = {};
-        const put = (k, id, e) => { (meta[k] = meta[k] || {})[id] = e; };
-        // 进度 / 数学进度 / 错题：每条随机是“有 / 删了 / 没有”
-        [['fjzk-zh-progress-v1', () => ({ viewed: rnd(50), best: pickOne([null, rnd(100)]), last: pickOne([null, rnd(100)]), attempts: rnd(5), updated: rnd(30), ...(rnd(2) ? { diag: pickOne(['pass', 'fail']), diagInferred: !!rnd(2), diagAt: rnd(30) } : {}) })],
-         ['mathmap-progress-v1', () => ({ best: rnd(10) / 10, last: rnd(10) / 10, at: rnd(30) })],
-         ['mathmap-wrong-v1', () => ({ n: 1 + rnd(4), at: rnd(40) })]].forEach(([k, mk]) => {
-          const o = {};
-          ['i1', 'i2', 'i3', 'i4'].forEach(id => {
-            const s = rnd(3);
-            if (s === 0) { o[id] = mk(); if (rnd(2)) put(k, id, { t: 10 + rnd(50), by: dev, ...(rnd(3) ? {} : { x: rnd(10) }) }); }
-            else if (s === 1) put(k, id, { t: rnd(10), by: dev, x: 20 + rnd(50), v: mk() });
-          });
-          keys[k] = o;
-        });
-        // 草稿：要么老数据（没有版本），要么有各设备版本
-        const dr = {}, dm = {};
-        ['w1', 'w2'].forEach(id => {
-          if (!rnd(3)) return;
-          if (rnd(2)) { dr[id] = { 0: { text: pickOne(['', '甲', '甲乙', '丙']) } }; return; }
-          const vers = { 0: {} };
-          devs.forEach(d => { if (d === dev || rnd(2)) vers[0][d] = { t: rnd(20), text: pickOne(['', '甲', '甲乙', '丙', '丁']), seen: rnd(2) ? { [pickOne(devs)]: rnd(20) } : {} }; });
-          dm[id] = { t: rnd(30), by: dev, vers };
-          dr[id] = { 0: { text: D.computeDraft(vers[0]).text } };
-        });
-        keys['fjzk-zh-drafts-v1'] = dr; meta['fjzk-zh-drafts-v1'] = dm;
-        if (rnd(2)) { keys['fjzk-zh-diag-v1'] = { s: rnd(5) }; put('fjzk-zh-diag-v1', '*', { t: rnd(5), by: dev }); }
-        if (rnd(2)) keys['km-narrate-rate'] = pickOne(['0.8', '1', '1.2']);
-        if (rnd(2)) keys['fjzk-x-v1'] = { r: rnd(5) };
-        keys['km-study-v1'] = rnd(2) ? { days: { d1: { k: rnd(100) } }, first: { k: { a: 'd' + rnd(9) } }, totals: { k: rnd(9) } }
-          : { days: {}, byDev: { [dev]: { d1: { k: rnd(100) } }, [pickOne(devs)]: { d2: { k: rnd(100) } } }, first: {}, totals: {}, migrated: 1 };
-        if (rnd(4)) keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙', '丙']), born: rnd(3), nameT: rnd(5), tick: rnd(1e6), fullness: rnd(100), xp: rnd(7), bones: rnd(20),
-          claimed: { k: ['a', 'b', 'c', 'd'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)), equip: { neck: pickOne(['collar', null]) }, equipT: rnd(5),
-          ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}), petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
-        const lists = [];
-        ['L1', 'L2'].forEach(id => {
-          const s = rnd(3);
-          const mk = () => ({ id, name: pickOne(['一', '二']), words: [{ en: pickOne(['cat', 'dog']) }], wrong: { cat: rnd(3) }, history: [{ at: rnd(5), c: rnd(2) }], created: rnd(3) });
-          if (s === 0) { lists.push(mk()); if (rnd(2)) put('fjzk-en-dictation-v1', id, { t: 10 + rnd(20), by: dev }); }
-          else if (s === 1) put('fjzk-en-dictation-v1', id, { t: rnd(5), x: 10 + rnd(30), v: mk() });
-        });
-        keys['fjzk-en-dictation-v1'] = { lists, settings: { reps: String(rnd(3)) } };
-        put('fjzk-en-dictation-v1', '@settings', { t: rnd(5), by: dev });
-        return pk(dev, keys, meta);
-      }
-      const P2 = r => pk('R', r.keys, r.meta);
-      let bad = 0, first = '';
-      for (let i = 0; i < 200; i++) {
-        const a = gen('A'), b = gen('B'), c = gen('C');
-        const r1 = M(P2(M(a, b).result), c).result;
-        const r2 = M(a, P2(M(b, c).result)).result;
-        const r3 = M(P2(M(a, c).result), b).result;
-        const r4 = M(P2(M(c, b).result), a).result;
-        const s1 = JSON.stringify(r1);
-        if (s1 !== JSON.stringify(r2) || s1 !== JSON.stringify(r3) || s1 !== JSON.stringify(r4)) { bad++; if (!first) first = '第 ' + i + ' 组：' + s1.slice(0, 300) + ' ≠ ' + JSON.stringify(r2).slice(0, 300); }
-        if (JSON.stringify(M(P2(r1), a).result) !== s1) { bad++; if (!first) first = '第 ' + i + ' 组再合 a 变了'; }
-      }
+      const { bad, first } = rand3(SEED);
       ok(!bad, '追加验收 1：200 组随机三份数据，(a,b),c / a,(b,c) / (a,c),b / (c,b),a 四种顺序结果逐字节相同' + (bad ? '；失败 ' + bad + ' 次，' + first : ''));
+    });
+
+    await test('删除记录 vs 旧数据：规则与顺序无关（#8）', () => {
+      const W = 'mathmap-wrong-v1';
+      const side = (dev, items, meta) => pk(dev, { [W]: items || {} }, meta ? { [W]: meta } : {});
+      const has = (r, id) => hasOwn(r.keys[W] || {}, id);
+      const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+      const all6 = (a, b, c) => [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]].map(o => M(pk('R', M(o[0], o[1]).result.keys, M(o[0], o[1]).result.meta), o[2]).result);
+      // #7 测试报告 seed 42 第 2 组的原例：A、B 是删除记录，C 是没有修改记录的旧值
+      const A = side('A', {}, { i4: { t: 0, x: 30, v: { at: 32 } } });
+      const B = side('B', {}, { i4: { t: 4, by: 'B', x: 30, v: { at: 0 } } });
+      const C = side('C', { i4: { n: 1, at: 8 } });
+      const rs = all6(A, B, C);
+      eq(rs.map(r => JSON.stringify(r)), Array(6).fill(JSON.stringify(rs[0])), '原例（seed 42）：6 种合并顺序逐字节相同');
+      ok(!has(rs[0], 'i4'), '原例：旧错题 at 8 早于删除 → 删掉（6 种顺序都一样）');
+      // 两方规则
+      const tomb = side('T', {}, { q: { t: 5, by: 'T', x: 30, v: { n: 2, at: 10 } } });
+      const two = (x, msg, want) => { const r1 = M(tomb, x).result, r2 = M(x, tomb).result; ok(JSON.stringify(r1) === JSON.stringify(r2) && has(r1, 'q') === want, msg); };
+      two(side('O', { q: { n: 1, at: 8 } }), '墓碑 × 无修改记录的旧条目（at 8 < 删除 30）→ 删除', false);
+      two(side('O', { q: { n: 1, at: 40 } }), '墓碑 × 无修改记录的旧条目（at 40 > 删除 30，删除之后又做错）→ 保留', true);
+      two(side('O', { q: { n: 1, at: 30 } }), '墓碑 × 旧条目 at 与删除同一时刻 → 删除（相等算删除）', false);
+      two(side('N', { q: { n: 1, at: 20 } }, { q: { t: 40, by: 'N' } }), '墓碑 × 有修改记录的新条目（t 40 > 删除 30）→ 保留', true);
+      two(side('N', { q: { n: 1, at: 20 } }, { q: { t: 20, by: 'N' } }), '墓碑 × 修改记录较早的条目（t 20 < 删除 30）→ 删除', false);
+      // 时钟不准：删除记录里的内容时间比删除时间还晚，删除时间按删除前内容的时间算
+      const skew = side('S', {}, { q: { t: 0, x: 30, v: { n: 1, at: 32 } } });
+      ok(!has(M(skew, side('O', { q: { n: 1, at: 31 } })).result, 'q'), '删除前内容 at 32、删除 x 30（时钟不准）× 旧条目 at 31 → 删除（这台设备是看到 at 32 之后才删的）');
+      ok(has(M(skew, side('O', { q: { n: 1, at: 33 } })).result, 'q'), '同上 × 旧条目 at 33 → 保留');
+      ok(!has(M(skew, skew).result, 'q') && !has(M(side('X', {}, { q: { t: 50, by: 'X', x: 30, v: { n: 1, at: 5 } } }), side('Y')).result, 'q'), '已删除的一边自己不会“复活”（删除记录 t 比 x 晚也一样）');
+      // 不丢错题：没有删除记录时，旧条目、新条目都保留
+      const keep = M(side('O', { a: { n: 1, at: 8 }, b: { n: 2, at: 0 } }), side('N', { c: { n: 1, at: 5 } }, { c: { t: 5, by: 'N' } })).result.keys[W];
+      eq(Object.keys(keep).sort(), ['a', 'b', 'c'], '没有删除记录：旧错题（含 at 0）和新错题都保留');
+      // 穷举：5 种按条目合并的键 × 10 种状态的三方组合
+      const tc = tombCombos();
+      ok(!tc.bad, '验收 2：错题、数学进度、进度、草稿、听写词单 × 10 种状态（墓碑 × 无 meta 旧条目、墓碑 × 有 meta 新条目、时钟不准的墓碑……）共 ' + tc.n + ' 种三方组合：6 种顺序 + a,(b,c) 逐字节相同、再合并不变、再导入没有变化' + (tc.bad ? '；失败 ' + tc.bad + ' 次，' + tc.first : ''));
+    });
+
+    await test('升级后错题本：自己合并不变、导入按规则、再导入没有变化（#8）', () => {
+      resetLS();
+      const W = 'mathmap-wrong-v1', Z = 'fjzk-zh-progress-v1';
+      // 升级前的老数据：没有修改记录（写入后把 km-meta-v1 删掉，模拟 km-data.js 上线前就有的数据）
+      localStorage.setItem(W, JSON.stringify({ w1: { n: 1, at: 8 }, w2: { n: 2, at: 40 }, w3: { n: 1, at: 50 }, w0: { n: 1 } }));
+      localStorage.setItem(Z, JSON.stringify({ a: { last: 90, best: 90, updated: 3 }, b: { last: 95, best: 95, updated: 4 }, c: { last: 90, best: 90, updated: 5 } }));
+      localStorage.setItem('km-study-v1', JSON.stringify({ days: { '2026-10-15': { [Z]: 900 } }, first: {}, totals: {} }));
+      localStorage.setItem('km-pet-v1', JSON.stringify({ breed: 'shiba', name: '小柴', born: 1, tick: Date.now(), fullness: 50, xp: 3, bones: 7, claimed: { [Z]: ['a', 'b', 'c'] }, owned: [], equip: {}, petDay: '', petCount: 0, lastStudy: 0 }));
+      D._flush();
+      localStorage.removeItem('km-meta-v1');
+      const bones0 = P.load().bones, sec0 = S.secondsOn(S.load(), '2026-10-15');
+      D._flush();
+      const local = D.collect();
+      const self = M(local, local);
+      ok(!self.report.changed, '升级后本机数据自己合并一次：没有变化');
+      eq(Object.keys(self.result.keys[W]).sort(), ['w0', 'w1', 'w2', 'w3'], '升级后错题本 4 道都在（没有修改记录的旧错题不丢）');
+      // 另一台设备：w1 在 x 30 答对删了（早于本机 w2 的 at 40、晚于 w1 的 at 8）；w2 也删过但在本机 at 40 之前；新错题 w4
+      const other = pk('B', { [W]: { w4: { n: 1, at: 60 } } }, { [W]: { w1: { t: 5, by: 'B', x: 30, v: { n: 1, at: 8 } }, w2: { t: 0, x: 30, v: { n: 2, at: 32 } }, w4: { t: 60, by: 'B' } } });
+      const r = M(D.collect(), other);
+      eq(Object.keys(r.result.keys[W]).sort(), ['w0', 'w2', 'w3', 'w4'], '验收 3：错题本按规则 = 去掉 w1（删除晚于最后做错）、保留 w2（本机 at 40 晚于删除）、w3、w0、加上 w4');
+      const it = r.report.items.find(x => x.key === W);
+      ok(it && it.text.indexOf('+1、−1（现在共 4 道）') === 0, '预览写明「+1、−1（现在共 4 道）」：' + (it && it.text));
+      D.apply(r.result);
+      eq([P.load().bones, S.secondsOn(S.load(), '2026-10-15'), Object.keys(JSON.parse(localStorage.getItem(Z))).length], [bones0, sec0, 3], '验收 3：骨头、学习时长、进度不变');
+      ok(!M(D.collect(), other).report.changed, '验收 3：同一文件再导入 →「没有变化」');
+      // 导出 → 空白设备导入 → 再导入
+      const file = JSON.parse(JSON.stringify(D.collect()));
+      resetLS();
+      const r2 = M(D.collect(), D.parseFile(JSON.stringify(file)).pkg);
+      D.apply(r2.result);
+      eq(Object.keys(JSON.parse(localStorage.getItem(W))).sort(), ['w0', 'w2', 'w3', 'w4'], '导出 → 空白设备导入：错题本一致');
+      ok(!M(D.collect(), D.parseFile(JSON.stringify(file)).pkg).report.changed, '验收 3：导出 → 导入 → 再导入「没有变化」');
+      ok(!M(D.collect(), other).report.changed, '再导入另一台设备的文件也「没有变化」（删除不会被旧数据带回来）');
     });
 
     await test('等级不倒退（#7）', () => {
@@ -300,45 +509,7 @@
       const lvAfter = P.level(m2.result.keys['km-pet-v1'].xp);
       ok(it2 && it2.text.indexOf('等级 Lv.1 → Lv.2') >= 0 && lvAfter === 2, '验收 5：等级变了写「等级 Lv.1 → Lv.2」：' + (it2 && it2.text));
       // 随机：claimed 有重复、xp 比去重数大的小狗，和其它随机数据三方合并
-      let seed = (+new URLSearchParams(location.search).get('seed') || 20261016) + 7;
-      const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
-      const pickOne = arr => arr[rnd(arr.length)];
-      function gen(dev) {
-        const keys = {}, meta = {};
-        keys[Z] = {};
-        ['a', 'b', 'c'].forEach(id => { if (rnd(2)) { keys[Z][id] = { last: rnd(100), best: rnd(100), updated: rnd(9) }; if (rnd(2)) (meta[Z] = meta[Z] || {})[id] = { t: rnd(20), by: dev }; } });
-        if (rnd(2)) keys['km-narrate-rate'] = pickOne(['0.8', '1', '1.2']);
-        if (rnd(2)) keys['km-study-v1'] = { days: { d1: { k: rnd(100) } }, first: {}, totals: {} };
-        if (rnd(5)) {
-          const cl = ['a', 'b', 'c', 'd', 'e'].filter(() => rnd(2));
-          const dup = rnd(3) ? cl.concat(cl.slice(0, 1 + rnd(3))) : cl;
-          keys['km-pet-v1'] = { breed: pickOne(['shiba', 'husky']), name: pickOne(['甲', '乙']), born: rnd(3), tick: rnd(1e6), fullness: rnd(100),
-            xp: new Set(cl).size + rnd(4), bones: rnd(15), claimed: { [Z]: dup, k: ['p', 'q'].filter(() => rnd(2)) }, owned: ['collar', 'party'].filter(() => rnd(2)),
-            equip: rnd(2) ? { neck: 'collar' } : {}, ...(rnd(2) ? { equipT: rnd(5) } : {}), ...(rnd(2) ? { spent: { [dev]: rnd(5) }, legacy: { [dev]: rnd(5) } } : {}),
-            petDay: '2026-10-' + (1 + rnd(9)), petCount: rnd(4), lastStudy: rnd(9) };
-        }
-        return pk(dev, keys, meta);
-      }
-      const P2 = r => pk('R', r.keys, r.meta);
-      const xpOf = p => { const v = p.keys['km-pet-v1']; return v && v.breed ? +v.xp || 0 : 0; };
-      let bad = 0, first = '';
-      const fail = m => { bad++; if (!first) first = m; };
-      for (let i = 0; i < 150; i++) {
-        const a = gen('A'), b = gen('B'), c = gen('C');
-        const orders = [[a, b, c], [a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]];
-        const rs = orders.map(o => M(P2(M(o[0], o[1]).result), o[2]).result);
-        const s0 = JSON.stringify(rs[0]);
-        if (rs.some(r => JSON.stringify(r) !== s0)) fail('第 ' + i + ' 组：6 种顺序结果不同');
-        if (JSON.stringify(M(a, P2(M(b, c).result)).result) !== s0) fail('第 ' + i + ' 组：a,(b,c) 结果不同');
-        if (JSON.stringify(M(P2(rs[0]), a).result) !== s0 || JSON.stringify(M(P2(rs[0]), P2(rs[0])).result) !== s0) fail('第 ' + i + ' 组：合并再合并变了');
-        const pet = rs[0].keys['km-pet-v1'];
-        if (pet) {
-          if (!(pet.xp >= xpOf(a) && pet.xp >= xpOf(b) && pet.xp >= xpOf(c))) fail('第 ' + i + ' 组：xp ' + pet.xp + ' 小于某一边');
-          if (pet.xp < D.uniqClaimed(pet)) fail('第 ' + i + ' 组：xp 小于去重数');
-          if (pet.bones !== D.petBones(pet)) fail('第 ' + i + ' 组：骨头 ' + pet.bones + ' ≠ 公式 ' + D.petBones(pet));
-        }
-        [a, c].forEach(x => { const r2 = M(x, b).result.keys['km-pet-v1']; if (r2 && P.level(r2.xp) < P.level(xpOf(x))) fail('第 ' + i + ' 组：导入后等级低于导入前'); });
-      }
+      const { bad, first } = randPet(SEED);
       ok(!bad, '150 组随机三份数据（含 claimed 重复、xp 比去重数大）：6 种顺序逐字节相同、幂等、xp ≥ 每一边、骨头等于公式值、等级不低于导入前' + (bad ? '；失败 ' + bad + ' 次，' + first : ''));
     });
 
