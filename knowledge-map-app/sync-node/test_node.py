@@ -1381,17 +1381,22 @@ def run_remote(addr, web=True):
         texts = '\n'.join(all_strings(list(gl.values())))
         check(b64e(blob)[:40] not in texts, '管理响应里没有密文字节')
         adm.ok('groups.setNote', {'gid': gid, 'note': LABEL})
-        adm.ok('groups.remove', {'gid': gid})
-        st, r = a.pull(0)
+        # 封禁 / 解除封禁 / 重建用换钥后的新组 g2 测（旧组 gid 已经换钥，1.2.0 起不许重建）
+        a2 = DevClient(http, g2, k2, 'autotestA')
+        adm.ok('groups.remove', {'gid': g2})
+        st, r = a2.pull(0)
         check(st == 403 and r['err'] == 'blocked', '移除后 403 blocked', (st, r))
-        adm.ok('groups.unblock', {'gid': gid})
-        st, r = a.create(iv)
-        check(st == 200 and r.get('rebuilt'), '解除封禁后重建', (st, r))
+        adm.ok('groups.unblock', {'gid': g2})
+        st, r = a2.create(iv)
+        check(st == 200 and r.get('rebuilt'), '解除封禁后重建（新组继承邀请号）', (st, r))
+        st, r = a.call('drop', {})
+        st2, r2 = b.create(iv)
+        check(st == 200 and st2 == 403 and r2 == {'err': 'replaced'}, '换钥后的旧组删掉后，用邀请码重建 → 403 replaced（1.2.0）', (st, r, st2, r2))
         body = json.dumps({'v': 1}).encode()
         st, r, _ = http.send('POST', '/admin/v1', body, {'X-KM-Auth': a.auth('POST', '/admin/v1', body)})
         check(st == 403 and r == {}, '设备签名访问管理接口 → 403 {}', (st, r))
         logs = adm.ok('log.list', {'limit': 30})['items']
-        check(any(i['op'] == 'groups.remove' and i['obj'] == gid[:6] for i in logs), '管理日志里有刚才的操作', '')
+        check(any(i['op'] == 'groups.remove' and i['obj'] == g2[:6] for i in logs), '管理日志里有刚才的操作', '')
         if web:
             run_remote_web(http, adm, info.get('host') or '43.142.41.27')
     finally:
