@@ -6,3 +6,4 @@ knowledge-map-app/signing/
 *.7z
 *.tar.gz
 /sims-c3-6.js
+__pycache__/
