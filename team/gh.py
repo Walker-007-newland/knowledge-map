@@ -106,7 +106,7 @@ def set_state(n, new):
 
 
 def status_issue():
-    items = api('GET', f'/repos/{REPO}/issues?state=open&labels={q(STATUS_LABEL)}&per_page=5')
+    items = api('GET', f'/repos/{REPO}/issues?state=open&labels={q(STATUS_LABEL)}&sort=updated&direction=desc&per_page=5')
     if items:
         return items[0]
     return api('POST', f'/repos/{REPO}/issues', {

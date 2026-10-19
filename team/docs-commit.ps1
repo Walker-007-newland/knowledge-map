@@ -19,7 +19,7 @@ while (-not $lock) {
 try {
   git -C $teach add -- docs
   # 只允许提交 docs/：暂存区里出现别的文件就停下
-  $staged = @(git -C $teach diff --cached --name-only)
+  $staged = @(git -C $teach -c core.quotepath=false diff --cached --name-only)
   $other = @($staged | Where-Object { $_ -notlike 'docs/*' })
   if ($other.Count) { throw "暂存区里有 docs/ 以外的文件，已停止：$($other -join ', ')" }
   if (-not $staged.Count) { Write-Host '文档没有变化'; exit 0 }
