@@ -234,12 +234,13 @@ async function load(quiet) {
 const W = 224, H = 176;
 // desk：工位桌子左上角；seat：空闲时去休息区沙发的位置；fixed：不去休息区（CEO 空闲时在办公室喝茶）
 const MEMBERS = [
-  { role: '需求员', name: '小需', hair: '#6b3e1f', shirt: '#e8833a', desk: [14, 60], seat: [100, 130], look: 'short', queue: [] },
-  { role: '产品', name: '小品', hair: '#1c1c22', shirt: '#8a5cd1', desk: [80, 60], seat: [114, 130], look: 'long', queue: ['待评审', '需修改', '已驳回'] },
-  { role: '开发', name: '小开', hair: '#22232a', shirt: '#2f6fde', desk: [14, 104], seat: [128, 130], look: 'phones', queue: ['已批准', '返工', '开发中'] },
-  { role: '开发2', name: '小发', hair: '#3a2a1a', shirt: '#1f9bb3', desk: [80, 104], seat: [142, 130], look: 'cap', queue: [] },
-  { role: '开发3', name: '小码', hair: '#141414', shirt: '#5c6bc0', desk: [146, 104], seat: [156, 130], look: 'short', queue: [] },
-  { role: '测试', name: '小测', hair: '#9a3b22', shirt: '#2e9e6a', desk: [14, 148], seat: [170, 130], look: 'glasses', queue: ['待测试'] },
+  { role: '需求员', name: '小需', hair: '#6b3e1f', shirt: '#e8833a', desk: [14, 60], seat: [136, 130], look: 'short', queue: [] },
+  { role: '产品', name: '小品', hair: '#1c1c22', shirt: '#8a5cd1', desk: [80, 60], seat: [148, 130], look: 'long', queue: ['待评审', '需修改', '已驳回'] },
+  { role: '开发', name: '小开', hair: '#22232a', shirt: '#2f6fde', desk: [14, 104], seat: [160, 130], look: 'phones', queue: ['已批准', '返工', '开发中'] },
+  { role: '开发2', name: '小发', hair: '#3a2a1a', shirt: '#1f9bb3', desk: [80, 104], seat: [172, 130], look: 'cap', queue: [] },
+  { role: '开发3', name: '小码', hair: '#141414', shirt: '#5c6bc0', desk: [146, 104], seat: [184, 130], look: 'short', queue: [] },
+  { role: '测试', name: '小测', hair: '#9a3b22', shirt: '#2e9e6a', desk: [14, 148], seat: [196, 130], look: 'glasses', queue: ['待测试'] },
+  { role: '文员', name: '小文', hair: '#4a2c1a', shirt: '#d35d8a', desk: [74, 148], dw: 40, seat: [208, 130], look: 'bun', queue: [] },
   { role: 'CEO', name: 'CEO', hair: '#6f6f6f', shirt: '#2b3a55', desk: [162, 66], dw: 54, fixed: true, look: 'suit', queue: ['待审批'] },
 ];
 const MS = { working: '工作中', idle: '空闲', blocked: '阻塞', stale: '可能已中断' };
@@ -331,6 +332,7 @@ function drawPerson(g, m, x, y, o) {
   if (!blink) { R('#222', 2, 4, 1, 1); R('#222', 5, 4, 1, 1); } else { R('#c49a78', 2, 4, 1, 1); R('#c49a78', 5, 4, 1, 1); }
   if (m.look === 'glasses') { R('#333', 1, 4, 3, 1); R('#333', 4, 4, 3, 1); R('#9fd3f5', 2, 4, 1, 1); R('#9fd3f5', 5, 4, 1, 1); }
   if (m.look === 'phones') { R('#e04848', 0, 3, 1, 3); R('#e04848', 7, 3, 1, 3); R('#555', 1, -1, 6, 1); }
+  if (m.look === 'bun') { R(m.hair, 3, -2, 2, 2); R(m.hair, 0, 1, 1, 4); R(m.hair, 7, 1, 1, 4); }
   if (m.look === 'cap') { R('#e67e22', 1, -1, 6, 2); R('#e67e22', 6, 1, 3, 1); }
   if (m.look === 'suit') { R('#fff', 3, 7, 2, 1); R('#c0392b', 3, 8, 2, 3); }
   R('#d9776b', 3, 6, 2, 1);                        // 嘴
@@ -362,15 +364,16 @@ function drawOffice() {
   g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill(); g.strokeStyle = '#555'; g.lineWidth = 1; g.stroke();
   const hand = (a, l, c) => { g.strokeStyle = c; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(a) * l, cy - Math.cos(a) * l); g.stroke(); };
   hand((now.getHours() % 12 + now.getMinutes() / 60) / 12 * 6.283, 4, '#333'); hand(now.getMinutes() / 60 * 6.283, 6, '#777');
+  // 咖啡机（墙边）
+  R('#555', 151, 12, 14, 22); R('#333', 153, 15, 10, 6); R(f % 60 < 30 ? '#4cc38a' : '#2a7a55', 161, 24, 2, 2); R('#fff', 155, 28, 4, 4);
   // CEO 室：墙上金色门牌、植物，玻璃隔断（下方留门）
   R('#9c7a12', 170, 12, 34, 13); R('#d4a72c', 171, 13, 32, 11);
   g.fillStyle = '#4a3500'; g.font = 'bold 8px monospace'; g.fillText('CEO', 175, 22);
   R('#8b5a2b', 212, 28, 8, 8); R('#3f9b4f', 211, 18, 4, 10); R('#4fb35f', 215, 14, 4, 14); R('#3f9b4f', 218, 20, 3, 8);
   R('#cfe3ef', 151, 38, 73, 50); R('#c4d8e6', 153, 40, 69, 46);   // 室内地毯
   // 休息区：地毯 + 沙发靠背 + 咖啡机
-  R('#c98b7a', 86, 128, 136, 46); R('#d9a090', 88, 130, 132, 42);
-  R('#5a8f7b', 94, 132, 92, 10);
-  R('#555', 202, 140, 14, 26); R('#333', 204, 143, 10, 6); R(f % 60 < 30 ? '#4cc38a' : '#2a7a55', 212, 152, 2, 2); R('#fff', 206, 156, 4, 4);
+  R('#c98b7a', 126, 128, 98, 46); R('#d9a090', 128, 130, 94, 42);
+  R('#5a8f7b', 132, 132, 88, 10);
   // 人：先移动，再按 y 排序画
   o.people.forEach(p => {
     const st = memberState(p.m).state, [tx, ty] = seatOf(p.m, st);
@@ -393,7 +396,8 @@ function drawOffice() {
       if (p.m.fixed) {   // CEO：待审批文件堆（一份一张，最多 6 张），工作时盖章
         for (let k = 0; k < Math.min(6, pending); k++) R(k % 2 ? '#fffdf5' : '#f0e6d0', x + 3, y - 2 - k, 9, 1);
         if (on && p.st === 'working') { const up = f % 30 < 15; R('#5e3818', x + 5, y - 9 - (up ? 3 : 0), 2, 4); R('#c0392b', x + 4, y - 5 - (up ? 3 : 0), 4, 2); if (!up) R('#e57373', x + 13, y - 1, 3, 1); }
-      } else R('#f0e6d0', x + 2, y - 2, 6, 2);  // 文件
+      } else if (p.m.role === '文员') { R('#e8c547', x + 2, y - 4, 7, 4); R('#6fa8dc', x + 3, y - 6, 6, 2); R('#e06666', x + 2, y - 8, 7, 2); }  // 文件夹
+      else R('#f0e6d0', x + 2, y - 2, 6, 2);  // 文件
     };
   };
   const pending = issues.filter(i => stateOf(i) === '待审批').length;
@@ -405,8 +409,8 @@ function drawOffice() {
   fronts.forEach(fn => fn());
   g.fillStyle = 'rgba(150,200,230,.55)'; g.fillRect(150, 38, 2, 50); g.fillRect(150, 87, 30, 2); g.fillRect(198, 87, 26, 2);
   // 沙发坐垫（挡住坐着的人的腿）+ 扶手 + 茶几
-  R('#6fa894', 92, 144, 96, 8); R('#4b7a68', 90, 134, 4, 18); R('#4b7a68', 186, 134, 4, 18);
-  R('#8a5a30', 116, 158, 48, 4); R('#6d4524', 118, 162, 2, 5); R('#6d4524', 160, 162, 2, 5);
+  R('#6fa894', 132, 144, 88, 8); R('#4b7a68', 128, 134, 4, 18); R('#4b7a68', 220, 134, 4, 18);
+  R('#8a5a30', 150, 158, 48, 4); R('#6d4524', 152, 162, 2, 5); R('#6d4524', 194, 162, 2, 5);
   // 头顶特效
   o.people.forEach((p, k) => {
     const x = Math.round(p.x), y = Math.round(p.y);
@@ -577,6 +581,7 @@ function mockApi(method, path, body) {
           开发: { state: 'working', text: '开发 #2：改听写选词界面', issue: 2, at: now },
           测试: { state: 'blocked', text: '#4 打包失败，等管理员', issue: 4, at: now },
           开发2: { state: 'working', text: '开发 #3：补浮力实验题', issue: 3, at: now },
+          文员: { state: 'working', text: '整理：知识图谱更新说明', at: now },
           CEO: { state: 'working', text: '审批 #3 浮力实验题', issue: 3, at: now } },
           log: [{ role: '开发', text: '开发 #2：改听写选词界面', issue: 2, at: now }, { role: '测试', text: '#4 打包失败，等管理员', issue: 4, at: now }, { role: '产品', text: '评审 #3 浮力实验题', issue: 3, at: now }] }) + '\n```' },
       { number: 3, title: '物理浮力章节缺少阿基米德原理实验题', state: 'open', labels: L('待审批'), comments: 1, created_at: now, updated_at: now,
