@@ -225,10 +225,22 @@
       ok(/已同步/.test($('status').textContent), '顶部状态：' + $('status').textContent);
       ok(d.querySelectorAll('[data-remove]').length === 1, '只有别的设备才有「移除」按钮');
       // 添加设备：显示加入码二维码，能被 jsQR 解回
+      // 「正在同步…」：状态经过「同步中」回到已同步后收起
+      $('btnSync').click();
+      ok(vis($('groupMsg')) && /正在同步/.test($('groupMsg').textContent), '点「立即同步」显示「正在同步…」');
+      const okState = mockState;
+      mockState = Object.assign({}, okState, { status: 'syncing' });
+      emit('state', mockState);
+      ok(vis($('groupMsg')), '同步中时还显示');
+      mockState = okState;
+      emit('state', mockState);
+      ok(!vis($('groupMsg')), '同步完（状态回到已同步）后「正在同步…」消失');
       $('btnAdd').click();
+      ok(vis($('groupMsg')) && /正在生成加入码/.test($('groupMsg').textContent), '点「添加设备」显示「正在生成加入码…」');
       ok(called('joinOpen').length === 1, '点「添加设备」→ joinOpen');
       const text = 'kmjoin:1?h=43.142.41.27&p=8787&s=ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       emit('join-code', { text, display: '43.142.41.27:8787 · ABCD-EFGH', exp: Date.now() + 600000 });
+      ok(!vis($('groupMsg')), '加入码显示出来后「正在生成加入码…」消失');
       const cv = await until(() => $('qrCanvas'));
       const r = cv && jsQR(cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height);
       eq(r && r.data, text, '页面上显示的加入码二维码能被 jsQR 解回原文');
@@ -290,6 +302,20 @@
       const tag = fr.contentDocument.getElementById('syncTag');
       ok(tag && tag.hidden && fr.contentWindow.getComputedStyle(tag).display === 'none', '状态标签默认隐藏（浏览器里、没加入同步组时都不显示）');
       ok(/设备同步/.test(fr.contentDocument.querySelector('footer').textContent), '底部有「设备同步」按钮');
+      // 合并提示框（km-sync.js 的 toast）盖在底部按钮上时、淡出后，按钮都点得到
+      const fw = fr.contentWindow, fd = fr.contentDocument;
+      await new Promise((res, rej) => { const sc = fd.createElement('script'); sc.src = 'km-sync.js'; sc.onload = res; sc.onerror = rej; fd.head.appendChild(sc); });
+      fw.scrollTo(0, fd.documentElement.scrollHeight);            // 滚到最底下，让底部按钮在可视区里（和平板上一样）
+      const links = Array.from(fd.querySelectorAll('footer a'));
+      fw.KMSync.toast('从「学校的平板」同步：数学 新增 4 个知识点记录\n语文 已掌握 6 → 7\n小狗 骨头 20 → 23\n学习时长 46 → 51 分钟', 300);
+      const t = fd.getElementById('km-sync-toast');
+      const hit = () => links.every(a => { const r = a.getBoundingClientRect(); const e = fd.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e && a.contains(e); });
+      const tr = t.getBoundingClientRect();
+      const covers = links.some(a => { const r = a.getBoundingClientRect(); return !(r.right < tr.left || r.left > tr.right || r.bottom < tr.top || r.top > tr.bottom); });
+      ok(t && fw.getComputedStyle(t).pointerEvents === 'none', '提示框不接收点击（pointer-events:none）');
+      ok(hit(), '提示框显示时，底部「我的数据」「设备同步」的中心点 elementFromPoint 命中的是按钮本身' + (covers ? '（提示框正好盖在按钮上）' : ''));
+      await wait(1000);
+      ok(!fd.getElementById('km-sync-toast') && hit(), '提示框消失后从页面移除，底部按钮可点击');
     });
   } catch (e) { log(false, '运行出错 ' + e); }
   finally {

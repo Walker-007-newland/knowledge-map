@@ -40,7 +40,7 @@ import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 PROTO = 1
 MB = 1024 * 1024
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
@@ -64,6 +64,7 @@ RDV_TOTAL = 500
 ADMIN_BODY_MAX = 64 * 1024
 LOG_KEEP_DAYS = 90
 SUPERSEDED_DAYS = 60
+TOMBSTONE_DAYS = 90          # 换钥后的旧组号记多久（期间不许用邀请码把它重建出来）
 
 # 网页后台（1.1.0）
 WEB_IDLE = 30 * 60            # 会话空闲 30 分钟过期
@@ -534,6 +535,10 @@ class Node:
                 if self.ndb.execute('SELECT 1 FROM groups WHERE gid=?', (gid,)).fetchone():
                     self._delete_group_data(gid)
                     self.log('系统', '', 'cleanup', gid[:6], '成功', '换钥后的旧组超过 60 天，已删除')
+            try:
+                self.adb.execute('DELETE FROM tombstones WHERE created < ?', (now - TOMBSTONE_DAYS * 86400000,))
+            except sqlite3.OperationalError:
+                pass        # 只认旧表结构的库（测试里模拟回滚）
             for gid in list(self._group_ids()):
                 self._recount(gid)
             self.ndb.commit()
@@ -696,6 +701,10 @@ class Node:
                 ex = self._existing(gid, node_key)
                 if ex:
                     return 200, ex
+                # 1.2.0：这个组号已经换钥（有了下一代组）。旧组被删后，被移除的设备不能凭旧组身份用邀请码把它重建出来
+                if self.adb.execute('SELECT 1 FROM tombstones WHERE gid=?', (gid,)).fetchone():
+                    self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '这个组已换钥，不能重建')
+                    raise Reject(403, 'replaced')
                 rebuild = bool(k and k['invite_id'] == inv)
                 if not rebuild:
                     if expires < self.ms():
@@ -742,6 +751,7 @@ class Node:
         inv = parent['invite_id'] if parent else None
         self.adb.execute('INSERT OR REPLACE INTO known_groups(gid, invite_id, parent_gid, created, note, quota_mb) VALUES(?,?,?,?,?,?)',
                          (new, inv, gid, self.ms(), parent['note'] if parent else None, parent['quota_mb'] if parent else None))
+        self.adb.execute('INSERT OR IGNORE INTO tombstones(gid, successor, created) VALUES(?,?,?)', (gid, new, self.ms()))
         self.log('设备', '', 'successor', f'{gid[:6]} → {new[:6]}', '成功', '换钥后的新组')
         gen = self.ndb.execute('SELECT gen FROM groups WHERE gid=?', (new,)).fetchone()[0]
         return 200, {'ok': True, 'gen': gen}
@@ -1571,6 +1581,10 @@ ADMIN_SCHEMA = [
                           totp_last_step INTEGER, enabled INTEGER, pw_changed INTEGER, fail_times TEXT);
     CREATE TABLE web_sessions(kid TEXT PRIMARY KEY, enc_key BLOB, last_ctr INTEGER, user TEXT, created INTEGER, last_used INTEGER,
                               expires INTEGER, ip TEXT, ua TEXT);
+    """,
+    # 3（1.2.0）：换钥后的旧组号墓碑（#1 第一期返工）。只加表，回滚到 1.1.0 不受影响
+    """
+    CREATE TABLE tombstones(gid TEXT PRIMARY KEY, successor TEXT, created INTEGER);
     """,
 ]
 

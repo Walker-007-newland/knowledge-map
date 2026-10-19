@@ -32,6 +32,9 @@ public final class SyncManager {
     static final long PREV_MEMBER_DAYS = 14, PREV_REKEYER_DAYS = 60;
     /** 节点 60 天后自动删掉换钥前的旧组；超过这么久没同步、组又不在了，就当同步组已过期 */
     static final long EXPIRE_DAYS = 60;
+    /** 节点说这个组号已经换钥（403 replaced）：多半是这台设备被移出了，或者换钥时它没拿到新钥匙。不重建、不重试 */
+    static final String REPLACED_MSG = "这台设备不在同步组里了：同步组已经换了钥匙，这台设备没有拿到新钥匙（可能已被移出）。"
+        + "如果是你自己的设备，请点下面的「退出同步组」，再扫另一台设备上的加入码重新加入（本机学习数据都在，不会丢）";
     static final String EXPIRED_MSG = "同步组已过期，请重新加入：这台设备超过 60 天没同步，你的其它设备可能已经换了同步钥匙。"
         + "请点下面的「退出同步组」，再扫另一台设备上的加入码（本机学习数据都在，不会丢）";
 
@@ -355,6 +358,7 @@ public final class SyncManager {
         String c = e.err;
         if (e.status == 403 && "blocked".equals(c)) { errCode = "blocked"; errMsg = "同步节点拒绝了这个同步组"; }
         else if (e.status == 403 && "invite".equals(c)) { errCode = "invite"; errMsg = "邀请码已失效，请向管理员要新的"; }
+        else if (e.status == 403 && "replaced".equals(c)) { errCode = "replaced"; errMsg = REPLACED_MSG; }
         else if (e.status == 413 && "quota".equals(c)) { errCode = "quota"; errMsg = "同步空间已满，请联系管理员"; }
         else if (e.status == 429) { errCode = "rate"; errMsg = "同步太频繁，15 分钟后再试"; backoffUntil = now() + RATE_BACKOFF; }
         else if (e.status == 401) { errCode = "auth"; errMsg = "同步节点认证失败"; }
@@ -675,7 +679,8 @@ public final class SyncManager {
         }
         if (p.mails.isEmpty()) p.mails.add("-");
         g.save(st);
-        // 旧组里推一份最新名单（用旧钥匙），被移除的设备拉到后就知道自己被移出了
+        // 先删掉本机在旧组的槽（换钥前的数据），再推一份最新名单（用旧钥匙），被移除的设备拉到后就知道自己被移出了
+        try { nc.call(oldGid, oldKey, dev, "forget", SyncJson.of("dev", dev)); } catch (NodeClient.NodeError ignored) { }
         Group old = g.copy();
         old.gk = p.gk;
         String content = g.sectionContent();
@@ -697,8 +702,8 @@ public final class SyncManager {
             String gid = p.gid();
             byte[] key = Group.nodeKeyOf(p.gk);
             if (now() > p.until) {
-                if ("rekeyer".equals(p.role)) try { nc.call(gid, key, dev, "drop", SyncJson.map()); } catch (NodeClient.NodeError ignored) { }
-                g.prev.remove(p);
+                g.prev.remove(p);                         // 旧组由节点 60 天后自动删
+
                 changed = true;
                 continue;
             }
@@ -707,7 +712,8 @@ public final class SyncManager {
                 if (p.pending.removeAll(moved)) changed = true;
                 for (String d : new ArrayList<>(p.pending)) if (g.member(d) == null || g.member(d).removed > 0) { p.pending.remove(d); changed = true; }
                 if (p.pending.isEmpty()) {
-                    try { nc.call(gid, key, dev, "drop", SyncJson.map()); } catch (NodeClient.NodeError ignored) { }
+                    // 剩下的组员都迁完了。旧组不主动 drop：留着里面那份最新名单，被移除的设备（可能好几天后才开机）
+                    // 拉旧组时才能看到「已被移出」；节点在新组建好 60 天后自动删旧组，旧组号记进墓碑，谁也不能再用邀请码重建它
                     g.prev.remove(p);
                     changed = true;
                     continue;
@@ -780,6 +786,7 @@ public final class SyncManager {
         } catch (NodeClient.NodeError e) {
             if (e.status == 403 && "invite".equals(e.err)) return res(false, "邀请码已失效，请向管理员要新的");
             if (e.status == 403 && "blocked".equals(e.err)) return res(false, "同步节点拒绝了这个同步组");
+            if (e.status == 403 && "replaced".equals(e.err)) return res(false, REPLACED_MSG);
             if (e.status == 413) return res(false, "同步节点已满，请联系管理员");
             return res(false, "同步节点出错（" + e.status + " " + e.err + "）");
         }

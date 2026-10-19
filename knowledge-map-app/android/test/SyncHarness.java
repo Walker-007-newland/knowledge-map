@@ -719,11 +719,97 @@ public class SyncHarness {
         a.sync();
         a.sync();
         b.sync();
-        boolean dropped = true;
-        for (Object o : SyncJson.l(node.cmd("cmd", "groups"))) if (oldGid.equals(SyncJson.s(SyncJson.m(o), "gid")) && SyncJson.b(SyncJson.m(o), "live")) dropped = false;
-        check(dropped && a.m.g.prev.isEmpty(), "B 迁完后 A 把旧组 drop 了", a.m.g.prev.size());
+        Map<String, Object> og = groupInfo(node, oldGid);
+        check(og != null && SyncJson.b(og, "live") && a.m.g.prev.isEmpty(),
+            "B 迁完后 A 不再跟踪旧组，但不 drop：旧组留给被移除的设备看名单（节点 60 天后自动删）", og);
         check(sameCids(a, b) && "换钥后 B 写的".equals(a.data.get("s1").get("after").get(1)), "A、B 在新组上照常同步", cidDiff(a, b));
         check(!a.m.cids().isEmpty() && c.m.cids().isEmpty(), "C 的同步文件已清掉（学习数据在网页那边，不受影响）");
+    }
+
+    static Map<String, Object> groupInfo(NodeCtl node, String gid) {
+        for (Object o : SyncJson.l(node.cmd("cmd", "groups"))) if (gid.equals(SyncJson.s(SyncJson.m(o), "gid"))) return SyncJson.m(o);
+        return null;
+    }
+
+    static long inviteUsed(NodeCtl node, String id) {
+        for (Object o : SyncJson.l(node.cmd("cmd", "invites"))) if (id.equals(SyncJson.s(SyncJson.m(o), "id"))) return SyncJson.n(SyncJson.m(o), "used", -1);
+        return -1;
+    }
+
+    /** 真机第 5 步：只有两台设备，A 移除 C（旧组里没有别的组员要迁） */
+    static void scenarioRemoveTwo(NodeCtl node, String tag) throws IOException {
+        section("9b. 只有两台设备，A 移除 C：C 显示「已被移出」，不重建旧组、不占邀请码次数");
+        Dev a = new Dev(tag + "2A", "X800"), c = new Dev(tag + "2C", "P70");
+        a.put("s1", "k", "A 的数据");
+        c.put("s2", "k", "C 的数据");
+        a.publish();
+        c.publish();
+        String inv = fixPort(invite(node), node);
+        String invId = NodeClient.parseInvite(inv).id;
+        a.m.nodeJoin(inv);
+        a.sync();
+        track(a);
+        check(join(a, c), "C 加入");
+        c.sync(); a.sync(); c.sync();
+        String oldGid = a.m.g.gid();
+        long used0 = inviteUsed(node, invId);
+        String cData = SyncJson.canon(c.data);
+        a.m.remove(c.id);
+        for (int i = 0; i < 3; i++) a.sync();
+        track(a);
+        check(!a.m.g.gid().equals(oldGid) && a.m.g.prev.isEmpty(), "A 换钥到新组，旧组里没有别的组员要等，A 不再跟踪旧组", a.m.g.prev.size());
+        Map<String, Object> og = groupInfo(node, oldGid);
+        check(og != null && SyncJson.b(og, "live"), "A 没有 drop 旧组（留给 C 看名单）", og);
+        for (int i = 0; i < 3; i++) c.sync();
+        Map<String, Object> cs = c.state();
+        check(!c.m.inGroup() && SyncJson.s(cs, "notice").contains("已被移出"), "C 显示「这台设备已被移出同步组，本机数据还在」", c.m.state());
+        check(SyncJson.canon(c.data).equals(cData), "C 本机数据还在");
+        long used1 = inviteUsed(node, invId);
+        check(used1 == used0, "没有多用邀请码次数（" + used0 + " → " + used1 + "）");
+        og = groupInfo(node, oldGid);
+        boolean onlyA = og != null;
+        if (og != null) for (Object o : SyncJson.l(og.get("devices"))) {
+            Map<String, Object> d = SyncJson.m(o);
+            if (SyncJson.n(d, "sections", 0) > 0 && !a.id.startsWith(SyncJson.s(d, "dev"))) onlyA = false;
+        }
+        check(onlyA, "旧组里只剩 A 推的那份名单（A、C 换钥前的数据槽都删了）", og);
+
+        section("9c. 两台设备，旧组已经被删（节点 60 天清理 / 数据丢了）之后 C 才开机：用邀请码重建旧组被拒，显示「不在同步组里了」");
+        Dev a2 = new Dev(tag + "3A", "X800"), c2 = new Dev(tag + "3C", "P70");
+        a2.put("s1", "k", 1);
+        c2.put("s2", "k", 2);
+        a2.publish();
+        c2.publish();
+        String inv2 = fixPort(invite(node), node);
+        String invId2 = NodeClient.parseInvite(inv2).id;
+        a2.m.nodeJoin(inv2);
+        a2.sync();
+        track(a2);
+        join(a2, c2);
+        c2.sync(); a2.sync(); c2.sync();
+        String old2 = a2.m.g.gid();
+        byte[] oldKey2 = a2.m.g.nodeKey();
+        a2.m.remove(c2.id);
+        a2.sync();
+        track(a2);
+        // 模拟节点把旧组删了（60 天清理 / 数据丢了）
+        try { new NodeClient(node.host, node.port, (gg, at) -> Math.max(System.currentTimeMillis(), at) + 7).call(old2, oldKey2, "cleaner", "drop", SyncJson.map()); }
+        catch (NodeClient.NodeError e) { check(false, "删旧组", e); }
+        long u0 = inviteUsed(node, invId2);
+        resetCounts();
+        c2.sync();
+        c2.sync();
+        Map<String, Object> s2 = c2.state();
+        long u1 = inviteUsed(node, invId2);
+        check(groupInfo(node, old2) == null || !SyncJson.b(groupInfo(node, old2), "live"), "旧组没有被重建出来", groupInfo(node, old2));
+        check(u1 == u0, "没有占邀请码次数（" + u0 + " → " + u1 + "）");
+        check("replaced".equals(SyncJson.s(SyncJson.m(s2.get("node")), "error")) && SyncJson.s(s2, "error").contains("不在同步组里了"),
+            "C 显示「这台设备不在同步组里了……（可能已被移出）」，并给出「退出同步组」重新加入的办法", c2.m.state());
+        int creates = count("create");
+        c2.sync();
+        check(count("create") <= creates + 1, "之后每次同步最多再试一次 create，不会把组建出来", PATHS);
+        check(!SyncJson.s(s2, "error").contains("已过期"), "和「同步组已过期（60 天没同步）」是两种提示，不混");
+        c2.m.leave();
     }
 
     static void scenarioOffline(NodeCtl node, Dev a, Dev b) {
@@ -904,6 +990,7 @@ public class SyncHarness {
                 scenarioRobust(node, d[0], d[1], d[2]);
                 scenarioSecrets(node, d[0]);
                 scenarioRemove(node, d[0], d[1], d[2]);
+                scenarioRemoveTwo(node, "dev");
                 scenarioOffline(node, d[0], d[1]);
                 scenarioNodeAdmin(node, d[0], d[1]);
             } else {
@@ -912,6 +999,7 @@ public class SyncHarness {
                 Dev[] d = scenarioCreateJoin(node, tag);
                 scenarioOrders(d[0], d[1], d[2]);
                 scenarioRemove(node, d[0], d[1], d[2]);
+                scenarioRemoveTwo(node, tag);
             }
         } catch (Throwable e) {
             e.printStackTrace(System.out);

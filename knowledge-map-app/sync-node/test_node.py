@@ -433,6 +433,41 @@ def run_local(java=True):
         st, res = d5.successor(ng2, nk2)
         check(st == 403 and res['err'] == 'blocked', '旧组被封禁时 403', (st, res))
 
+        # ------------------------------------------------ 1.2.0 换钥后的旧组号墓碑（#1：被移除的设备不能用邀请码把旧组重建出来）
+        section('换钥后的旧组不能用邀请码重建（1.2.0）')
+        inv7 = Invite(A('invites.create', {'label': '墓碑', 'days': 7, 'uses': 3})['qr'])
+        g7, k7 = new_group()
+        o7, x7 = DevClient(http, g7, k7, 'owner7'), DevClient(http, g7, k7, 'removed7')
+        st, res = o7.create(inv7)
+        check(st == 200, '建组', (st, res))
+        used0 = {i['id']: i for i in A('invites.list')}[inv7.id]['used']
+        g8, k8 = new_group()
+        st, res = o7.successor(g8, k8)
+        check(st == 200, '换钥建新组', (st, res))
+        st, res = x7.create(inv7)
+        check(st == 200 and res.get('existed'), '旧组还在时，同一个 nodeKey 再 create 只回 existed（不新建、不占次数）', (st, res))
+        st, res = x7.pull(0)
+        check(st == 200, '旧组还在时被移除的设备照常能拉旧组（看到「已被移出」的名单）', (st, res))
+        st, res = o7.call('drop', {})
+        check(st == 200, '换钥的设备 drop 旧组', (st, res))
+        st, res = x7.pull(0)
+        check(st == 404 and res['err'] == 'nogroup', '旧组删掉后拉取 → 404 nogroup', (st, res))
+        st, res = x7.create(inv7)
+        check(st == 403 and res == {'err': 'replaced'}, '被移除的设备用邀请码重建旧组 → 403 replaced', (st, res))
+        used1 = {i['id']: i for i in A('invites.list')}[inv7.id]['used']
+        check(used1 == used0 and not ln.node.ndb.execute('SELECT 1 FROM groups WHERE gid=?', (g7,)).fetchone(),
+              '重建被拒：没有建出组、没有占邀请码次数', (used0, used1))
+        with ln.node.lock:
+            ln.node._delete_group_data(g8)        # 模拟节点数据丢了（墓碑在 admin.db，不受影响）
+            ln.node.ndb.commit()
+        st, res = x7.create(inv7)
+        check(st == 403 and res['err'] == 'replaced', '节点组数据丢了以后墓碑还在（存在 admin.db）：仍然拒绝', (st, res))
+        st, res = DevClient(http, g8, k8, 'owner7').create(inv7)
+        check(st == 200 and res.get('rebuilt'), '新一代组照常能用邀请码重建', (st, res))
+        ln.node.adb.execute('UPDATE tombstones SET created=1 WHERE gid=?', (g7,))
+        ln.node.janitor()
+        check(not ln.node.adb.execute('SELECT 1 FROM tombstones WHERE gid=?', (g7,)).fetchone(), '墓碑 90 天后由清理任务删掉', '')
+
         # ------------------------------------------------ 信箱、转交
         section('信箱、转交')
         g6, k6 = new_group()
@@ -1142,7 +1177,7 @@ def run_migration():
             K.ADMIN_SCHEMA = saved
         n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
         ver2 = n.adb.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0]
-        check(ver1 == '1' and ver2 == '2', '表结构 1 → 2', (ver1, ver2))
+        check(ver1 == '1' and ver2 == str(len(saved)), f'表结构 1 → {len(saved)}', (ver1, ver2))
         ok = (n.adb.execute('SELECT label FROM invites WHERE id=?', (inv['id'],)).fetchone() == ('旧邀请码',)
               and n.known('ab' * 16)['note'] == '旧备注' and n.known('ab' * 16)['blocked_at'] == 2
               and n.adb.execute("SELECT 1 FROM bans WHERE ip='192.0.2.1'").fetchone()

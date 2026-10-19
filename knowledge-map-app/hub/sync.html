@@ -149,7 +149,21 @@
 
   let st = null, joinTimer = 0, joinExp = 0, joinRole = '', hostName = '';
 
-  function show(el, text, cls) { el.hidden = !text; el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+  function show(el, text, cls) { el.hidden = !text; el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); delete el.dataset.p; }
+  // 「正在同步…」「正在生成加入码…」这类进行中的提示：结果回来（状态不再是同步中、加入码显示出来、出错）就收起；最多留 20 秒
+  let progT = 0, sawBusy = false;
+  function progress(text, kind) {
+    const el = $('groupMsg');
+    show(el, text);
+    el.dataset.p = kind;
+    sawBusy = false;
+    clearTimeout(progT);
+    progT = setTimeout(() => clearProgress(), 20000);
+  }
+  function clearProgress(kind) {
+    const el = $('groupMsg');
+    if (el.dataset.p && (!kind || el.dataset.p === kind)) { show(el, ''); clearTimeout(progT); }
+  }
 
   function render() {
     st = KMSync.state() || st;
@@ -160,7 +174,7 @@
     $('status').className = st.inGroup ? st.status : '';
     show($('notice'), st.inGroup ? '' : st.notice, 'bad');
     // 同步组已过期（超过 60 天没同步、节点上的组也没了）：明确提示，给一个直接的按钮
-    $('btnRejoin').hidden = !(st.inGroup && st.node && st.node.error === 'expired');
+    $('btnRejoin').hidden = !(st.inGroup && st.node && (st.node.error === 'expired' || st.node.error === 'replaced'));
     $('start').hidden = st.inGroup || joinRole === 'guest' || !!st.unavailable;   // 内核建不出来：只显示原因
     $('group').hidden = !st.inGroup;
     $('more').hidden = !st.inGroup;
@@ -251,6 +265,7 @@
 
   /* ---------------- 加入码（本机是已在组里的 A） ---------------- */
   async function showJoinCode(d) {
+    clearProgress('join');
     $('addBox').hidden = false;
     $('btnAdd').hidden = true;
     $('joinText').textContent = d.display || d.text;
@@ -309,7 +324,12 @@
   /* ---------------- 事件 ---------------- */
   window.addEventListener('km-sync', e => {
     const t = e.detail.type, d = e.detail.data || {};
-    if (t === 'state') render();
+    if (t === 'state') {
+      render();
+      // 立即同步：看到过「同步中」、或者状态已经回到同步完的样子，就收起「正在同步…」
+      if (st && st.status === 'syncing') sawBusy = true;
+      else if (st && (sawBusy || st.status === 'ok' || st.status === 'error' || st.status === 'offline')) clearProgress('sync');
+    }
     else if (t === 'action-result') {
       const el = d.op === 'nodeJoin' && !(st && st.inGroup) ? $('startMsg') : $('groupMsg');
       show(el, d.msg, d.ok ? 'good' : 'bad');
@@ -345,8 +365,8 @@
   bindScan($('scanJoin'), $('startMsg'));
   bindScan($('rescan'), $('groupMsg'));
   $('btnManual').onclick = () => handleCode($('manual').value, $('startMsg'));
-  $('btnSync').onclick = () => { KMSync.publish(); A.syncNow(); show($('groupMsg'), '正在同步…'); };
-  $('btnAdd').onclick = () => { show($('groupMsg'), '正在生成加入码…'); A.joinOpen(); };
+  $('btnSync').onclick = () => { KMSync.publish(); A.syncNow(); progress('正在同步…', 'sync'); };
+  $('btnAdd').onclick = () => { progress('正在生成加入码…', 'join'); A.joinOpen(); };
   $('btnAddClose').onclick = () => closeJoin(true);
   $('btnRejoin').onclick = () => {
     if (!confirm('退出同步组后，用另一台设备上的「添加设备」生成加入码，再在这台设备上扫码加入。\n本机学习数据保留，重新加入时会合并。')) return;

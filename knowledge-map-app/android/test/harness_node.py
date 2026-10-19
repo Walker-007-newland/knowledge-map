@@ -75,6 +75,8 @@ class Local:
             return self.op('invites.revoke', {'id': c['id']})
         if cmd == 'groups':
             return self.op('groups.list', {})
+        if cmd == 'invites':
+            return [{'id': i['id'], 'label': i['label'], 'state': i['state'], 'used': i['used']} for i in self.op('invites.list', {})]
         if cmd == 'lose_db':
             self.stop()
             for s in ('', '-wal', '-shm'):
@@ -142,7 +144,7 @@ class Remote:
         if cmd == 'groups':
             return self.adm.ok('groups.list')
         if cmd == 'invites':
-            return [{'id': i['id'], 'label': i['label'], 'state': i['state']} for i in self.adm.ok('invites.list')]
+            return [{'id': i['id'], 'label': i['label'], 'state': i['state'], 'used': i['used']} for i in self.adm.ok('invites.list')]
         raise ValueError('远程模式不支持 ' + cmd)
 
     def close(self):

@@ -183,7 +183,8 @@
     } finally { merging = false; }
   }
 
-  function toast(text) {
+  // 提示框只是看的：任何时候都不接收点击（pointer-events:none），淡出后从页面上移除，不会挡住下面的按钮
+  function toast(text, ms) {
     if (!document.body) return;
     let el = document.getElementById('km-sync-toast');
     if (!el) {
@@ -192,13 +193,17 @@
       el.setAttribute('role', 'status');
       el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:min(92vw,560px);z-index:99999;' +
         'background:rgba(30,32,36,.94);color:#fff;padding:12px 16px;border-radius:12px;font:15px/1.5 system-ui,"Microsoft YaHei",sans-serif;' +
-        'white-space:pre-line;box-shadow:0 6px 24px rgba(0,0,0,.25);transition:opacity .3s;';
+        'white-space:pre-line;box-shadow:0 6px 24px rgba(0,0,0,.25);transition:opacity .3s;pointer-events:none;';
       document.body.appendChild(el);
     }
     el.textContent = text;
     el.style.opacity = '1';
     clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.opacity = '0'; }, 6000);
+    clearTimeout(el._r);
+    el._t = setTimeout(() => {
+      el.style.opacity = '0';
+      el._r = setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 400);
+    }, ms || 6000);
   }
 
   function onEvent(type, json) {
