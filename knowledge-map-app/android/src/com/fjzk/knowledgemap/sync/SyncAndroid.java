@@ -46,7 +46,8 @@ public final class SyncAndroid {
         final java.util.ArrayDeque<android.net.nsd.NsdServiceInfo> queue = new java.util.ArrayDeque<>();
         boolean resolving;
         final java.util.Set<String> seen = new java.util.HashSet<>();
-        final java.util.List<Object> callbacks = new java.util.ArrayList<>();
+        /** API 34+：服务名 → ServiceInfoCallback；服务掉线时注销，再出现时重新注册，不会重复 */
+        final java.util.Map<String, Object> callbacks = new java.util.HashMap<>();
         final java.util.concurrent.Executor exec = java.util.concurrent.Executors.newSingleThreadExecutor();
 
         AndroidLan(Context c) {
@@ -129,7 +130,10 @@ public final class SyncAndroid {
                 public void onDiscoveryStopped(String t) { }
                 public void onServiceFound(android.net.nsd.NsdServiceInfo s) { enqueue(s); }
                 public void onServiceLost(android.net.nsd.NsdServiceInfo s) {
-                    synchronized (AndroidLan.this) { seen.remove(s.getServiceName()); }
+                    synchronized (AndroidLan.this) {
+                        seen.remove(s.getServiceName());
+                        if (android.os.Build.VERSION.SDK_INT >= 34) Api34.unwatch(AndroidLan.this, s.getServiceName());
+                    }
                     SyncService sv = service;
                     if (sv != null) sv.lanLost(s.getServiceName());
                 }
@@ -179,13 +183,20 @@ public final class SyncAndroid {
         /** API 34+ 的解析方式，单独放一个类，旧系统上不会加载 */
         static final class Api34 {
             static void unwatchAll(AndroidLan d) {
-                for (Object cb : d.callbacks) {
+                for (Object cb : d.callbacks.values()) {
                     try { d.nsd.unregisterServiceInfoCallback((android.net.nsd.NsdManager.ServiceInfoCallback) cb); } catch (Throwable ignored) { }
                 }
                 d.callbacks.clear();
             }
 
+            static void unwatch(AndroidLan d, String name) {
+                Object cb = d.callbacks.remove(name);
+                if (cb == null) return;
+                try { d.nsd.unregisterServiceInfoCallback((android.net.nsd.NsdManager.ServiceInfoCallback) cb); } catch (Throwable ignored) { }
+            }
+
             static void watch(final AndroidLan d, final android.net.nsd.NsdServiceInfo s) {
+                unwatch(d, s.getServiceName());   // 万一还留着旧的，先注销再注册
                 try {
                     android.net.nsd.NsdManager.ServiceInfoCallback cb = new android.net.nsd.NsdManager.ServiceInfoCallback() {
                         public void onServiceInfoCallbackRegistrationFailed(int code) { }
@@ -200,7 +211,7 @@ public final class SyncAndroid {
                         public void onServiceInfoCallbackUnregistered() { }
                     };
                     d.nsd.registerServiceInfoCallback(s, d.exec, cb);
-                    d.callbacks.add(cb);
+                    d.callbacks.put(s.getServiceName(), cb);
                 } catch (Throwable e) { Log.w(TAG, "NSD 解析", e); }
             }
         }
