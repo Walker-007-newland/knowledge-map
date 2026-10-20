@@ -113,6 +113,23 @@ final class Node {
         }
     }
 
+    /** 新的 32 字节随机管理密钥。 */
+    static byte[] newKey() {
+        byte[] k = new byte[32];
+        RNG.nextBytes(k);
+        return k;
+    }
+
+    /**
+     * 换管理密钥（节点 1.3.0 起）：用旧密钥 c 发 admin.rotateKey，把新密钥 newKey 装在加密的请求里送给节点。
+     * 成功后旧密钥立即失效。调用方要先把 newKey 存好（网络中断时不知道节点换没换，靠它确认）。
+     */
+    static Result rotate(Code c, CtrStore store, byte[] newKey) {
+        return call(c, store, "admin.rotateKey", "{\"key\":\"" + b64e(newKey) + "\"}");
+    }
+
+    static boolean ok(Result r) { return r != null && r.status == 200 && r.text != null && r.text.startsWith("{\"ok\":true"); }
+
     // ------------------------------------------------------------ 极简 HTTP/1.1（Content-Length，连接 10 秒、读取 20 秒超时）
 
     /** 返回 [状态码, X-KM-Retry 头（可能为 null）, 正文]。 */

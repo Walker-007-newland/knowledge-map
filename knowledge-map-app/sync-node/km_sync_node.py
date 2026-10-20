@@ -6,7 +6,7 @@
 - 设备协议只用标准库；
 - 管理接口用系统自带的 python3-cryptography（AESGCM），导入不了时管理接口整体关闭（回 403），设备接口照常。
 
-运行：python3 km_sync_node.py --config /etc/km-sync/config.json
+运行：python3 km_sync_node.py --config /etc/km-sync/config.json（1.3.0：彻底删除组登记、App 里换管理密钥、日志一页 500 条）
 监听（端口都可在 config.json 里改，0 = 不开）：
   8787            设备协议 + 审批 App 管理接口（明文 HTTP + 整包加密）
   443  (TLS)      网页后台：静态页面、/admin/web/login、/admin/v1（会话密钥或管理密钥）；证书 /etc/km-sync/tls/，60 秒内热更新
@@ -40,7 +40,7 @@ import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 PROTO = 1
 MB = 1024 * 1024
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
@@ -536,7 +536,8 @@ class Node:
                     self._delete_group_data(gid)
                     self.log('系统', '', 'cleanup', gid[:6], '成功', '换钥后的旧组超过 60 天，已删除')
             try:
-                self.adb.execute('DELETE FROM tombstones WHERE created < ?', (now - TOMBSTONE_DAYS * 86400000,))
+                # 1.3.0：管理员「彻底删除」的组登记留下的墓碑（purged 不为空）永久保留，这个组号永远不能再建
+                self.adb.execute('DELETE FROM tombstones WHERE created < ? AND purged IS NULL', (now - TOMBSTONE_DAYS * 86400000,))
             except sqlite3.OperationalError:
                 pass        # 只认旧表结构的库（测试里模拟回滚）
             for gid in list(self._group_ids()):
@@ -561,6 +562,13 @@ class Node:
         row = self.adb.execute('SELECT gid, invite_id, parent_gid, created, blocked_at, note, quota_mb FROM known_groups WHERE gid=?',
                                (gid,)).fetchone()
         return dict(zip(('gid', 'invite_id', 'parent_gid', 'created', 'blocked_at', 'note', 'quota_mb'), row)) if row else None
+
+    def purged(self, gid):
+        """管理员彻底删除过登记的组号（1.3.0）：对设备来说和「已封禁」一样，永远 403 blocked。"""
+        try:
+            return bool(self.adb.execute('SELECT 1 FROM tombstones WHERE gid=? AND purged IS NOT NULL', (gid,)).fetchone())
+        except sqlite3.OperationalError:
+            return False
 
     def quota_bytes(self, gid):
         k = self.known(gid)
@@ -609,7 +617,7 @@ class Node:
             raise Reject(400, 'bad', 'gid 格式')
         with self.lock:
             k = self.known(gid)
-            if k and k['blocked_at']:
+            if (k and k['blocked_at']) or self.purged(gid):
                 raise Reject(403, 'blocked')
             g = self.ndb.execute('SELECT node_key FROM groups WHERE gid=?', (gid,)).fetchone()
             if not g:
@@ -686,6 +694,9 @@ class Node:
                 if k and k['blocked_at']:
                     self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '组已封禁')
                     raise Reject(403, 'blocked')
+                if self.purged(gid):
+                    self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '组已移除，登记已彻底删除')
+                    raise Reject(403, 'blocked')
                 row = self.adb.execute('SELECT secret, expires, max_uses, used, revoked_at FROM invites WHERE id=?', (inv,)).fetchone()
                 if not row:
                     self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '邀请码不存在')
@@ -741,7 +752,7 @@ class Node:
         if nk is None:
             raise Reject(401, 'auth', '包裹校验错')
         k = self.known(new)
-        if k and k['blocked_at']:
+        if (k and k['blocked_at']) or self.purged(new):
             raise Reject(403, 'blocked')
         ex = self._existing(new, nk)
         if ex:
@@ -1019,7 +1030,7 @@ class Node:
             return 200, {'iv': b64e(riv), 'ct': b64e(rct)}, {}
 
     READ_OPS = ('status', 'groups.list', 'invites.list', 'log.list', 'web.status', 'web.sessions', 'web.whoami')
-    KEY_ONLY_OPS = ('web.status', 'web.setPassword', 'web.setEnabled', 'web.totpReset', 'web.reset')
+    KEY_ONLY_OPS = ('web.status', 'web.setPassword', 'web.setEnabled', 'web.totpReset', 'web.reset', 'admin.rotateKey')
     SESSION_ONLY_OPS = ('web.changePassword', 'web.totpBegin', 'web.totpConfirm', 'web.totpDisable', 'web.whoami', 'web.logout')
 
     @staticmethod
@@ -1144,6 +1155,23 @@ class Node:
             raise OpError('这个组没有被封禁')
         self.adb.execute('UPDATE known_groups SET blocked_at=NULL WHERE gid=?', (gid,))
         return {}, gid[:6], '解除封禁'
+
+    def op_groups_purge(self, args, ip):
+        """彻底删除「已移除并封禁、节点上没有数据」的组登记（1.3.0）：从列表里消失，但组号记进永久墓碑，
+        设备再来建组、重建、同步一律 403 blocked，也不能再解除封禁。"""
+        gid = self._gid_arg(args)
+        k = self.known(gid)
+        if not k or not k['blocked_at']:
+            raise OpError('只能彻底删除「已移除并封禁」的组')
+        if self.ndb.execute('SELECT 1 FROM groups WHERE gid=?', (gid,)).fetchone() or \
+                self.ndb.execute('SELECT 1 FROM slots WHERE gid=? UNION SELECT 1 FROM mail WHERE gid=?', (gid, gid)).fetchone():
+            raise OpError('这个组在节点上还有数据，不能彻底删除')
+        now = self.ms()
+        if self.adb.execute('UPDATE tombstones SET purged=? WHERE gid=?', (now, gid)).rowcount == 0:
+            self.adb.execute('INSERT INTO tombstones(gid, successor, created, purged) VALUES(?,?,?,?)', (gid, None, now, now))
+        self.adb.execute('DELETE FROM known_groups WHERE gid=?', (gid,))
+        inv = f'，来源邀请码 {k["invite_id"]}' if k['invite_id'] else ''
+        return {}, gid[:6], f'彻底删除登记（组号永久封禁，不能再建、不能解除封禁{inv}）'
 
     def _ensure_known(self, gid):
         if self.known(gid):
@@ -1270,8 +1298,8 @@ class Node:
 
     def op_log_list(self, args, ip):
         before, limit, sec = args.get('before'), args.get('limit', 50), bool(args.get('sec'))
-        if not isinstance(limit, int) or not 1 <= limit <= 100:
-            raise OpError('limit 要在 1–100 之间')
+        if not isinstance(limit, int) or not 1 <= limit <= 500:      # 1.3.0 起 500（导出日志时一页多取些）
+            raise OpError('limit 要在 1–500 之间')
         sql, p = 'SELECT id, t, who, ip, op, obj, result, note, sec FROM log WHERE 1=1', []
         if isinstance(before, int):
             sql += ' AND id<?'
@@ -1526,6 +1554,25 @@ class Node:
         self.adb.commit()
         self.log('系统', '', 'web.reset', '网页登录', '成功', f'经 SSH 清空网页用户名、密码、二次验证和 {n} 个会话，网页登录关闭')
 
+    # ---------- 审批 App 里换管理密钥（1.3.0，只有管理密钥 K 能做）
+    def op_admin_rotateKey(self, args, ip):
+        """App 生成新的 32 字节 K'，装在用旧 K 加密的请求里发来；换上后旧 K 立即失效（响应仍用旧 K 加密）。
+        和 deploy.ps1 -NewAdminKey 一样只保留一把管理密钥；电脑上 signing/sync-node.json 里的旧管理码随之失效。"""
+        try:
+            k = b64d(args.get('key', ''))
+        except ValueError:
+            k = b''
+        if len(k) != 32 or len(set(k)) < 8:
+            raise OpError('新的管理密钥格式不对（要 32 字节随机数）')
+        kid = hashlib.sha256(k).hexdigest()[:8]
+        old = self.cur['kid'] if self.cur else ''
+        if kid == old or self.admin_key(kid) or self._session(kid):
+            raise OpError('新的管理密钥和现有的撞了，请再试一次')
+        self.adb.execute('DELETE FROM admin_keys')
+        self.adb.execute('INSERT INTO admin_keys(kid, enc_key, last_ctr, created) VALUES(?,?,0,?)', (kid, hm(k, b'km-admin-enc-v1'), self.ms()))
+        self.kid_hits.pop(old, None)
+        return {'kid': kid}, kid, f'在审批 App 里换管理密钥：旧 kid {old} 立即失效，新 kid {kid}（电脑上的旧管理码也失效）'
+
     # ---------- 命令行（部署脚本用）
     def new_admin_key(self):
         k = secrets.token_bytes(32)
@@ -1585,6 +1632,10 @@ ADMIN_SCHEMA = [
     # 3（1.2.0）：换钥后的旧组号墓碑（#1 第一期返工）。只加表，回滚到 1.1.0 不受影响
     """
     CREATE TABLE tombstones(gid TEXT PRIMARY KEY, successor TEXT, created INTEGER);
+    """,
+    # 4（1.3.0）：管理员彻底删除组登记后留下的永久墓碑。只加一列，回滚到 1.2.0 时这些组号仍按墓碑拒绝重建
+    """
+    ALTER TABLE tombstones ADD COLUMN purged INTEGER;
     """,
 ]
 

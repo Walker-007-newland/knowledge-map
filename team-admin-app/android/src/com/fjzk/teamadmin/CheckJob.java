@@ -19,7 +19,7 @@ import org.json.JSONObject;
 import java.net.URLEncoder;
 import java.util.TreeSet;
 
-/** 每 30 分钟左右查一次“待审批”和“阻塞”的需求单，有新的就发通知。 */
+/** 每 30 分钟左右查一次“待审批”和“阻塞”的需求单，有新的就发通知；顺便取一次同步节点状态，异常时发节点提醒（NodeHealth）。 */
 public class CheckJob extends JobService {
     static final int JOB_ID = 1;
     static final String CHANNEL = "approve";
@@ -37,10 +37,41 @@ public class CheckJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
+            try { checkNode(this); } catch (Exception ignored) { }   // 节点提醒和待审批提醒互不影响
             try { check(this); } catch (Exception ignored) { }
             jobFinished(params, false);
         }).start();
         return true;
+    }
+
+    static final String CHANNEL_NODE = "node";
+
+    /**
+     * 同步节点健康提醒（#6 第三期）：取一次 status，按 NodeHealth 的规则发通知（每类每天最多一次）。
+     * 没设置节点就什么都不做。返回这次发出的通知条数。
+     */
+    static int checkNode(Context c) throws Exception {
+        if (!NodeStore.configured(c)) return 0;
+        if (NodeStore.hasPending(c)) NodeStore.resolvePending(c);
+        Node.Code code = NodeStore.load(c);
+        if (code == null) return 0;
+        Node.Result r = Node.call(code, NodeStore.ctr(c), "status", "{}");
+        NodeHealth.Status s = null;
+        String why;
+        if (r.status == 200) {
+            s = NodeHealth.parse(r.text);
+            why = "节点响应格式不对";
+        } else if (r.status == 0) {
+            why = r.text;
+        } else if (r.status == 403) {
+            why = "节点拒绝了请求：管理码可能已失效，或这个网络被限速/封禁";
+        } else {
+            why = "节点返回 " + r.status;
+        }
+        String today = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(new java.util.Date());
+        java.util.List<NodeHealth.Alert> alerts = NodeHealth.check(s, why, today, code.host, NodeStore.health(c));
+        for (NodeHealth.Alert a : alerts) notify(c, CHANNEL_NODE, "同步节点提醒", a.notifyId(), a.title, a.text);
+        return alerts.size();
     }
 
     @Override
@@ -72,19 +103,23 @@ public class CheckJob extends JobService {
     }
 
     static void notify(Context c, String title, String text) {
+        notify(c, CHANNEL, "待审批提醒", 1, title, text);
+    }
+
+    static void notify(Context c, String channel, String channelName, int id, String title, String text) {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
-            nm.createNotificationChannel(new NotificationChannel(CHANNEL, "待审批提醒", NotificationManager.IMPORTANCE_DEFAULT));
+            nm.createNotificationChannel(new NotificationChannel(channel, channelName, NotificationManager.IMPORTANCE_DEFAULT));
         }
         PendingIntent pi = PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CHANNEL) : new Notification.Builder(c);
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, channel) : new Notification.Builder(c);
         b.setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setStyle(new Notification.BigTextStyle().bigText(text))
                 .setContentIntent(pi)
                 .setAutoCancel(true);
-        nm.notify(1, b.build());
+        nm.notify(id, b.build());
     }
 }

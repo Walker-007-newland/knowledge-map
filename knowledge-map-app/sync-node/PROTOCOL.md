@@ -20,7 +20,7 @@
 |---|---|---|
 | 400 | `{"err":"bad"}` | 请求格式不对（程序错误） |
 | 401 | `{"err":"auth"}` | 签名错、计数重复或变小 |
-| 403 | `{"err":"blocked"}` | 组已被管理员封禁。平板提示「同步节点拒绝了这个同步组」，停止使用节点 |
+| 403 | `{"err":"blocked"}` | 组已被管理员封禁（1.3.0 起也包括管理员「彻底删除登记」的组号，永久）。平板提示「同步节点拒绝了这个同步组」，停止使用节点 |
 | 403 | `{"err":"invite"}` | 邀请码无效 / 过期 / 用完 / 作废 / 没带。提示「邀请码已失效，请向管理员要新的」 |
 | 403 | `{"err":"replaced"}` | （1.2.0 起）`create` 的组号已经换钥（有过 `successor`），旧组被删后不许用邀请码重建。设备提示「这台设备的同步组已经换了钥匙……可能已被移出」，不再重试 |
 | 404 | `{"err":"nogroup"}` | 组不存在（节点数据丢了）→ 用保存的邀请码 `create` 重建，然后 `since=0` 重新拉、全部重推 |
@@ -154,6 +154,22 @@ mail/del {"ids":["…"]}                                     → {"ok":true,"rem
 - 操作（`op`）：`status`、`groups.list`、`groups.clear`、`groups.remove`、`groups.unblock`、`groups.setQuota`、`groups.setNote`、
   `invites.create`、`invites.list`、`invites.revoke`、`limits.set`、`expiry.set`、`access.set`、`log.list`。参数和返回见
   `km_sync_node.py` 里 `op_*` 函数。所有返回都只有元数据，没有任何密文。
+
+### 1.3.0 新增（#6 第三期）
+
+| op | 谁能调 | 参数 → 返回 |
+|---|---|---|
+| `groups.purge` | 管理密钥和网页会话 | `{gid}` → `{}`。彻底删除「已移除并封禁、节点上没有数据」的组登记：从 `groups.list` 消失；组号记进**永久**墓碑（`tombstones.purged`，清理任务不删），之后设备 `create`（新建或重建）、`successor` 用它当新组号、`/v1/g/<gid>/…` 一律 `403 {"err":"blocked"}`，也不能再 `groups.unblock`。不满足条件回 `{"ok":false}` 和中文原因 |
+| `admin.rotateKey` | 只有管理密钥（审批 App） | `{key: b64(新的 32 字节管理密钥)}` → `{kid: 新 kid}`。新密钥装在用旧密钥加密的请求里；换上后旧密钥立即失效（这次的响应仍用旧密钥加密），节点只保留这一把。电脑上 `signing/sync-node.json`、`sync-node-admin.png` 里的旧管理码随之失效（`deploy.ps1` 照常能部署，会提示；需要时 `-NewAdminKey`） |
+| `log.list` | 都可以 | `limit` 上限从 100 提到 500（导出日志时按 `before` 一页一页取完） |
+
+审批 App 换钥时先把新密钥存成「待确认」再发请求；没拿到明确结果（断网、超时）时，下次调节点前用新密钥试一次 `status`，能用就转正，
+被拒而旧密钥能用就丢掉新的。
+
+健康提醒（审批 App 后台约每 30 分钟取一次 `status`，不改协议）：连续两次连不上或被拒、`disk_free/disk_total < 10%`、`days_left ≤ 7`、
+`tls.enabled 且 tls.hours_left < 48` 时发系统通知，每类每天最多一次（`team-admin-app/.../NodeHealth.java`）。
+
+admin.db 表结构 4：`tombstones` 加一列 `purged`（升级前备份 `admin.db.v3.bak`；回滚到 1.2.0 时这些组号按普通墓碑拒绝重建，90 天后才会被 1.2.0 清掉）。
 
 ## 6. 网页后台（1.1.0 起，#6 第二期）
 
