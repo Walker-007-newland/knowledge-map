@@ -56,6 +56,8 @@ public class BridgeGate {
         allow(SAFE, "syncTake", "syncAck");                         // 只在安全页面合并写回本机
         allow(SYNC_PAGE, "nodeJoin", "nodeRemove", "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm",
             "syncRename", "syncRemove", "syncLeave");
+        // #1 第二期：局域网配对，只在设备同步页
+        allow(SYNC_PAGE, "pairOpen", "pairClose", "pairWith", "pairAddr", "pairConfirm");
     }
 
     /** 不需要令牌的方法 */

@@ -5,6 +5,9 @@
     <!-- 图谱内容都在 APK 里离线使用；联网只用于检查和下载更新 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 设备同步·局域网直连（需求 #1 第二期）：判断是不是连着 Wi-Fi、NSD 发现同一个 Wi-Fi 下的组员。都是普通权限，安装时自动给，不要定位权限 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <!-- 要用系统的语音朗读引擎（Android 11+ 需要声明） -->
     <queries>

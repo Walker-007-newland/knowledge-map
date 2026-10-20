@@ -74,6 +74,14 @@
     syncLeave: () => calls.push(['syncLeave']),
     saveFile: (n, t) => calls.push(['saveFile', n, t.length])
   };
+  // 第二期（局域网配对）的接口：只在「局域网配对」那组测试里装上，第一期的测试仍按没有这些接口的桥跑
+  const lanApi = {
+    pairOpen: () => calls.push(['pairOpen']),
+    pairClose: () => calls.push(['pairClose']),
+    pairWith: k => calls.push(['pairWith', k]),
+    pairAddr: a => calls.push(['pairAddr', a]),
+    pairConfirm: v => calls.push(['pairConfirm', v])
+  };
   window.__kmMockApp = mock;
   const emit = (type, data) => (target || window).__kmSyncEvent(type, JSON.stringify(data || {}));
   const called = m => calls.filter(c => c[0] === m);
@@ -292,6 +300,98 @@
       ok(vis($('notice')) && /暂时不可用/.test($('notice').textContent) && !vis($('start')) && !vis($('group')) && !vis($('btnRejoin')), '同步不可用：显示原因，看不到建组、加入按钮');
       const errs = w.__errs || [];
       ok(!errs.length, '同步页没有脚本错误');
+      target = null;
+    });
+
+    await test('第二期：局域网配对（同步页 iframe + 模拟桥）', async () => {
+      calls.length = 0;
+      Object.assign(mock, lanApi);
+      const lan0 = { on: true, addr: '192.168.1.23:47811', disc: 0, online: [], nearby: [], lastOk: 0 };
+      mockState = { inGroup: false, notice: '', me: { dev: 'devA', name: '家里的平板' }, members: [], inbox: 0, pending: 0, status: 'none', error: '', lastOk: 0, lan: lan0 };
+      const fr = document.getElementById('fr');
+      fr.src = '../sync.html?t=' + Date.now();
+      await new Promise(r => { fr.onload = r; });
+      const w = fr.contentWindow, d = fr.contentDocument;
+      target = w;
+      const $ = id => d.getElementById(id);
+      const vis = el => !!el && w.getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+      await until(() => !$('statusCard').hidden);
+      ok(vis($('btnLanStart')) && /同一个 Wi-Fi/.test($('btnLanStart').textContent) && !vis($('lanCard')), '没加入组：有「和同一个 Wi-Fi 下的设备配对」按钮，配对卡片收着');
+      $('btnLanStart').click();
+      ok(called('pairOpen').length === 1, '点它 → pairOpen');
+      emit('action-result', { op: 'pairOpen', ok: false, msg: '没连 Wi-Fi：局域网配对要两台设备连同一个 Wi-Fi（也可以一台开手机热点，另一台连上去）' });
+      ok(/没连 Wi-Fi/.test($('startMsg').textContent), '没连 Wi-Fi：中文提示 ' + $('startMsg').textContent);
+      // 可被发现 3 分钟：显示本机地址、倒计时、附近的设备
+      mockState = Object.assign({}, mockState, { lan: Object.assign({}, lan0, { disc: Date.now() + 180000 }) });
+      emit('pair-open', { ok: true, addr: lan0.addr, exp: mockState.lan.disc, list: [] });
+      ok(vis($('lanCard')) && $('lanAddr').textContent === '192.168.1.23:47811' && /还剩 [23] 分/.test($('lanLeft').textContent), '可被发现：显示本机地址和 3 分钟倒计时：' + $('lanLeft').textContent);
+      ok(/还没找到/.test($('lanList').textContent), '附近还没有设备：说明要对方也打开「添加设备」');
+      emit('peers', { list: [{ key: 'km-ab12', name: '书房的平板' }] });
+      const pb = d.querySelector('[data-peer="km-ab12"]');
+      ok(pb && /书房的平板/.test(pb.textContent), '附近的设备出现在列表里');
+      pb.click();
+      ok(called('pairWith').length === 1 && called('pairWith')[0][1] === 'km-ab12', '点它 → pairWith(km-ab12)');
+      $('lanAddrIn').value = 'hello world';
+      $('btnLanAddr').click();
+      ok(!called('pairAddr').length && /格式不对/.test($('lanMsg').textContent), '手输地址格式错：中文提示');
+      $('lanAddrIn').value = '192.168.1.40:47811';
+      $('btnLanAddr').click();
+      ok(called('pairAddr').length === 1 && called('pairAddr')[0][1] === '192.168.1.40:47811', '手输地址 → pairAddr');
+      // 两边弹确认码
+      emit('pair-request', { role: 'client', name: '书房的平板', code: '4821' });
+      const modal = await until(() => d.querySelector('.modal.pair'));
+      ok(modal && /书房的平板/.test(modal.textContent) && /4821/.test(modal.textContent) && /只配对同一个学生自己的设备/.test(modal.textContent) && /不一样，取消/.test(modal.textContent),
+        '确认弹窗：对方名字、大号 4 位确认码、合并警告、「不一样，取消」');
+      modal.querySelector('#mYes').click();
+      ok(called('pairConfirm').length === 1 && called('pairConfirm')[0][1] === true && /等「书房的平板」/.test($('lanMsg').textContent), '点「数字一样，配对」→ pairConfirm(true)，提示等对方确认');
+      emit('pair-request', { role: 'server', name: '妈妈的手机', code: '1111' });
+      const m2 = await until(() => d.querySelector('.modal.pair'));
+      m2.querySelector('#mNo').click();
+      ok(called('pairConfirm').length === 2 && called('pairConfirm')[1][1] === false && !d.querySelector('.modal.pair'), '点「不一样，取消」→ pairConfirm(false)，弹窗关掉');
+      emit('pair-result', { ok: false, role: 'client', name: '书房的平板', msg: '「书房的平板」上点了「不一样」，没有配对' });
+      ok(/没有配对/.test($('lanMsg').textContent), '配对失败：卡片里显示原因');
+      // 配对成功（第一次）：先备份，再显示「已配对，正在第一次同步」
+      const saves = called('saveFile').length;
+      emit('pair-request', { role: 'client', name: '书房的平板', code: '4821' });
+      mockState = { inGroup: true, notice: '', me: { dev: 'devA', name: '家里的平板' }, status: 'pending', error: '', lastOk: 0, inbox: 0, pending: 2, node: null,
+        members: [{ dev: 'devA', name: '家里的平板', me: true, last: 0, via: '局域网', near: false }, { dev: 'devB', name: '书房的平板', me: false, last: Date.now() - 30000, via: '局域网', near: true }],
+        lan: Object.assign({}, lan0, { disc: 0, online: ['devB'] }) };
+      emit('pair-result', { ok: true, role: 'client', name: '书房的平板', first: true, msg: '已和「书房的平板」配对，正在第一次同步…' });
+      ok(called('saveFile').length === saves + 1 && /同步前备份/.test(called('saveFile')[saves][1]), '第一次配对成功：先在「下载/知识图谱」里备份一份');
+      ok(!d.querySelector('.modal.pair') && /已和「书房的平板」配对/.test($('groupMsg').textContent) && /备份/.test($('groupMsg').textContent), '提示已配对、正在第一次同步、备份在哪');
+      emit('state', mockState);
+      ok(vis($('group')) && !vis($('lanCard')) && !vis($('start')), '配对后显示「我的设备」，配对卡片收起');
+      ok(/局域网/.test($('devices').textContent) && /在附近/.test($('devices').textContent) && /只在同一个 Wi-Fi 下同步/.test($('devices').textContent),
+        '设备列表：途径「局域网」、「在附近」，没有节点时说明只在同一个 Wi-Fi 下同步');
+      // 没有节点的组：「添加设备」只开局域网配对，不生成加入码
+      calls.length = 0;
+      $('btnAdd').click();
+      ok(called('pairOpen').length === 1 && !called('joinOpen').length, '没有同步节点的组点「添加设备」→ 只 pairOpen，不 joinOpen');
+      // 附近没有组员时的状态
+      mockState = Object.assign({}, mockState, { lan: Object.assign({}, mockState.lan, { online: [] }), members: mockState.members.map(m => Object.assign({}, m, { near: false })) });
+      emit('state', mockState);
+      ok(/附近没有找到你的设备/.test($('status').textContent), '只有局域网、附近没有组员：' + $('status').textContent);
+      mockState = Object.assign({}, mockState, { lan: Object.assign({}, mockState.lan, { on: false }) });
+      emit('state', mockState);
+      ok(/没连 Wi-Fi/.test($('status').textContent), '只有局域网、没连 Wi-Fi：' + $('status').textContent);
+      // 有节点的组：「添加设备」两样都开
+      mockState = Object.assign({}, mockState, { node: { h: '43.142.41.27', p: 8787, off: false, last: Date.now(), error: '', msg: '' }, lan: Object.assign({}, lan0) });
+      emit('state', mockState);
+      calls.length = 0;
+      $('btnAdd').click();
+      ok(called('pairOpen').length === 1 && called('joinOpen').length === 1, '有同步节点的组点「添加设备」→ 加入码（joinOpen）和局域网配对（pairOpen）都开');
+      // 3 分钟到了 / 错 3 次：停止被发现
+      mockState = Object.assign({}, mockState, { lan: Object.assign({}, lan0, { disc: Date.now() + 60000 }) });
+      emit('state', mockState);
+      ok(vis($('lanCard')), '可被发现时卡片显示');
+      mockState = Object.assign({}, mockState, { lan: Object.assign({}, lan0, { disc: 0 }) });
+      emit('pair-close', { msg: '确认码对不上 3 次，已停止被发现。要再配对，请重新点「添加设备」' });
+      emit('state', mockState);
+      ok(!vis($('lanCard')) && /3 次/.test($('groupMsg').textContent), '停止被发现：卡片收起，说明原因');
+      ok(S.statusText({ inGroup: true, status: 'ok', lastOk: Date.now(), error: '同步节点连不上，局域网同步照常', members: [] }).indexOf('局域网同步照常') > 0, '节点连不上、局域网照常：「已同步 · … · 同步节点连不上，局域网同步照常」');
+      const errs = w.__errs || [];
+      ok(!errs.length, '同步页没有脚本错误');
+      Object.keys(lanApi).forEach(k => delete mock[k]);
       target = null;
     });
 

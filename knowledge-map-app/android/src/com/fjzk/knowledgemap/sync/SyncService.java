@@ -19,6 +19,8 @@ public final class SyncService {
     public interface Log { void warn(String msg, Throwable e); }
 
     static final long AFTER_PUBLISH = 10000, EVERY = 15 * 60 * 1000L, AFTER_PAUSE = 1500;
+    /** 局域网（第二期）：本机发布后马上推给在线组员；前台每 2 分钟问一次组员的清单 */
+    static final long LAN_AFTER_PUBLISH = 800, LAN_EVERY = 2 * 60 * 1000L;
 
     final ScheduledExecutorService ex;
     final Sink sink;
@@ -26,9 +28,15 @@ public final class SyncService {
     volatile SyncManager m;
     volatile String broken = "";
     volatile boolean foreground;
-    ScheduledFuture<?> syncF, periodicF, pollF;
+    ScheduledFuture<?> syncF, periodicF, pollF, lanF, lanPeriodicF, pairPollF, pairTickF;
+    final java.util.concurrent.atomic.AtomicBoolean kicked = new java.util.concurrent.atomic.AtomicBoolean();
 
     public SyncService(final File dir, final SyncStore.KeyWrap kw, final SyncManager.Clock clock, Sink sink, Log log) {
+        this(dir, kw, clock, sink, log, null);
+    }
+
+    /** lan：局域网的平台部分（Android：NSD + Wi-Fi 地址）；null = 不用局域网 */
+    public SyncService(final File dir, final SyncStore.KeyWrap kw, final SyncManager.Clock clock, Sink sink, Log log, final Lan.Env lan) {
         this.sink = sink;
         this.log = log;
         ScheduledThreadPoolExecutor e = new ScheduledThreadPoolExecutor(1, r -> {
@@ -42,10 +50,17 @@ public final class SyncService {
             SyncManager x = new SyncManager(new SyncStore(dir, kw), clock);
             x.setEvents((type, json) -> {
                 try { SyncService.this.sink.event(type, json); } catch (Throwable t) { warn("发事件", t); }
-                if ("join-result".equals(type) && json.contains("\"ok\":true")) syncSoon(300);
+                if (("join-result".equals(type) || "pair-result".equals(type)) && json.contains("\"ok\":true")) syncSoon(300);
             });
+            if (lan != null) x.setLan(lan, this::kick);
             m = x;
         });
+    }
+
+    /** 局域网服务端收到东西：让后台线程尽快处理（连着来好几次只排一次） */
+    void kick() {
+        if (!kicked.compareAndSet(false, true)) return;
+        run("局域网收件", () -> { kicked.set(false); SyncManager x = m; if (x != null) x.lanProcess(); });
     }
 
     void warn(String what, Throwable t) {
@@ -79,15 +94,43 @@ public final class SyncService {
         foreground = true;
         try {
             if (periodicF != null) periodicF.cancel(false);
+            if (lanPeriodicF != null) lanPeriodicF.cancel(false);
+            withM("局域网", SyncManager::lanStart);
             periodicF = ex.scheduleWithFixedDelay(() -> { if (foreground) runSync(); }, 1500, EVERY, TimeUnit.MILLISECONDS);
+            lanPeriodicF = ex.scheduleWithFixedDelay(() -> {
+                if (!foreground) return;
+                try { SyncManager x = m; if (x != null) { x.pairTick(); x.lanSync(false); } } catch (Throwable t) { warn("局域网", t); }
+            }, LAN_EVERY, LAN_EVERY, TimeUnit.MILLISECONDS);
         } catch (Throwable t) { warn("回到前台", t); }
     }
 
     public void onPause() {
         foreground = false;
-        try { if (periodicF != null) periodicF.cancel(false); } catch (Throwable t) { warn("切后台", t); }
+        try {
+            if (periodicF != null) periodicF.cancel(false);
+            if (lanPeriodicF != null) lanPeriodicF.cancel(false);
+        } catch (Throwable t) { warn("切后台", t); }
         syncSoon(AFTER_PAUSE);
+        // 推完最后一次再关局域网服务（同一个后台线程，排在同步后面）；这期间又回到前台就不关
+        try { ex.schedule(() -> { try { SyncManager x = m; if (x != null && !foreground) x.lanStop(); } catch (Throwable t) { warn("局域网", t); } },
+            AFTER_PAUSE + 200, TimeUnit.MILLISECONDS); } catch (Throwable t) { warn("切后台", t); }
     }
+
+    /** 只和局域网里的组员同步（本机发布后、发现组员） */
+    public synchronized void lanSoon(long delay) {
+        try {
+            if (lanF != null) lanF.cancel(false);
+            lanF = ex.schedule(() -> { try { SyncManager x = m; if (x != null) x.lanSync(false); } catch (Throwable t) { warn("局域网", t); } },
+                delay, TimeUnit.MILLISECONDS);
+        } catch (Throwable t) { warn("局域网", t); }
+    }
+
+    /** NSD 找到 / 丢了一台（Android 的 NSD 线程调用，转到后台线程） */
+    public void lanFound(final String service, final String host, final int port, final Map<String, String> txt) {
+        withM("局域网发现", x -> { if (x.lanFound(service, host, port, txt)) lanSoon(300); });
+    }
+
+    public void lanLost(final String service) { withM("局域网发现", x -> x.lanLost(service)); }
 
     public synchronized void syncSoon(long delay) {
         try {
@@ -136,7 +179,7 @@ public final class SyncService {
 
     // ------------------------------------------------------------ 没有返回值的接口（排进后台线程）
 
-    public void publish(final String json) { withM("发布", x -> { if (x.publish(json) > 0) syncSoon(AFTER_PUBLISH); }); }
+    public void publish(final String json) { withM("发布", x -> { if (x.publish(json) > 0) { lanSoon(LAN_AFTER_PUBLISH); syncSoon(AFTER_PUBLISH); } }); }
 
     public void ack(final String json) { withM("确认收件", x -> x.ack(json)); }
 
@@ -207,6 +250,59 @@ public final class SyncService {
             if (!SyncJson.b(o, "ok")) { o.put("role", "host"); emit("join-result", o); }
             else if (ok) syncSoon(0);
         });
+    }
+
+    // ------------------------------------------------------------ 局域网配对（第二期）
+
+    public void pairOpen() {
+        run("局域网配对", () -> {
+            SyncManager x = m;
+            Map<String, Object> o = x == null ? SyncJson.of("ok", false, "msg", "设备同步暂时不可用") : SyncJson.obj(x.pairOpen());
+            o.put("op", "pairOpen");
+            if (SyncJson.b(o, "ok")) {
+                synchronized (this) {
+                    if (pairTickF != null) pairTickF.cancel(false);
+                    pairTickF = ex.schedule(() -> { try { SyncManager y = m; if (y != null) y.pairTick(); } catch (Throwable t) { warn("局域网配对", t); } },
+                        Lan.DISCOVERABLE + 500, TimeUnit.MILLISECONDS);
+                }
+            }
+            emit("action-result", o);
+        });
+    }
+
+    public void pairClose() { withM("局域网配对", SyncManager::pairClose); }
+
+    public void pairWith(final String key) { pairStart(x -> x.pairWith(key)); }
+
+    public void pairAddr(final String addr) { pairStart(x -> x.pairAddr(addr)); }
+
+    void pairStart(final Op fn) {
+        run("局域网配对", () -> {
+            SyncManager x = m;
+            Map<String, Object> o = x == null ? SyncJson.of("ok", false, "msg", "设备同步暂时不可用") : SyncJson.obj(fn.run(x));
+            if (!SyncJson.b(o, "ok")) { o.put("role", "client"); emit("pair-result", o); }
+        });
+    }
+
+    public void pairConfirm(final boolean ok) {
+        run("局域网配对", () -> {
+            SyncManager x = m;
+            Map<String, Object> o = x == null ? SyncJson.of("ok", false, "msg", "设备同步暂时不可用") : SyncJson.obj(x.pairConfirm(ok));
+            if (SyncJson.b(o, "poll")) startPairPoll(1500);
+            o.put("op", "pairConfirm");
+            emit("action-result", o);
+        });
+    }
+
+    synchronized void startPairPoll(long delay) {
+        try {
+            if (pairPollF != null) pairPollF.cancel(false);
+            pairPollF = ex.schedule(() -> {
+                long d;
+                try { SyncManager x = m; d = x == null ? -1 : x.pairPoll(); } catch (Throwable t) { warn("局域网配对", t); d = 3000; }
+                if (d > 0) startPairPoll(d);
+            }, delay, TimeUnit.MILLISECONDS);
+        } catch (Throwable t) { warn("局域网配对", t); }
     }
 
     /** 测试用：等后台线程把已排队的任务做完 */
