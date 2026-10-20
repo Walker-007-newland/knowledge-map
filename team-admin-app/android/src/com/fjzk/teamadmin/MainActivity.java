@@ -25,6 +25,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private Uri photoUri;
     static final int REQ_FILE = 7;
+    static final int REQ_SAVE = 8;
+    private String saveId, saveText;      // 导出日志：等管理员选好保存位置
     // 节点请求排队在一个后台线程里：计数严格递增、按顺序到达节点
     private final java.util.concurrent.ExecutorService nodeExec = java.util.concurrent.Executors.newSingleThreadExecutor();
 
@@ -102,7 +104,28 @@ public class MainActivity extends Activity {
             photoUri = null;
             return;
         }
+        if (req == REQ_SAVE && saveId != null) {
+            final String id = saveId, text = saveText;
+            saveId = null; saveText = null;
+            final Uri u = result == RESULT_OK && data != null ? data.getData() : null;
+            if (u == null) { fileSaved(id, false, "已取消"); return; }
+            new Thread(() -> {
+                boolean ok = false; String msg;
+                try (java.io.OutputStream os = getContentResolver().openOutputStream(u, "w")) {
+                    if (os == null) throw new java.io.IOException("打不开文件");
+                    os.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    ok = true; msg = "已保存";
+                } catch (Exception e) { msg = "保存失败：" + e.getMessage(); }
+                final boolean fok = ok; final String fmsg = msg;
+                runOnUiThread(() -> fileSaved(id, fok, fmsg));
+            }).start();
+            return;
+        }
         super.onActivityResult(req, result, data);
+    }
+
+    private void fileSaved(String id, boolean ok, String msg) {
+        web.evaluateJavascript("window.__fileSaved && window.__fileSaved(" + JSONObject.quote(id) + "," + ok + "," + JSONObject.quote(msg) + ")", null);
     }
 
     @Override
@@ -169,13 +192,79 @@ public class MainActivity extends Activity {
             nodeExec.execute(() -> {
                 Node.Result r;
                 try {
+                    if (NodeStore.hasPending(MainActivity.this)) NodeStore.resolvePending(MainActivity.this);
                     Node.Code c = NodeStore.load(MainActivity.this);
                     r = c == null ? new Node.Result(0, "还没有设置同步节点", false) : Node.call(c, NodeStore.ctr(MainActivity.this), op, argsJson);
                 } catch (Exception e) {
                     r = new Node.Result(0, "读取管理密钥失败：" + e, false);
                 }
-                final String js = "window.__nodeDone(" + JSONObject.quote(id) + "," + r.status + "," + JSONObject.quote(r.text) + ")";
-                runOnUiThread(() -> web.evaluateJavascript(js, null));
+                nodeDone(id, r);
+            });
+        }
+
+        /**
+         * 换管理密钥（#6 第三期）：生成新密钥 → 先存成「待确认」→ 用旧密钥发 admin.rotateKey → 节点确认后新密钥转正。
+         * 网络中断不知道换没换时，留着「待确认」，下次调节点前自动确认（NodeStore.resolvePending）。新旧密钥都不给网页。
+         * 回调 window.__nodeDone(id, status, text)，成功时 text 是 {"ok":true,"data":{"kid":新 kid}}。
+         */
+        @JavascriptInterface
+        public void nodeRotateKey(final String id) {
+            nodeExec.execute(() -> {
+                Node.Result r;
+                try {
+                    if (NodeStore.hasPending(MainActivity.this)) NodeStore.resolvePending(MainActivity.this);
+                    Node.Code old = NodeStore.load(MainActivity.this);
+                    if (old == null) {
+                        r = new Node.Result(0, "还没有设置同步节点", false);
+                    } else {
+                        byte[] nk = Node.newKey();
+                        NodeStore.savePending(MainActivity.this, nk);
+                        r = Node.rotate(old, NodeStore.ctr(MainActivity.this), nk);
+                        java.util.Arrays.fill(nk, (byte) 0);
+                        if (Node.ok(r)) {
+                            NodeStore.commitPending(MainActivity.this);
+                        } else if (r.status == 200) {
+                            NodeStore.clearPending(MainActivity.this);       // 节点拒绝了（格式等），旧密钥照常
+                        } else {
+                            // 没拿到明确结果（断网、超时）：马上用新密钥确认一次
+                            NodeStore.resolvePending(MainActivity.this);
+                            String kid = NodeStore.prefs(MainActivity.this).getString("kid", "");
+                            if (NodeStore.hasPending(MainActivity.this)) {
+                                r = new Node.Result(0, "网络中断，还不确定换没换成功；新密钥已存好，下次连上节点时自动确认", false);
+                            } else if (!kid.equals(old.kid)) {
+                                r = new Node.Result(200, "{\"ok\":true,\"data\":{\"kid\":\"" + kid + "\"}}", false);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    r = new Node.Result(0, "换管理密钥失败：" + e, false);
+                }
+                nodeDone(id, r);
+            });
+        }
+
+        private void nodeDone(String id, Node.Result r) {
+            final String js = "window.__nodeDone(" + JSONObject.quote(id) + "," + r.status + "," + JSONObject.quote(r.text) + ")";
+            runOnUiThread(() -> web.evaluateJavascript(js, null));
+        }
+
+        /**
+         * 把文字存成文件（导出日志用）：弹出系统「保存到」界面让管理员选位置（不用存储权限），
+         * 完成后回调 window.__fileSaved(id, ok, 说明)。
+         */
+        @JavascriptInterface
+        public void saveFile(final String id, final String name, final String mime, final String text) {
+            runOnUiThread(() -> {
+                if (saveId != null) fileSaved(saveId, false, "已取消");
+                saveId = id;
+                saveText = text == null ? "" : text;
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType(mime == null || mime.isEmpty() ? "text/plain" : mime).putExtra(Intent.EXTRA_TITLE, name);
+                try {
+                    startActivityForResult(i, REQ_SAVE);
+                } catch (ActivityNotFoundException e) {
+                    fileSaved(id, false, "这台手机没有文件管理器，存不了文件");
+                }
             });
         }
 

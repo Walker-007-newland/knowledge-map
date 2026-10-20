@@ -468,6 +468,58 @@ def run_local(java=True):
         ln.node.janitor()
         check(not ln.node.adb.execute('SELECT 1 FROM tombstones WHERE gid=?', (g7,)).fetchone(), '墓碑 90 天后由清理任务删掉', '')
 
+        # ------------------------------------------------ 1.3.0 彻底删除已移除的组登记（#6 第三期）
+        section('彻底删除已移除的组登记（1.3.0）')
+        invp = Invite(A('invites.create', {'label': '彻底删除', 'days': 7, 'uses': 5})['qr'])
+        gp, kp = new_group()
+        dp = DevClient(http, gp, kp, 'dp')
+        dp.create(invp)
+        dp.push([('s', 1, 'c', b'data')])
+        st, r = adm.call('groups.purge', {'gid': gp})
+        check(st == 200 and not r['ok'] and '已移除' in r['msg'], '没移除的组不能彻底删除', r)
+        A('groups.remove', {'gid': gp})
+        A('groups.purge', {'gid': gp})
+        gl = {g['gid'] for g in A('groups.list')}
+        check(gp not in gl and not ln.node.known(gp), '彻底删除后组登记从列表和 admin.db 里消失', '')
+        row = ln.node.adb.execute('SELECT purged FROM tombstones WHERE gid=?', (gp,)).fetchone()
+        check(row and row[0], '组号记进永久墓碑（purged）', row)
+        r4 = [dp.create(invp), dp.pull(0), dp.push([('s', 2, 'c', b'x')])]
+        check(all(s_ == 403 and res_ == {'err': 'blocked'} for s_, res_ in r4), '彻底删除后建组 / 重建、pull、push 都是 403 blocked（不能被复活）', r4)
+        st, r = adm.call('groups.unblock', {'gid': gp})
+        check(st == 200 and not r['ok'], '彻底删除后不能「解除封禁」', r)
+        st, r = adm.call('groups.purge', {'gid': gp})
+        check(st == 200 and not r['ok'], '重复彻底删除 → 失败提示', r)
+        g_new, k_new = new_group()
+        dq = DevClient(http, g_new, k_new, 'dq')
+        dq.create(invp)
+        st, res = dq.call('successor', {'gid': gp, **wrap(k_new, gp, kp)})
+        check(st == 403 and res == {'err': 'blocked'}, '换钥建新组也不能用已彻底删除的组号（403 blocked）', (st, res))
+        lg = A('log.list', {'limit': 20})['items']
+        okp = [i for i in lg if i['op'] == 'groups.purge' and i['result'] == '成功']
+        check(okp and okp[0]['obj'] == gp[:6] and adm.kid in okp[0]['who'] and '彻底删除' in okp[0]['note'], '彻底删除有日志（谁、对象、说明）', okp[:1])
+        check(any(i['op'] == 'groups.purge' and i['result'] == '失败' for i in lg), '失败的彻底删除也有日志', '')
+        check(any(i['op'] == 'invite.use' and i['result'] == '拒绝' and '彻底删除' in i['note'] for i in lg), '设备拿已删除的组号来建组：日志里记拒绝', '')
+        far = (K.TOMBSTONE_DAYS + 5) * 86400
+        ln.advance(far)
+        ln.node.janitor()
+        check(ln.node.purged(gp), f'永久墓碑过了 {K.TOMBSTONE_DAYS} 天也不清理', '')
+        ln.advance(-far)
+        ln.lose_node_db()
+        http.port = ln.port
+        st, res = dp.create(invp)
+        check(st == 403 and res == {'err': 'blocked'}, '节点数据丢了以后（墓碑在 admin.db）仍然 403 blocked', (st, res))
+        # 已经因为换钥有普通墓碑的组号：移除后彻底删除，墓碑变成永久的
+        gr, kr = new_group()
+        dr = DevClient(http, gr, kr, 'dr')
+        dr.create(invp)
+        gr2, kr2 = new_group()
+        dr.successor(gr2, kr2)
+        A('groups.remove', {'gid': gr})
+        A('groups.purge', {'gid': gr})
+        row = ln.node.adb.execute('SELECT successor, purged FROM tombstones WHERE gid=?', (gr,)).fetchone()
+        check(row and row[0] == gr2 and row[1], '换钥后的旧组号彻底删除：保留原墓碑（下一代组号）并标成永久', row)
+        check(ln.node.known(gr2) and ln.node.known(gr2)['parent_gid'] == gr, '下一代组不受影响', '')
+
         # ------------------------------------------------ 信箱、转交
         section('信箱、转交')
         g6, k6 = new_group()
@@ -662,6 +714,52 @@ def run_local(java=True):
         check(not ln.node.ndb.execute('SELECT 1 FROM groups WHERE gid=?', (g8,)).fetchone()
               and ln.node.ndb.execute('SELECT 1 FROM groups WHERE gid=?', (g9,)).fetchone(), '旧组 60 天后删除，新组保留')
         ln.clock.offset = 0
+
+        # ------------------------------------------------ 1.3.0 导出日志：按 before 翻页（每页最多 500）能完整、不重复地取到全部日志
+        section('导出日志（1.3.0）')
+        for i in range(620):
+            ln.node.log('测试', '192.0.2.200', 'groups.setNote', f'x{i}', '成功', f'造日志 {i}')
+        db_ids = [r[0] for r in ln.node.adb.execute('SELECT id FROM log ORDER BY id DESC')]
+        got, before, pages = [], None, 0
+        while True:
+            pg = A('log.list', {'limit': 500, **({'before': before} if before else {})})
+            got += pg['items']
+            pages += 1
+            if not pg['more']:
+                break
+            before = pg['items'][-1]['id']
+        check([i['id'] for i in got] == db_ids and pages == 2, f'翻页导出 {len(got)} 条 = 库里 {len(db_ids)} 条，顺序一致、不重复（{pages} 页）', (len(got), len(db_ids)))
+        row = ln.node.adb.execute('SELECT t, who, ip, op, obj, result, note, sec FROM log WHERE id=?', (got[0]['id'],)).fetchone()
+        check(tuple(got[0][k] for k in ('t', 'who', 'ip', 'op', 'obj', 'result', 'note', 'sec')) == row, '导出的字段和库里一致', (got[0], row))
+        st, r = adm.call('log.list', {'limit': 501})
+        check(st == 200 and not r['ok'], 'limit 超过 500 被拒', r)
+
+        # ------------------------------------------------ 1.3.0 在审批 App 里换管理密钥（#6 第三期）
+        section('换管理密钥（1.3.0）')
+        old_kid, old_k = adm.kid, adm.k
+        for bad, why in ((b64e(b'\0' * 32), '全 0'), (b64e(secrets.token_bytes(16)), '16 字节'), ('不是base64!', '格式'), (None, '缺参数')):
+            st, r = adm.call('admin.rotateKey', {} if bad is None else {'key': bad})
+            check(st == 200 and not r['ok'], f'新密钥{why} → 拒绝', r)
+        check(adm.call('status')[0] == 200, '格式不对时旧管理密钥照常可用', '')
+        new_k = secrets.token_bytes(32)
+        d = A('admin.rotateKey', {'key': b64e(new_k)})
+        new_kid = hashlib.sha256(new_k).hexdigest()[:8]
+        check(d['kid'] == new_kid, f'换管理密钥成功，返回新 kid {new_kid}', d)
+        st, res = adm.call('status')
+        check(st == 403 and res is None, '换钥后旧管理密钥 K → 403', st)
+        adm2 = AdminClient(http, f'kmadmin:1?h=127.0.0.1&p={ln.port}&k={b64e(new_k)}')
+        st, r = adm2.call('status')
+        check(st == 200 and r['ok'], '换钥后新管理密钥 K\' 成功', st)
+        check(ln.node.adb.execute('SELECT kid FROM admin_keys').fetchall() == [(new_kid,)], '服务器只剩新的一把管理密钥', '')
+        adm = adm2
+        lg = A('log.list', {'limit': 10})['items']
+        rk = [i for i in lg if i['op'] == 'admin.rotateKey' and i['result'] == '成功']
+        check(rk and old_kid in rk[0]['who'] and rk[0]['obj'] == new_kid and old_kid in rk[0]['note'], '换钥有日志（旧 kid 做的、对象是新 kid）', rk[:1])
+        check(any(i['op'] == 'auth' and i['obj'] == old_kid and i['result'] == '拒绝' for i in A('log.list', {'limit': 10, 'sec': True})['items']),
+              '之后用旧密钥的请求记成安全事件', '')
+        responses.append(d)
+        check(b64e(new_k) not in json.dumps(A('log.list', {'limit': 100}), ensure_ascii=False) and b64e(old_k) not in json.dumps(lg, ensure_ascii=False),
+              '日志里没有新旧管理密钥本身', '')
 
         # ------------------------------------------------ Java 互通
         if java:
@@ -870,6 +968,16 @@ def run_web_local():
             a = {'gid': gid, 'note': '网页备注'} if op == 'groups.setNote' else {'gid': gid, 'mb': 30} if op == 'groups.setQuota' else {'gid': gid}
             okc.append(op) if s.call(op, a)[1]['ok'] else None
         check(len(okc) == 14, f'网页会话调第一期全部 14 个管理操作都成功（{len(okc)} 个）', okc)
+        # 1.3.0：网页上也能彻底删除已移除的组登记；不能换管理密钥
+        gpw, kpw = new_group()
+        DevClient(http, gpw, kpw, 'w2').create(inv)
+        s.ok('groups.remove', {'gid': gpw})
+        st, r = s.call('groups.purge', {'gid': gpw})
+        check(st == 200 and r['ok'] and not ln.node.known(gpw) and ln.node.purged(gpw), '网页会话能彻底删除已移除的组登记（1.3.0）', r)
+        lg = s.ok('log.list', {'limit': 5})['items']
+        check(any(i['op'] == 'groups.purge' and i['who'].startswith('网页 boss') for i in lg), '网页上的彻底删除记成「网页 用户名」', lg[:2])
+        st, r = s.call('admin.rotateKey', {'key': b64e(secrets.token_bytes(32))})
+        check(st == 200 and not r['ok'] and r['err'] == 'perm' and adm.call('status')[0] == 200, '网页会话不能换管理密钥（1.3.0），K 照常可用', r)
         ctr, body = s.envelope('status', {})
         st1, _, _ = s.send_raw(body)
         st2, r2, _ = s.send_raw(body)
@@ -1201,6 +1309,37 @@ def run_migration():
             n.adb.close()
         finally:
             K.ADMIN_SCHEMA = saved
+        cols = [r[1] for r in sqlite3.connect(os.path.join(d, 'admin.db')).execute('PRAGMA table_info(tombstones)')]
+        check('purged' in cols and len(saved) == 4, '表结构 4（1.3.0）：tombstones 加了 purged 列', cols)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    # 1.2.0（表结构 3）的库：已有的换钥墓碑升级后还在、仍按 90 天清理
+    d = tempfile.mkdtemp(prefix='km-sync-mig3-')
+    try:
+        saved = K.ADMIN_SCHEMA
+        K.ADMIN_SCHEMA = saved[:3]
+        try:
+            n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            n.adb.execute('INSERT INTO tombstones(gid, successor, created) VALUES(?,?,?)', ('cd' * 16, 'ef' * 16, n.ms()))
+            n.adb.commit()
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
+        n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+        row = n.adb.execute('SELECT successor, purged FROM tombstones WHERE gid=?', ('cd' * 16,)).fetchone()
+        check(row == ('ef' * 16, None) and not n.purged('cd' * 16) and os.path.exists(os.path.join(d, 'admin.db.v3.bak')),
+              '1.2.0 的库升级到表结构 4：换钥墓碑还在（不是永久的），备份了 admin.db.v3.bak', row)
+        n.ndb.close()
+        n.adb.close()
+        K.ADMIN_SCHEMA = saved[:3]
+        try:
+            n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            check(n.adb.execute('SELECT COUNT(*) FROM tombstones').fetchone()[0] == 1, '用只认表结构 3 的程序打开新库也正常（模拟回滚到 1.2.0）', '')
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -1263,8 +1402,9 @@ def run_java(admin_text):
     try:
         r = subprocess.run([javac, '-encoding', 'UTF-8', '-d', out,
                             os.path.join(src, 'src', 'com', 'fjzk', 'teamadmin', 'Node.java'),
+                            os.path.join(src, 'src', 'com', 'fjzk', 'teamadmin', 'NodeHealth.java'),
                             os.path.join(src, 'test', 'NodeTest.java')], capture_output=True, text=True)
-        if not check(r.returncode == 0, 'javac 编译 Node.java + NodeTest.java', r.stderr[-800:]):
+        if not check(r.returncode == 0, 'javac 编译 Node.java + NodeHealth.java + NodeTest.java', r.stderr[-800:]):
             return
         r = subprocess.run([java, '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', out, 'com.fjzk.teamadmin.NodeTest', admin_text],
                            capture_output=True, timeout=120)
@@ -1339,10 +1479,16 @@ def run_remote(addr, web=True):
     adm = AdminClient(http, info['admin_qr'])
     LABEL = '自动测试'
     made_groups, made_inv = [], []
+    stale = False
     try:
         section(f'远程节点 {addr}')
         st, res, _ = http.send('GET', '/v1/hello')
         check(st == 200 and res['node'] == 'km-sync', f'/v1/hello（版本 {res and res.get("ver")}）', res)
+        if adm.call('status')[0] == 403:
+            check(False, '本机 sync-node.json 的管理密钥被节点拒绝：可能已在审批 App 里换过管理密钥（1.3.0）'
+                  + (f'——{info["stale_note"]}' if info.get('stale_note') else '') + '。需要时运行 deploy.ps1 -NewAdminKey（手机要重新扫码）')
+            stale = True
+            return
         s = adm.ok('status')
         check(s['version'] == res['ver'] and s['your_ip'] == '127.0.0.1', f'管理接口可用（到期 {s["expiry"]}，还剩 {s["days_left"]} 天，'
               f'磁盘剩 {s["disk_free"] / 1e9:.1f} GB）', s)
@@ -1392,6 +1538,20 @@ def run_remote(addr, web=True):
         st, r = a.call('drop', {})
         st2, r2 = b.create(iv)
         check(st == 200 and st2 == 403 and r2 == {'err': 'replaced'}, '换钥后的旧组删掉后，用邀请码重建 → 403 replaced（1.2.0）', (st, r, st2, r2))
+        # 1.3.0：彻底删除已移除的组登记
+        if s['version'] >= '1.3.0':
+            g3, k3 = new_group()
+            made_groups.append((g3, k3))
+            a3 = DevClient(http, g3, k3, 'autotestA')
+            st, r = a3.create(iv)
+            adm.ok('groups.remove', {'gid': g3})
+            adm.ok('groups.purge', {'gid': g3})
+            made_groups.remove((g3, k3))
+            gl = {g['gid'] for g in adm.ok('groups.list')}
+            st2, r2 = a3.create(iv)
+            check(st == 200 and g3 not in gl and st2 == 403 and r2 == {'err': 'blocked'}, '彻底删除登记后从列表消失，设备用邀请码重建 → 403 blocked（1.3.0）', (st, st2, r2))
+            pg = adm.ok('log.list', {'limit': 500})
+            check(len(pg['items']) > 0 and any(i['op'] == 'groups.purge' and i['obj'] == g3[:6] for i in pg['items']), '日志一页取 500 条（导出用）、有彻底删除记录', len(pg['items']))
         body = json.dumps({'v': 1}).encode()
         st, r, _ = http.send('POST', '/admin/v1', body, {'X-KM-Auth': a.auth('POST', '/admin/v1', body)})
         check(st == 403 and r == {}, '设备签名访问管理接口 → 403 {}', (st, r))
@@ -1401,6 +1561,8 @@ def run_remote(addr, web=True):
             run_remote_web(http, adm, info.get('host') or '43.142.41.27')
     finally:
         # 清理：设备删组（连同登记一起删），作废邀请码
+        if stale:
+            return
         for g, k in made_groups:
             d = DevClient(http, g, k, 'autotestA')
             st, _ = d.call('drop', {})

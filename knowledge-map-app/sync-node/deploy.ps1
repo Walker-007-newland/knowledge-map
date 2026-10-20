@@ -198,6 +198,13 @@ if ($r.admin) {
   Write-Host "第一次部署：已在服务器上生成管理密钥（kid $($r.admin.kid)）"
 } elseif ($old -and $old.kid -eq $r.kid) {
   $info = [ordered]@{}; $old.PSObject.Properties | ForEach-Object { $info[$_.Name] = $_.Value }
+  $info.Remove('stale_note')
+} elseif ($old -and $r.kid -and $old.key) {
+  # 1.3.0 起管理员可以在审批 App 里换管理密钥：服务器上的 kid 变了，本机这份就失效了。照常部署（程序更新不需要管理密钥），只提醒
+  $info = [ordered]@{}; $old.PSObject.Properties | ForEach-Object { $info[$_.Name] = $_.Value }
+  $info.stale_note = "管理密钥已在审批 App 里换过（服务器 kid $($r.kid)），本机这份（kid $($old.kid)）和 sync-node-admin.png 已失效"
+  Write-Host "注意：服务器上的管理密钥是 kid $($r.kid)（在审批 App 里换过），本机 $infoPath 和 sync-node-admin.png 里的 kid $($old.kid) 已失效。" -ForegroundColor Yellow
+  Write-Host '      部署照常完成；远程测试（test_node.py --remote）要用管理密钥，需要时运行 deploy.ps1 -NewAdminKey（手机要重新扫码）。' -ForegroundColor Yellow
 } else {
   throw "服务器上已有管理密钥（kid $($r.kid)），但本机 $infoPath 里没有或不一致。请运行 deploy.ps1 -NewAdminKey 重新生成"
 }
