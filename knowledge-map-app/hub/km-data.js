@@ -20,6 +20,7 @@
   const META = 'km-meta-v1', DEVICE = 'km-device-v1', EXTRA = 'km-data-extra-v1';
   const TOMB_KEEP = 180 * 86400000;     // 删除记录保留 180 天
   const DICT = 'fjzk-en-dictation-v1';
+  const WORDS = 'fjzk-en-words-v1';
   const HOUR = 3600000;
 
   /* ---------------- 数据清单 ----------------
@@ -38,7 +39,10 @@
       { key: 'km-study-v1', name: '学习时长', cat: 'study', merge: 'study' },
       { key: 'km-pet-v1', name: '小狗', cat: 'pet', merge: 'pet' },
       { key: 'km-narrate-rate', name: '朗读语速', cat: 'pref', merge: 'whole', raw: true },
-      { key: DICT, name: '单词听写', cat: 'dictation', merge: 'dictation', items: 'dict', store: 'shared' }
+      { key: DICT, name: '单词听写', cat: 'dictation', merge: 'dictation', items: 'dict', store: 'shared' },
+      // #9 英语单元单词（english-map/words.html，图谱页的 localStorage）：每个词一条，见 joinWord
+      { key: WORDS, name: '英语单元单词', cat: 'words', merge: 'words', items: 'obj' },
+      { key: 'fjzk-en-words-set-v1', name: '单元单词设置', cat: 'pref', merge: 'whole' }
     ]);
   const byKey = {};
   KEYS.forEach(s => { byKey[s.key] = s; });
@@ -291,6 +295,19 @@
   const joinMath = (a, b) => joinObj(a, b, { best: jMax }, [MATH_LA]);
   // 数学错题：n 取大、at 取新
   const joinWrong = (a, b) => joinObj(a, b, { n: jMax, at: jMax });
+  // 英语单元单词（#9）：每个词 { k, kt, r, rt, w: { 设备: 累计写错次数 }, n: { 设备: 累计默写次数 } }
+  //   k+kt（背诵：最近一次标「会了」1 /「不会」0 及时间）一组、r+rt（默写：最近一次对 1 / 错 0 及时间，r=0 即在错词本）一组，
+  //   各取时间较新的那组（时间相同取 JSON 文本较大的）；w、n 按设备取大，显示时各设备相加
+  const KT = { fields: ['k', 'kt'], key: s => [+s.kt || 0, canon(s)] };
+  const RT = { fields: ['r', 'rt'], key: s => [+s.rt || 0, canon(s)] };
+  function joinCount(a, b) {
+    if (!isObj(a) && !isObj(b)) return jCanon(a, b);
+    const r = {};
+    [a, b].forEach(src => Object.keys(isObj(src) ? src : {}).forEach(d => { r[d] = jMax(r[d], src[d]); }));
+    return r;
+  }
+  const joinWord = (a, b) => joinObj(a, b, { w: joinCount, n: joinCount }, [KT, RT]);
+  const wordTime = v => isObj(v) ? Math.max(+v.kt || 0, +v.rt || 0) : 0;
 
   // 听写词单：名称、单词表等取修改记录较新的；错词取并集、次数取大；history 按 at 去重、保留最近 50 条；created 取早
   function joinList(a, b, ea, eb) {
@@ -386,7 +403,7 @@
        这台设备是在看到这些之后才删的（两台设备时钟不准时可能出现 x 比 t / at 早）；
        没有删除时间也没有修改时间的“删除前内容”不算数（不是我们写出来的数据）。
        这样已删除的一边永远不会让条目“复活”，合并结果写回后再读也是同一个状态，所以满足交换、结合、幂等 */
-  const itemHint = (kind, v) => kind === 'list' ? listHint(v) : kind === 'mathWrong' && isObj(v) ? +v.at || 0 : 0;
+  const itemHint = (kind, v) => kind === 'list' ? listHint(v) : kind === 'mathWrong' && isObj(v) ? +v.at || 0 : kind === 'words' ? wordTime(v) : 0;
   function deadSide(kind, e) {
     const x = Math.max(e.x, e.t, itemHint(kind, e.v));
     const r = Object.assign({}, e, { x });
@@ -408,6 +425,7 @@
       else if (kind === 'list') val = joinList(va, vb, ea, eb);
       else if (kind === 'mathWrong') val = joinWrong(va, vb);
       else if (kind === 'mathProgress') val = joinMath(va, vb);
+      else if (kind === 'words') val = joinWord(va, vb);
       else val = joinProg(va, vb);
       const hint = itemHint(kind, val);
       const live = (ha || hb) && val !== undefined && (!x || Math.max(w.t, hint) > x);
@@ -592,7 +610,7 @@
   function mergeKey(spec, A, B2) {
     const kind = spec ? spec.merge : 'whole';
     const objOk = v => v === undefined || isObj(v);
-    if ((kind === 'progress' || kind === 'mathProgress' || kind === 'mathWrong' || kind === 'drafts') && objOk(A.val) && objOk(B2.val)) {
+    if ((kind === 'progress' || kind === 'mathProgress' || kind === 'mathWrong' || kind === 'drafts' || kind === 'words') && objOk(A.val) && objOk(B2.val)) {
       const r = mergeItems(kind, { items: A.val, meta: A.meta, dev: A.dev }, { items: B2.val, meta: B2.meta, dev: B2.dev });
       return { val: A.val === undefined && B2.val === undefined ? undefined : r.items, meta: r.meta };
     }
@@ -730,6 +748,13 @@
           if (before.petDay !== after.petDay || (+before.petCount || 0) !== (+after.petCount || 0)) parts.push('今天摸摸的次数有更新');
           if (!parts.length) parts.push('补上了另一台设备的喂食、学习记录（骨头、等级不变）');
         }
+      } else if (kind === 'words') {
+        const n = Object.keys(a).filter(id => !same(a[id], b[id])).length;
+        const k0 = countIf(b, w => w.k === 1), k1 = countIf(a, w => w.k === 1);
+        if (n) parts.push('合并 ' + n + ' 个词的记录');
+        if (k0 !== k1) parts.push('会了 ' + k0 + ' → ' + k1 + ' 个');
+        const g = Object.keys(b).filter(id => !hasOwn(a, id)).length;
+        if (g) parts.push('去掉 ' + g + ' 个词的记录');
       } else if (kind === 'dictation') {
         const bl = Array.isArray(b.lists) ? b.lists : [], al = Array.isArray(a.lists) ? a.lists : [];
         const ids = new Set(bl.map(l => l.id));
@@ -853,7 +878,7 @@
 
   /** 本机数据概览（「我的数据」页用） */
   function summary(pkg) {
-    const k = pkg.keys, S = window.KMStudy, out = { subjects: [], wrong: 0, drafts: 0, minutes: 0, pet: null, lists: 0 };
+    const k = pkg.keys, S = window.KMStudy, out = { subjects: [], wrong: 0, drafts: 0, minutes: 0, pet: null, lists: 0, words: 0, wordsWrong: 0 };
     if (S) S.SOURCES.forEach(s => {
       const p = isObj(k[s.key]) ? k[s.key] : {};
       out.subjects.push({ key: s.key, name: s.name, mastered: countIf(p, s.ok), records: Object.keys(p).length });
@@ -865,6 +890,8 @@
     if (isPet(pet)) out.pet = { name: pet.name, level: petLevel(pet.xp), bones: pet.bones };
     const dict = k[DICT];
     out.lists = isObj(dict) && Array.isArray(dict.lists) ? dict.lists.length : 0;
+    out.words = countIf(k[WORDS], w => w.k === 1);          // 英语单元单词：会了的词数
+    out.wordsWrong = countIf(k[WORDS], w => w.r === 0);     // 在错词本里的词数
     return out;
   }
 
@@ -886,6 +913,8 @@
     petBones, normPet, normStudy, ownedPrice, uniqClaimed,
     // 草稿正文的算法（同步层显示用）
     computeDraft,
+    // 单元单词一个词的合并（测试用）
+    joinWord,
     // 测试和调试用
     _flush: flush, _canon: canon, _resetDevice: () => { dev = null; }, _itemsOf: (key, v) => itemsOf(byKey[key], v), _sharedRead: sharedRead
   };

@@ -63,7 +63,7 @@
 
   <section class="card">
     <h2>导出全部学习数据</h2>
-    <p>所有科目的进度、数学错题本、作文草稿、入门诊断、学习时长、小狗、单词听写词单都存进一个文件。换平板、重置或卸载前先导出一份。</p>
+    <p>所有科目的进度、数学错题本、作文草稿、入门诊断、学习时长、小狗、单词听写词单、英语单元单词的背默记录都存进一个文件。换平板、重置或卸载前先导出一份。</p>
     <button class="btn primary" id="btnExport">导出全部学习数据</button>
     <div class="msg" id="exportMsg"></div>
   </section>
@@ -127,6 +127,7 @@
     html += row('学习总时长', minutes(s.minutes));
     html += row('小狗', s.pet ? esc(s.pet.name) + ' · Lv.' + s.pet.level + ' · 🦴 ' + s.pet.bones : '还没领养');
     html += row('单词听写词单', s.lists + ' 个');
+    html += row('英语单元单词', '会了 ' + s.words + ' 个' + (s.wordsWrong ? ' · 错词 ' + s.wordsWrong + ' 个' : ''));
     $('rows').innerHTML = html;
     $('dev').textContent = '这台设备：' + dev.name + ' · 编号 …' + String(dev.id).slice(-4);
   }

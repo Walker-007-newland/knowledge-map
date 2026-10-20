@@ -1,0 +1,731 @@
+{
+ "book": "mj4b",
+ "printing": "2026 春版（内容 ID 83e1a7f0-a0bf-4663-9cb0-ca5de49a2409）",
+ "pages": {
+  "contents": "图 5–7（书页 ii–iv）",
+  "vocab": "图 79–81（书页 72–74）"
+ },
+ "mustMarked": true,
+ "units": [
+  {
+   "id": "u1",
+   "name": "Unit 1 Weekly Activities"
+  },
+  {
+   "id": "u2",
+   "name": "Unit 2 My Favorite Subject"
+  },
+  {
+   "id": "u3",
+   "name": "Unit 3 Our Feelings"
+  },
+  {
+   "id": "u4",
+   "name": "Unit 4 Getting Around"
+  }
+ ],
+ "words": [
+  {
+   "u": "u1",
+   "en": "weekly",
+   "pos": "",
+   "zh": "每周的",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "activity",
+   "pos": "",
+   "zh": "活动",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "week",
+   "pos": "",
+   "zh": "星期，周",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Sunday",
+   "pos": "",
+   "zh": "星期日",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Monday",
+   "pos": "",
+   "zh": "星期一",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Tuesday",
+   "pos": "",
+   "zh": "星期二",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Wednesday",
+   "pos": "",
+   "zh": "星期三",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Thursday",
+   "pos": "",
+   "zh": "星期四",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Friday",
+   "pos": "",
+   "zh": "星期五",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Saturday",
+   "pos": "",
+   "zh": "星期六",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "fifty",
+   "pos": "",
+   "zh": "五十",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "must",
+   "pos": "",
+   "zh": "必须",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "robot",
+   "pos": "",
+   "zh": "机器人",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "weekday",
+   "pos": "",
+   "zh": "工作日",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "piano",
+   "pos": "",
+   "zh": "钢琴",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "chess",
+   "pos": "",
+   "zh": "国际象棋",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "every",
+   "pos": "",
+   "zh": "每个",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "sit",
+   "pos": "",
+   "zh": "坐",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "door",
+   "pos": "",
+   "zh": "门",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "helpful",
+   "pos": "",
+   "zh": "有帮助的；乐于助人的",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "foot",
+   "pos": "",
+   "zh": "（复数feet）脚",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "tomorrow",
+   "pos": "",
+   "zh": "明天",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "weekend",
+   "pos": "",
+   "zh": "周末",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "hooray",
+   "pos": "",
+   "zh": "（表示高兴、赞许等）好哇",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "film",
+   "pos": "",
+   "zh": "电影",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "evening",
+   "pos": "",
+   "zh": "傍晚",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "picnic",
+   "pos": "",
+   "zh": "野餐",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "subject",
+   "pos": "",
+   "zh": "科目",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "science",
+   "pos": "",
+   "zh": "科学",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "math",
+   "pos": "",
+   "zh": "数学",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "because",
+   "pos": "",
+   "zh": "因为",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "useful",
+   "pos": "",
+   "zh": "有用的",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "but",
+   "pos": "",
+   "zh": "但是",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "worry",
+   "pos": "",
+   "zh": "担心",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "water",
+   "pos": "",
+   "zh": "水；浇水",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "poem",
+   "pos": "",
+   "zh": "诗",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "kind",
+   "pos": "",
+   "zh": "体贴的；友好的",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "exercise",
+   "pos": "",
+   "zh": "锻炼",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "fox",
+   "pos": "",
+   "zh": "狐狸",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "enjoy",
+   "pos": "",
+   "zh": "欣赏；享受",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "search",
+   "pos": "",
+   "zh": "搜查；搜寻",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "internet",
+   "pos": "",
+   "zh": "互联网",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "information",
+   "pos": "",
+   "zh": "信息",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "tell",
+   "pos": "",
+   "zh": "告诉",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "story",
+   "pos": "",
+   "zh": "故事",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "fly",
+   "pos": "",
+   "zh": "飞；放飞",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "why",
+   "pos": "",
+   "zh": "为什么",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "slide show",
+   "pos": "",
+   "zh": "幻灯片放映",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "zero",
+   "pos": "",
+   "zh": "零",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "feeling",
+   "pos": "",
+   "zh": "感觉",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "tired",
+   "pos": "",
+   "zh": "疲倦的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "excited",
+   "pos": "",
+   "zh": "激动的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "over",
+   "pos": "",
+   "zh": "在……上面",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "nervous",
+   "pos": "",
+   "zh": "紧张的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "winner",
+   "pos": "",
+   "zh": "获胜者",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "proud",
+   "pos": "",
+   "zh": "自豪的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "feel",
+   "pos": "",
+   "zh": "感到；觉得",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "better",
+   "pos": "",
+   "zh": "较好的；更好的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "next",
+   "pos": "",
+   "zh": "下一个的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "sad",
+   "pos": "",
+   "zh": "悲伤的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "him",
+   "pos": "",
+   "zh": "他（宾格）",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "high",
+   "pos": "",
+   "zh": "高的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "angry",
+   "pos": "",
+   "zh": "愤怒的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "count",
+   "pos": "",
+   "zh": "数数；计算",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "parent",
+   "pos": "",
+   "zh": "父，母；家长",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "farm",
+   "pos": "",
+   "zh": "农场",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "poor",
+   "pos": "",
+   "zh": "可怜的；贫穷的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "duckling",
+   "pos": "",
+   "zh": "小鸭",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "bored",
+   "pos": "",
+   "zh": "厌倦的；烦闷的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "ugly",
+   "pos": "",
+   "zh": "丑陋的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "lonely",
+   "pos": "",
+   "zh": "孤独的；寂寞的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "thirsty",
+   "pos": "",
+   "zh": "渴的",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "swan",
+   "pos": "",
+   "zh": "天鹅",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "by",
+   "pos": "",
+   "zh": "通过；以……（方式）",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "subway",
+   "pos": "",
+   "zh": "地铁",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "near",
+   "pos": "",
+   "zh": "在附近",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "far",
+   "pos": "",
+   "zh": "遥远的",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "away",
+   "pos": "",
+   "zh": "去别处；离开",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "dad",
+   "pos": "",
+   "zh": "爸爸",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "take",
+   "pos": "",
+   "zh": "带走；拿走；搭乘（交通工具）",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "does",
+   "pos": "",
+   "zh": "（do的第三人称单数形式）做",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "work",
+   "pos": "",
+   "zh": "工作",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "his",
+   "pos": "",
+   "zh": "他的",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "office",
+   "pos": "",
+   "zh": "办公室",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "live",
+   "pos": "",
+   "zh": "生活",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "forty",
+   "pos": "",
+   "zh": "四十",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "travel",
+   "pos": "",
+   "zh": "旅游",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "train",
+   "pos": "",
+   "zh": "火车",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "cheap",
+   "pos": "",
+   "zh": "便宜的",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "summer",
+   "pos": "",
+   "zh": "夏天",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "holiday",
+   "pos": "",
+   "zh": "假期；节日",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "plane",
+   "pos": "",
+   "zh": "飞机",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "surprise",
+   "pos": "",
+   "zh": "惊喜",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "turn",
+   "pos": "",
+   "zh": "转动；转弯",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "will",
+   "pos": "",
+   "zh": "（构成将来时）将；会",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "I’ll",
+   "pos": "",
+   "zh": "（I will）我将会",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "the UK",
+   "pos": "",
+   "zh": "英国",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "Hong Kong",
+   "pos": "",
+   "zh": "香港",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "ship",
+   "pos": "",
+   "zh": "船",
+   "must": 1
+  }
+ ],
+ "notes": [
+  "书页 74（图 81）Unit 4：课本原样为「I’ll=I will 我将会」（细体）。按规则把等号后的英文补充放到 zh 开头：en 写 I’ll，zh 写「（I will）我将会」；撇号照课本用弯撇号 ’（U+2019），比对时若对方用直撇号 ' 属同一词。",
+  "书页 72（图 79）Unit 1 week 的释义「星期，周」中间是逗号（不是分号），照抄为全角逗号；书页 73 Unit 3 parent「父，母；家长」同样保留逗号。",
+  "Review 1、Review 2、Story Time 在词表中没有词条，未放入 units。",
+  "词表不标词性，pos 全为空。",
+  "fifty 在词表里列在 Unit 1（目录中 fifty 是 Unit 3 Lesson 3 的 Key words），按词表照录在 u1，未改动。",
+  "Unit 3 词条跨栏：书页 73 左栏 feeling…farm 之后，右栏顶部 poor…swan 仍属 Unit 3，接着才是 Unit 4 标题。",
+  "黑体判断全部在放大图上做过，并与 Word List（图 82–84，书页 75–77）逐个对照，未发现矛盾；细体但可能被误认的：better、high、poor、cheap、surprise、count、proud、weekday、weekend、useful、enjoy、search、information、zero、away、office、subway、Hong Kong、the UK、I’ll。"
+ ]
+}
