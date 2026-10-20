@@ -1,7 +1,8 @@
 // 「节点」页：管理腾讯云上的同步节点 km-sync（#6）。审批 App 和网页后台（sync-node/web，#6 第二期）共用这一份。
 // 审批 App：网络请求走原生 Native.nodeCall（Node.java：Socket + 整包 AES-GCM），管理密钥只在原生侧，网页拿不到。
 // 网页后台：sync-node/web/web.js 提供同名的 Native 垫片（WebCrypto + fetch，会话密钥只在内存里），并设 window.KM_WEB = true。
-// 浏览器 ?mock 时用 mockNode 假数据；?mock&node=none 预览「未配置」，?mock&node=down 预览「连不上」，?mock&node=cert 预览证书快过期。
+// 浏览器 ?mock 时用 mockNode 假数据；?mock&node=none 预览「未配置」，?mock&node=down 预览「连不上」，?mock&node=cert 预览证书快过期，
+// ?mock&node=disk 预览磁盘快满、?mock&node=expiry 预览服务器快到期（设置页「节点提醒」里可以模拟后台检查，#6 第三期）。
 // 依赖页面里的 $、esc、toast、when、ago、MOCK、current、tab、renderList、renderTabs。
 
 const NODE_MOCK = (location.search.match(/[?&]node=(\w+)/) || [])[1] || '';
@@ -24,28 +25,53 @@ function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStora
 
 /** 调管理操作：成功 resolve data；失败 reject Error，e.kind = down（连不上）| denied（403）| rate（429）| op（节点拒绝，e.message 是中文原因）。 */
 function nodeCall(op, args) {
-  const settle = (status, text) => {
-    if (status === 200) {
-      let r; try { r = JSON.parse(text); } catch (e) { return Promise.reject(Object.assign(new Error('节点响应解不开'), { kind: 'down' })); }
-      if (r.ok) return Promise.resolve(r.data);
-      return Promise.reject(Object.assign(new Error(r.msg || r.err || '失败'), { kind: 'op', code: r.err }));
-    }
-    if (status === 0) return Promise.reject(Object.assign(new Error(text || '连不上'), { kind: 'down' }));
-    if (status === 429) return Promise.reject(Object.assign(new Error('请求太频繁，过一分钟再试'), { kind: 'rate' }));
-    if (KM_WEB) {
-      if (window.webLoggedOut) setTimeout(() => window.webLoggedOut('登录已过期或被踢下线，请重新登录'), 0);
-      return Promise.reject(Object.assign(new Error('登录已过期或被踢下线，请重新登录'), { kind: 'denied' }));
-    }
-    const off = lsGet('km-node-remote-off') === '1';
-    return Promise.reject(Object.assign(new Error(off ? '已关闭外网管理：只能经电脑 SSH 隧道管理。要恢复，在电脑上运行 deploy.ps1 -ResetAdminAccess'
-      : `节点拒绝了请求（${status}）：管理码可能已失效（换过管理密钥），或这个网络的 IP 被限速/封禁了`), { kind: 'denied' }));
-  };
-  if (MOCK) return new Promise(r => setTimeout(r, 120)).then(() => { const [s, t] = mockNode(op, args || {}); return settle(s, t); });
+  if (MOCK) return new Promise(r => setTimeout(r, 120)).then(() => { const [s, t] = mockNode(op, args || {}); return nodeSettle(s, t); });
   return new Promise((resolve, reject) => {
     const id = 'n' + (++nodeSeq);
-    nodeWaiting[id] = (s, t) => settle(s, t).then(resolve, reject);
+    nodeWaiting[id] = (s, t) => nodeSettle(s, t).then(resolve, reject);
     Native.nodeCall(id, op, JSON.stringify(args || {}));
   });
+}
+
+/** 换管理密钥（只在审批 App 里，#6 第三期）：新密钥在原生侧生成、发给节点、存进系统密钥库，网页只拿到新 kid。 */
+function nodeRotateKey() {
+  if (MOCK) return nodeCall('admin.rotateKey', { key: 'MOCK' });
+  return new Promise((resolve, reject) => {
+    const id = 'n' + (++nodeSeq);
+    nodeWaiting[id] = (s, t) => nodeSettle(s, t).then(resolve, reject);
+    Native.nodeRotateKey(id);
+  });
+}
+
+/** 把文字存成文件：审批 App 弹出系统「保存到」界面；网页后台和浏览器直接下载。resolve {ok, msg}。 */
+let fileSeq = 0; const fileWaiting = {};
+window.__fileSaved = (id, ok, msg) => { const w = fileWaiting[id]; delete fileWaiting[id]; if (w) w({ ok, msg }); };
+function saveTextFile(name, mime, text) {
+  if (!MOCK && window.Native && Native.saveFile) {
+    return new Promise(res => { const id = 'f' + (++fileSeq); fileWaiting[id] = res; Native.saveFile(id, name, mime, text); });
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: mime + ';charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; a.hidden = true;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return Promise.resolve({ ok: true, msg: '已下载 ' + name });
+}
+
+function nodeSettle(status, text) {
+  if (status === 200) {
+    let r; try { r = JSON.parse(text); } catch (e) { return Promise.reject(Object.assign(new Error('节点响应解不开'), { kind: 'down' })); }
+    if (r.ok) return Promise.resolve(r.data);
+    return Promise.reject(Object.assign(new Error(r.msg || r.err || '失败'), { kind: 'op', code: r.err }));
+  }
+  if (status === 0) return Promise.reject(Object.assign(new Error(text || '连不上'), { kind: 'down' }));
+  if (status === 429) return Promise.reject(Object.assign(new Error('请求太频繁，过一分钟再试'), { kind: 'rate' }));
+  if (KM_WEB) {
+    if (window.webLoggedOut) setTimeout(() => window.webLoggedOut('登录已过期或被踢下线，请重新登录'), 0);
+    return Promise.reject(Object.assign(new Error('登录已过期或被踢下线，请重新登录'), { kind: 'denied' }));
+  }
+  const off = lsGet('km-node-remote-off') === '1';
+  return Promise.reject(Object.assign(new Error(off ? '已关闭外网管理：只能经电脑 SSH 隧道管理。要恢复，在电脑上运行 deploy.ps1 -ResetAdminAccess'
+    : `节点拒绝了请求（${status}）：管理码可能已失效（换过管理密钥），或这个网络的 IP 被限速/封禁了`), { kind: 'denied' }));
 }
 
 // ---------- 小工具 ----------
@@ -147,6 +173,34 @@ function certText(t) {
   const left = h < 0 ? `已过期 ${fmtDays(-h * 3600)}` : `还剩 ${fmtDays(h * 3600)}`;
   return [`Let's Encrypt，${left}${h < 48 ? '（自动续期可能失败了，网页后台快打不开了；审批 App 和同步不受影响）' : '，自动续期'}`, h < 48 ? 'nbad' : ''];
 }
+/**
+ * 节点健康提醒（#6 第三期）：和审批 App 原生侧 NodeHealth.java 同样的规则和文案（真正发系统通知的是原生侧 CheckJob，
+ * 后台约每 30 分钟一次）；这里给浏览器 ?mock 预览「模拟一次后台检查」用。
+ * s = status（没取到时为 null，why 是原因）；st = {fails, days:{类型: 上次提醒日期}}，会被修改。返回 [{type, title, text}]。
+ */
+function nodeHealthAlerts(s, why, today, host, st) {
+  const out = [], add = a => { if (st.days[a.type] === today) return; st.days[a.type] = today; out.push(a); };
+  if (!s) {
+    st.fails = (st.fails || 0) + 1;
+    if (st.fails >= 2) add({ type: 'down', title: '同步节点连不上', text: `后台连续 ${st.fails} 次没连上 ${host}（${why || '原因不明'}）。服务器可能停了、到期了，或网络有问题；平板之间的局域网同步不受影响。` });
+    return out;
+  }
+  st.fails = 0;
+  if (s.disk_total > 0 && s.disk_free * 10 < s.disk_total) {
+    add({ type: 'disk', title: '同步节点磁盘快满了', text: `只剩 ${fmtBytes(s.disk_free)} / ${fmtBytes(s.disk_total)}（${Math.floor(s.disk_free * 100 / s.disk_total)}%）。可以在「节点 → 同步组」里清空或移除占用大的组。` });
+  }
+  if (s.days_left <= 7) {
+    const d = s.days_left, left = d > 0 ? `还剩 ${d} 天` : d === 0 ? '今天到期' : `已过期 ${-d} 天`;
+    add({ type: 'expiry', title: '同步节点服务器快到期了', text: `服务器 ${s.expiry} 到期，${left}。请到腾讯云续费，续费后在「节点」页点「改到期日」。到期停机后同步节点和网页后台都会停。` });
+  }
+  if (s.tls && s.tls.enabled && s.tls.hours_left != null && s.tls.hours_left < 48) {
+    const h = Math.round(s.tls.hours_left), left = h >= 0 ? `还剩 ${h} 小时` : `已过期 ${-h} 小时`;
+    add({ type: 'cert', title: '网页后台证书快过期了', text: `证书${left}，自动续期可能失败了。只影响网页后台 https://${host}，审批 App 和平板同步不受影响；在电脑上运行 deploy.ps1 -TlsCheck 查看。` });
+  }
+  return out;
+}
+const HEALTH_RULES = '审批 App 在后台大约每 30 分钟检查一次（和待审批提醒一起）。出现下面情况时发系统通知，每类每天最多一次：连续两次连不上、磁盘剩不到 10%、离服务器到期 7 天以内（含已过期）、网页后台证书剩不到 48 小时。';
+
 async function nodeCheck() {
   const info = nodeInfo();
   if (!info.configured) { window.nodeAlert = false; return; }
@@ -261,8 +315,9 @@ function renderGroup(gid) {
       <label for="gquota">空间上限（MB，1–500，空着 = 默认）</label><input id="gquota" type="number" min="1" max="500" value="${g.quota_mb || ''}">
       <div class="row"><button class="primary" id="gsave">保存备注和上限</button></div></div>
     <div class="card"><div class="row">
-      ${g.blocked_at ? '<button class="primary" id="gunblock">解除封禁</button>' : `<button id="gclear" ${g.live ? '' : 'disabled'}>清空数据</button><button class="danger" id="gremove">移除并封禁</button>`}
-    </div></div>`;
+      ${g.blocked_at ? `<button class="primary" id="gunblock">解除封禁</button>${g.live ? '' : '<button class="danger" id="gpurge">彻底删除登记</button>'}`
+        : `<button id="gclear" ${g.live ? '' : 'disabled'}>清空数据</button><button class="danger" id="gremove">移除并封禁</button>`}
+    </div>${g.blocked_at && !g.live ? '<div class="hint">「彻底删除登记」让这个已移除的空组从列表里消失；组号会被永久封禁，不能再解除封禁，设备也不能用邀请码把它重建出来。</div>' : ''}</div>`;
   const done = async (p, okMsg) => { try { await p; toast(okMsg); nodeState.groups = await nodeCall('groups.list'); renderGroup(gid); } catch (e) { toast(e.message, 4000); } };
   $('gsave').onclick = () => {
     const note = $('gnote').value.trim(), q = $('gquota').value.trim();
@@ -274,6 +329,15 @@ function renderGroup(gid) {
   if ($('gremove')) $('gremove').onclick = () => confirm('移除后这个组的设备不能再用同步节点（家里局域网同步不受影响）。' +
     (g.invite ? `如果是陌生组，建议同时作废它用的邀请码 ${g.invite}。` : '') + '\n\n确定移除并封禁组 ' + short(gid) + '？') && done(nodeCall('groups.remove', { gid }), '已移除并封禁');
   if ($('gunblock')) $('gunblock').onclick = () => confirm('解除封禁后，这个组的设备下一轮会自动重建并重新上传。确定？') && done(nodeCall('groups.unblock', { gid }), '已解除封禁');
+  if ($('gpurge')) $('gpurge').onclick = async () => {
+    if (!confirm(`彻底删除组 ${short(gid)} 的登记？\n\n它会从同步组列表里消失；组号被永久封禁：不能再解除封禁，设备也不能用邀请码把它重建出来。这一步不能撤销，会记进操作日志。` +
+      (g.invite ? `\n\n如果是陌生组，记得同时作废它用的邀请码 ${g.invite}。` : ''))) return;
+    try {
+      await nodeCall('groups.purge', { gid });
+      toast('已彻底删除组 ' + short(gid) + ' 的登记');
+      nodeState.sub = 'groups'; current = null; renderList();
+    } catch (e) { toast(e.message, 4000); }
+  };
   window.scrollTo(0, 0);
 }
 
@@ -396,9 +460,43 @@ async function nodeLogView(more) {
         <span class="hint">${when(i.t)}</span> <b>${esc(i.who)}</b> ${esc(i.op)}${i.obj ? ' · ' + esc(i.obj) : ''}
         <span class="${i.result === '成功' ? 'nok' : 'nbad'}">${esc(i.result)}</span>${i.note ? ` <span class="hint">${esc(i.note)}</span>` : ''}${i.ip ? ` <span class="hint">IP ${esc(i.ip)}</span>` : ''}
       </div>`).join('') : '<div class="hint">没有记录</div>'}</div>
-      ${L.more ? '<div class="row"><button id="lmore">更多</button></div>' : ''}</div>`);
+      <div class="row">${L.more ? '<button id="lmore">更多</button>' : ''}<button id="lexport">${sec ? '导出安全事件' : '导出全部日志'}（CSV 文件）</button></div></div>`);
   $('lsec').onchange = () => { nodeState.logSec = $('lsec').checked; nodeLogView(); };
   if ($('lmore')) $('lmore').onclick = () => nodeLogView(true);
+  $('lexport').onclick = async () => {
+    const b = $('lexport'); b.disabled = true; b.textContent = '正在导出…';
+    try {
+      const items = await nodeLogAll(sec, n => { if ($('lexport')) $('lexport').textContent = `正在导出…（已取 ${n} 条）`; });
+      const d = new Date(), p = x => String(x).padStart(2, '0');
+      const name = `km-sync-${sec ? 'security' : 'log'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.csv`;
+      const r = await saveTextFile(name, 'text/csv', logCsv(items));
+      toast(r.ok ? `${r.msg}（${items.length} 条）` : r.msg, 3500);
+    } catch (e) { toast('导出失败：' + e.message, 4000); }
+    if ($('lexport')) { $('lexport').disabled = false; $('lexport').textContent = sec ? '导出安全事件（CSV 文件）' : '导出全部日志（CSV 文件）'; }
+  };
+}
+
+/** 一页一页（每页 500 条，按编号从新到旧）取完全部日志；sec = 只要安全事件。最多 50000 条。 */
+async function nodeLogAll(sec, progress) {
+  const all = []; let before;
+  while (all.length < 50000) {
+    const pg = await nodeCall('log.list', { limit: 500, sec, before });
+    all.push(...pg.items);
+    if (progress) progress(all.length);
+    if (!pg.more || !pg.items.length) break;
+    before = pg.items[pg.items.length - 1].id;
+  }
+  return all;
+}
+
+/** 日志 → CSV（UTF-8 带 BOM，Excel 直接打开不乱码）。列和节点 log 表一一对应，时间是本机时区。 */
+function logCsv(items) {
+  const p = x => String(x).padStart(2, '0');
+  const t = ms => { const d = new Date(ms); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+  const cell = v => { const s = String(v == null ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = [['编号', '时间', '谁', '来源 IP', '操作', '对象', '结果', '说明', '安全事件']]
+    .concat(items.map(i => [i.id, t(i.t), i.who, i.ip, i.op, i.obj, i.result, i.note, i.sec ? '是' : '']));
+  return '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
 
 // ---------- 网页登录（只在审批 App 里：管理密钥是总钥匙，网页密码在这里设） ----------
@@ -490,13 +588,39 @@ async function renderWebLogin(box, s) {
 function renderNodeSettings(box) {
   const info = nodeInfo();
   box.innerHTML = `<div class="card"><div style="font-weight:700;margin-bottom:4px">同步节点</div>
-    ${info.configured ? `<div>地址 <b>${esc(info.host)}:${info.port}</b> · 管理码 kid <b>${esc(info.kid)}</b></div>
-      <div class="hint">管理密钥用系统密钥库加密存在本机，网页拿不到。换过管理密钥（deploy.ps1 -NewAdminKey）后请重新扫码。</div>
-      <div class="row"><button id="nrescan">重新扫码</button><button class="danger" id="nclear">清除</button></div><div id="ncode2" hidden>${adminCodeInputsHtml()}</div>`
+    ${info.configured ? `<div>地址 <b>${esc(info.host)}:${info.port}</b> · 管理码 kid <b id="nkid">${esc(info.kid)}</b></div>
+      <div class="hint">管理密钥用系统密钥库加密存在本机，网页拿不到。在电脑上换过管理密钥（deploy.ps1 -NewAdminKey）后请重新扫码。</div>
+      <div class="row"><button id="nrescan">重新扫码</button><button id="nrotate">换管理密钥</button><button class="danger" id="nclear">清除</button></div><div id="ncode2" hidden>${adminCodeInputsHtml()}</div>`
       : `<div class="hint">还没设置。在电脑上打开 <code>knowledge-map-app/signing/sync-node-admin.png</code>，用下面的按钮扫一次。</div><div id="ncode2">${adminCodeInputsHtml()}</div>`}
-  </div>`;
+  </div>
+  ${info.configured ? `<div class="card"><div style="font-weight:700;margin-bottom:4px">节点提醒</div>
+    <div class="hint">${HEALTH_RULES}手机系统设置里可以单独关掉「同步节点提醒」这一类通知。</div>
+    ${MOCK ? `<div class="hint">浏览器预览：每点一次「模拟一次后台检查」相当于后台检查一次（用 ?mock&amp;node=down / disk / expiry / cert 预览四种情况）。</div>
+      <div class="row"><button id="nsim">模拟一次后台检查</button><button id="nsimreset">清空模拟记录</button></div><div id="nsimout"></div>` : ''}
+  </div>` : ''}`;
   bindAdminCodeInputs($('ncode2'), () => { renderNodeSettings(box); nodeCheck(); });
   if ($('nrescan')) $('nrescan').onclick = () => { $('ncode2').hidden = !$('ncode2').hidden; };
+  if ($('nrotate')) $('nrotate').onclick = async () => {
+    if (!confirm('换一把新的管理密钥？\n\n这台手机自动换上新的，旧的立即失效：电脑上的 sync-node-admin.png、其它装了审批 App 的手机都不能再管理节点' +
+      '（以后需要时在电脑上运行 deploy.ps1 -NewAdminKey 重新生成，那时这台手机也要重新扫码）。网页后台的密码和登录不受影响。\n\n怀疑管理码图片外泄、或手机被别人用过时用。确定？')) return;
+    $('nrotate').disabled = true;
+    try {
+      const r = await nodeRotateKey();
+      toast(`已换成新的管理密钥（kid ${r.kid}），旧的已失效`, 4000);
+      renderNodeSettings(box); nodeCheck();
+    } catch (e) { toast(e.message, 5000); if ($('nrotate')) $('nrotate').disabled = false; renderNodeSettings(box); }
+  };
+  if ($('nsim')) $('nsim').onclick = async () => {
+    const key = 'km-node-mock-health-' + (NODE_MOCK || 'ok');
+    let st; try { st = JSON.parse(lsGet(key)) || { fails: 0, days: {} }; } catch (e) { st = { fails: 0, days: {} }; }
+    let s = null, why = '';
+    try { s = await nodeCall('status'); } catch (e) { why = e.kind === 'denied' ? '节点拒绝了请求：管理码可能已失效，或这个网络被限速/封禁' : e.message; }
+    const alerts = nodeHealthAlerts(s, why, day(Date.now()), info.host, st);
+    lsSet(key, JSON.stringify(st));
+    $('nsimout').innerHTML = (alerts.length ? alerts.map(a => `<div class="feed nnotify"><b>${esc(a.title)}</b><div>${esc(a.text)}</div><div class="hint">（模拟的系统通知）</div></div>`).join('')
+      : `<div class="hint">这次没有新提醒${!s ? `（已连续 ${st.fails} 次连不上，第 2 次起提醒）` : ''}${Object.keys(st.days).length ? '；今天已经提醒过、不再重复：' + Object.keys(st.days).filter(k => st.days[k] === day(Date.now())).map(k => ({ down: '连不上', disk: '磁盘', expiry: '到期', cert: '证书' }[k])).join('、') : ''}</div>`);
+  };
+  if ($('nsimreset')) $('nsimreset').onclick = () => { lsSet('km-node-mock-health-' + (NODE_MOCK || 'ok'), null); $('nsimout').innerHTML = '<div class="hint">已清空</div>'; };
   if ($('nclear')) $('nclear').onclick = () => {
     if (!confirm('清除本机保存的管理码？清除后要重新扫码才能管理节点（节点本身不受影响）。')) return;
     if (MOCK) window.__mockNodeInfo = { configured: false }; else Native.nodeClear();
@@ -513,7 +637,8 @@ function mockNode(op, a) {
   if (NODE_MOCK === 'down') return [0, '超时（可能 8787 端口没开放，或服务器停了）'];
   const now = Date.now(), H = 3600e3, D = 86400e3;
   const m = window.__mockNodeData = window.__mockNodeData || {
-    expiry: '2026-11-16', remote: true, ips: [], limits: { max_groups: 30, group_mb: 50, sec_mb: 4, req_mb: 8, ip_rate: 600 },
+    // ?mock&node=expiry：预览服务器 5 天后到期；?mock&node=disk：预览磁盘只剩 5%
+    expiry: NODE_MOCK === 'expiry' ? day(now + 5 * D) : '2026-11-16', remote: true, ips: [], limits: { max_groups: 30, group_mb: 50, sec_mb: 4, req_mb: 8, ip_rate: 600 },
     groups: [
       { gid: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', live: true, bytes: 1258291, created: now - 20 * D, last_seen: now - 10 * 60e3, invite: 'k7m2p9qa', invite_label: '小明', parent: null, blocked_at: null, note: '', quota_mb: null,
         devices: [{ dev: 'Xa91fe', last_seen: now - 10 * 60e3, last_upload: now - 12 * 60e3, sections: 22, bytes: 640000 }, { dev: 'b03c7d', last_seen: now - 2 * H, last_upload: now - 3 * H, sections: 22, bytes: 610000 }, { dev: 'f4e1aa', last_seen: now - 3 * D, last_upload: now - 3 * D, sections: 21, bytes: 8291 }] },
@@ -550,7 +675,7 @@ function mockNode(op, a) {
   }
   const ok = data => [200, JSON.stringify({ ok: true, data })];
   const fail = msg => [200, JSON.stringify({ ok: false, err: 'bad', msg })];
-  const log = (op, obj, result, note) => m.log.push({ id: m.log.length + 1, t: Date.now(), who: '管理员 c0ffee42', ip: '192.168.1.5', op, obj, result, note, sec: 0 });
+  const log = (op, obj, result, note) => m.log.push({ id: m.log.length + 1, t: Date.now(), who: '管理员 ' + mockNodeInfo().kid, ip: '192.168.1.5', op, obj, result, note, sec: 0 });
   const g = a.gid && m.groups.find(x => x.gid === a.gid);
   const stateOfInv = i => i.revoked_at ? 'revoked' : i.expires < now ? 'expired' : i.used >= i.max_uses ? 'used' : 'ok';
   const qrOf = i => `kmnode:1?h=43.142.41.27&p=8787&i=${i.id}&s=MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK`;
@@ -558,7 +683,7 @@ function mockNode(op, a) {
     case 'status': {
       const exp = new Date(m.expiry + 'T00:00:00+08:00'), today = new Date(new Date(now + 8 * H).toISOString().slice(0, 10) + 'T00:00:00+08:00');
       const tlsLeft = m.tlsLeft != null ? m.tlsLeft : 101.5;
-      return ok({ version: '1.1.0', proto: 1, started: now - 31 * D, uptime: 31 * 86400 + 3600, now, disk_total: 42140479488, disk_free: 35540000000,
+      return ok({ version: '1.3.0', proto: 1, started: now - 31 * D, uptime: 31 * 86400 + 3600, now, disk_total: 42140479488, disk_free: NODE_MOCK === 'disk' ? 2200000000 : 35540000000,
         node_db: 45000000, admin_db: 81920, groups: m.groups.filter(x => x.live).length, bytes: m.groups.reduce((s, x) => s + x.bytes, 0),
         requests_24h: 1204, errors_24h: 0, expiry: m.expiry, days_left: Math.round((exp - today) / D), limits: m.limits,
         remote_admin: m.remote, allow_ips: m.ips, breaker_until: 0, your_ip: '192.168.1.5', host: '43.142.41.27', port: 8787,
@@ -586,6 +711,19 @@ function mockNode(op, a) {
     case 'groups.clear': if (!g || !g.live) return fail('这个组在节点上没有数据'); g.bytes = 0; g.devices.forEach(d => { d.sections = 0; d.bytes = 0; }); log(op, short(g.gid), '成功', '清空数据'); return ok({});
     case 'groups.remove': if (!g || g.blocked_at) return fail('这个组已经被移除了'); g.blocked_at = Date.now(); g.live = false; g.bytes = 0; g.devices = []; log(op, short(g.gid), '成功', '移除并封禁'); return ok({});
     case 'groups.unblock': if (!g || !g.blocked_at) return fail('这个组没有被封禁'); g.blocked_at = null; log(op, short(g.gid), '成功', '解除封禁'); return ok({});
+    case 'groups.purge': {
+      if (!g || !g.blocked_at) { log(op, short(a.gid), '失败', '只能彻底删除「已移除并封禁」的组'); return fail('只能彻底删除「已移除并封禁」的组'); }
+      if (g.live) { log(op, short(a.gid), '失败', '这个组在节点上还有数据，不能彻底删除'); return fail('这个组在节点上还有数据，不能彻底删除'); }
+      m.groups = m.groups.filter(x => x !== g);
+      log(op, short(g.gid), '成功', '彻底删除登记（组号永久封禁，不能再建、不能解除封禁' + (g.invite ? `，来源邀请码 ${g.invite}` : '') + '）');
+      return ok({});
+    }
+    case 'admin.rotateKey': {
+      const info = mockNodeInfo(), old = info.kid, kid = Array.from({ length: 8 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+      log(op, kid, '成功', `在审批 App 里换管理密钥：旧 kid ${old} 立即失效，新 kid ${kid}（电脑上的旧管理码也失效）`);
+      info.kid = kid;
+      return ok({ kid });
+    }
     case 'groups.setNote': if (!g) return fail('没有这个组'); if ((a.note || '').length > 40) return fail('备注最多 40 个字'); g.note = a.note; log(op, short(g.gid), '成功', `备注改为「${a.note}」`); return ok({});
     case 'groups.setQuota': if (!g) return fail('没有这个组'); g.quota_mb = a.mb; log(op, short(g.gid), '成功', a.mb ? `空间上限改为 ${a.mb} MB` : '空间上限改为默认'); return ok({});
     case 'invites.create': {

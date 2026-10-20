@@ -42,6 +42,16 @@ powershell -ExecutionPolicy Bypass -File knowledge-map-app\sync-node\deploy.ps1 
 - 服务器上导入不了 python3-cryptography 时，部署会停下报错（不自动安装，请管理员决定）。
 - 手机丢了：`deploy.ps1 -NewAdminKey`，旧管理码立即失效，用审批 App 重新扫新的 `sync-node-admin.png`。
 - 把自己锁在外面（IP 名单填错、关了外网管理、被封 IP）：`deploy.ps1 -ResetAdminAccess`。
+- 1.3.0 起审批 App「设置 → 同步节点 → 换管理密钥」可以在手机上换钥：新密钥只在手机里，电脑上的 `sync-node.json` / `sync-node-admin.png`
+  随之失效。之后再部署照常（会黄字提示本机管理码已失效，并在 `sync-node.json` 里记 `stale_note`）；远程测试要用管理密钥，
+  需要时 `deploy.ps1 -NewAdminKey`（手机要重新扫码）。
+
+### 第三期（1.3.0）
+
+- 「同步组」里已移除、没有数据的组可以「彻底删除登记」（App 和网页都有）：从列表消失，组号永久封禁，设备不能用邀请码把它重建。
+- 「操作日志」可以导出 CSV（UTF-8 带 BOM，Excel 能直接打开）：App 弹系统「保存到」，网页直接下载；勾了「只看安全事件」就只导出安全事件。
+- 审批 App 后台检查时顺便取一次节点状态，连续两次连不上、磁盘 < 10%、离到期 ≤ 7 天、证书 < 48 小时发系统通知（每类每天最多一次）。
+  浏览器 `index.html?mock&node=down|disk|expiry|cert` →「设置」→「模拟一次后台检查」可以预览四种通知文案。
 
 ### 网页后台（1.1.0）
 
