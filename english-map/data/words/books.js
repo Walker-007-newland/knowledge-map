@@ -9,7 +9,7 @@ window.KW = window.KW || {
   add(id, list) { this.words[id] = list; }
 };
 KW.books = [
-  { id: 'mj3a', grade: 3, term: '上', pub: '闽教版', ed: '2024 秋新版', checked: false, mustMarked: true,
+  { id: 'mj3a', grade: 3, term: '上', pub: '闽教版', ed: '2024 秋新版', checked: true, mustMarked: true,
     src: '闽教版三年级上册（2025 年度印次），书末 Words and Expressions 第 74–77 页；国家中小学智慧教育平台电子课本',
     units: [
       { id: "u1", name: "Unit 1 Meeting Friends" },
@@ -17,7 +17,7 @@ KW.books = [
       { id: "u3", name: "Unit 3 Colors Around Us" },
       { id: "u4", name: "Unit 4 Loving My Family" }
     ] },
-  { id: 'mj3b', grade: 3, term: '下', pub: '闽教版', ed: '2025 春新版', checked: false, mustMarked: true,
+  { id: 'mj3b', grade: 3, term: '下', pub: '闽教版', ed: '2025 春新版', checked: true, mustMarked: true,
     src: '闽教版三年级下册（2026 年度印次），书末 Words and Expressions 第 72–74 页；国家中小学智慧教育平台电子课本',
     units: [
       { id: "u1", name: "Unit 1 Our Animal Friends" },
@@ -25,7 +25,7 @@ KW.books = [
       { id: "u3", name: "Unit 3 Time" },
       { id: "u4", name: "Unit 4 Healthy Eating" }
     ] },
-  { id: 'mj4a', grade: 4, term: '上', pub: '闽教版', ed: '2025 秋新版', checked: false, mustMarked: true,
+  { id: 'mj4a', grade: 4, term: '上', pub: '闽教版', ed: '2025 秋新版', checked: true, mustMarked: true,
     src: '闽教版四年级上册（2026 年度印次），书末 Words and Expressions 第 72–74 页；国家中小学智慧教育平台电子课本',
     units: [
       { id: "u1", name: "Unit 1 Our School" },
@@ -33,7 +33,7 @@ KW.books = [
       { id: "u3", name: "Unit 3 Our Hobbies" },
       { id: "u4", name: "Unit 4 Chinese Festivals" }
     ] },
-  { id: 'mj4b', grade: 4, term: '下', pub: '闽教版', ed: '2026 春新版', checked: false, mustMarked: true,
+  { id: 'mj4b', grade: 4, term: '下', pub: '闽教版', ed: '2026 春新版', checked: true, mustMarked: true,
     src: '闽教版四年级下册（2026 春版），书末 Words and Expressions 第 72–74 页；国家中小学智慧教育平台电子课本',
     units: [
       { id: "u1", name: "Unit 1 Weekly Activities" },
