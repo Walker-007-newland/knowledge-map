@@ -17,6 +17,7 @@
     <span id="progressText">0 / 0</span>
   </div>
   <div class="actions">
+    <button class="btn" id="btnWords">单元单词</button>
     <button class="btn" id="btnDictation">单词听写</button>
     <button class="btn primary" id="btnDiag">入门诊断</button>
     <button class="btn" id="btnPath">学习路线</button>
@@ -77,6 +78,8 @@
 <script src="data/skill-d.js"></script>
 <script src="js/app.js"></script>
 <script>
+  // 单元单词：内置课本词表，走 file://（和图谱同一个存储空间）
+  document.getElementById('btnWords').onclick = function () { location.href = 'words.html'; };
   // 单词听写：平板 App 里要走 https 虚拟地址（识别引擎在 file:// 下用不了），浏览器里直接打开
   document.getElementById('btnDictation').onclick = function () {
     location.href = window.KMApp && KMApp.goBack

@@ -84,7 +84,7 @@
   $env:KM_SIGNING_DIR='C:\Users\newland\Documents\teach\knowledge-map-app\signing'; powershell -ExecutionPolicy Bypass -File <工作区>\knowledge-map-app\build.ps1
   ```
   （build.ps1 末尾有 APK 自检）
-- **真机测试**：先 `adb devices` 看有没有 USB 真机（目前是新大陆 X800 / Android 12、新大陆 P70 / Android 14，见 docs/team/AI团队说明.md）。有就用 adb 装包、点按（`input tap/text`）、读控件（`uiautomator dump`）、截图（`screencap`，X800 禁止截图只能读控件文字）、看日志（`logcat`）做真机验收；只动知识图谱 App 及其数据，不改系统设置、别的应用和账号；测完装回当前正式版。没有真机时，真机项在测试报告里标「需管理员真机确认」
+- **真机测试**：先 `adb devices` 看有没有 USB 真机（目前是新大陆 X800 / Android 12、新大陆 P70 / Android 14，见 docs/team/AI团队说明.md）。有就用 adb 装包、点按（`input tap/text`）、读控件（`uiautomator dump`）、截图（`screencap`，X800 禁止截图只能读控件文字）、看日志（`logcat`）做真机验收。**用真机前先占设备锁**：创建 `C:/Users/newland/Documents/teach-team-wt/.device-lock`（写入「#<n> 时间」），已存在且 2 小时内有更新就说明别人在用，先做别的或等；用完删掉。只动知识图谱 App 及其数据，不改系统设置、别的应用和账号；测完装回当前正式版。没有真机时，真机项在测试报告里标「需管理员真机确认」
 - 通过后上线：
   ```
   powershell -ExecutionPolicy Bypass -File C:\Users\newland\Documents\teach\team\release.ps1 -Issue <n> -Notes "<给平板用户看的一句话更新说明>"

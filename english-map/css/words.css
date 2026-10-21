@@ -1,0 +1,90 @@
+/* 单元单词页：在 style.css、dictation.css 的基础上补充 */
+body.words main { padding-bottom: 96px; }
+.muted { color: var(--muted); }
+
+/* 年级、册 */
+.grades { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.grade { min-height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; cursor: pointer; }
+.grade.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.grade.off { opacity: .4; }
+.book-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.book-bar .seg button { min-height: 44px; }
+.book-name { color: var(--muted); font-size: 14px; }
+.badge-check { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--warn-bg); color: var(--st-learning); border: 1px solid var(--st-learning); }
+.badge-check[hidden] { display: none; }
+#btnAllWrong { margin-left: auto; min-height: 44px; }
+
+/* 单元列表 */
+.units-head { display: flex; gap: 18px; padding: 4px 4px 10px; border-bottom: 1px solid var(--line); }
+.units-head label[hidden] { display: none; }
+.chk { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; min-height: 40px; }
+.chk input, .unit input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.unit { display: grid; grid-template-columns: 30px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .8fr); gap: 10px; align-items: center;
+  padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 10px; min-height: 56px; }
+.unit:last-child { border-bottom: 0; }
+.unit.on { background: var(--rhyme-bg); }
+.u-name { font-weight: 600; display: flex; flex-direction: column; line-height: 1.3; }
+.u-name small { font-weight: 400; color: var(--muted); font-size: 13px; }
+.u-prog { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.u-prog .bar i { background: var(--st-mastered); }
+.u-dict { font-size: 14px; text-align: right; }
+.u-dict small { color: var(--muted); font-size: 12px; }
+.hint.src { font-size: 12px; }
+
+/* 底部操作栏 */
+.bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); box-shadow: var(--shadow); }
+.bottom-bar .sel-info { flex: 1; min-width: 160px; font-size: 15px; }
+.bottom-bar .btn.big { min-width: 96px; }
+body:not(.on-home) .bottom-bar { display: none; }
+
+/* 背诵卡片 */
+.card-top, .card-opts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.card-prog { margin-left: auto; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.seg.small button { padding: 6px 12px; font-size: 14px; }
+.seg[data-opt] button { min-height: 44px; }
+.seg.small button { min-height: 40px; }
+.flash { position: relative; min-height: 300px; margin: 12px 0; padding: 32px 20px 40px; border-radius: 20px; background: var(--surface);
+  border: 1px solid var(--line); box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.flash.was-known { border-color: var(--st-mastered); }
+.flash-front, .flash-back { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.flash-front[hidden], .flash-back[hidden] { display: none; }
+.f-en { font-size: 48px; font-weight: 700; line-height: 1.2; font-family: "Segoe UI", Roboto, Arial, sans-serif; word-break: break-word; }
+.f-zh { font-size: 30px; line-height: 1.4; }
+.f-pos { font-size: 18px; color: var(--muted); font-style: italic; }
+.f-audio { font-size: 72px; line-height: 1; }
+.flash-tip { position: absolute; bottom: 10px; left: 0; right: 0; font-size: 13px; color: var(--muted); }
+.card-btns { display: grid; grid-template-columns: 56px 1fr 1fr; gap: 12px; }
+.card-btns .btn.big { height: 60px; font-size: 20px; }
+.card-btns .say { width: 56px; height: 60px; }
+.card-btns .no { background: var(--bad-bg); border-color: var(--st-weak); }
+.card-btns .yes { background: var(--st-mastered); border-color: var(--st-mastered); color: #fff; }
+
+/* 错词本 */
+.w-group { font-size: 15px; color: var(--muted); margin: 16px 0 4px; }
+.w-group:first-child { margin-top: 4px; }
+.w-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto 44px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.w-row b { font-size: 18px; font-family: "Segoe UI", Roboto, Arial, sans-serif; }
+.w-zh { color: var(--muted); }
+.w-n { font-size: 13px; color: var(--st-weak); white-space: nowrap; }
+.w-row .btn.icon { width: 44px; height: 44px; }
+
+.toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 20; padding: 10px 18px; border-radius: 99px;
+  background: var(--text); color: var(--bg); font-size: 15px; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+.toast[hidden] { display: none; }
+
+@media (max-width: 600px) {
+  .grades { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .grade { padding: 0; font-size: 15px; }
+  .grade .g-suffix { display: none; }
+  .bottom-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .bottom-bar .sel-info { grid-column: 1 / -1; min-width: 0; }
+  .bottom-bar .btn.big { min-width: 0; padding: 0 8px; }
+  body.words main { padding-bottom: 130px; }
+  .unit { grid-template-columns: 28px minmax(0, 1fr) minmax(0, .9fr); }
+  .u-dict { grid-column: 2 / -1; text-align: left; }
+  .f-en { font-size: 38px; }
+  .w-row { grid-template-columns: minmax(0, 1fr) auto 44px; }
+  .w-zh { grid-column: 1 / -1; grid-row: 2; }
+}

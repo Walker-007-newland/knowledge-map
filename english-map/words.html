@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>单元单词</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dictation.css">
+<link rel="stylesheet" href="css/words.css">
+</head>
+<body class="dict words">
+<header class="topbar">
+  <button class="btn" id="btnBack">← 返回</button>
+  <div class="brand">
+    <h1 id="title">单元单词</h1>
+    <span class="sub" id="subtitle">课本单元词表 · 选单元背诵、默写</span>
+  </div>
+</header>
+
+<main>
+  <!-- 选单元 -->
+  <section class="view" id="vHome">
+    <div class="grades" id="grades" role="tablist" aria-label="年级"></div>
+    <div class="book-bar">
+      <div class="seg" id="terms"><button data-t="上">上册</button><button data-t="下">下册</button></div>
+      <span class="book-name" id="bookName"></span>
+      <span class="badge-check" id="bookUnchecked" hidden title="这一册的词表还没有对照纸质课本抽查确认">待核对</span>
+      <button class="btn" id="btnAllWrong">全部错词</button>
+    </div>
+    <div class="card units-card">
+      <div class="units-head">
+        <label class="chk"><input type="checkbox" id="chkAll"> 全选</label>
+        <label class="chk" id="mustWrap" hidden><input type="checkbox" id="chkMust"> 只看必背</label>
+      </div>
+      <div id="units"></div>
+      <p class="empty" id="unitsLoading" hidden>正在载入词表…</p>
+    </div>
+    <p class="hint">课本以外的词（老师补充的），用英语图谱首页的「单词听写」拍照建词单。</p>
+    <p class="hint src" id="bookSrc"></p>
+    <div class="bottom-bar">
+      <span class="sel-info" id="selInfo">先勾选要背的单元</span>
+      <button class="btn big" id="btnWrong" disabled>错词</button>
+      <button class="btn big" id="btnDict" disabled>默写</button>
+      <button class="btn big primary" id="btnStudy" disabled>背诵</button>
+    </div>
+  </section>
+
+  <!-- 背诵卡片 -->
+  <section class="view" id="vCard" hidden>
+    <div class="card-top">
+      <div class="seg" id="faceSeg" data-opt="face">
+        <button data-v="en">看英文</button><button data-v="zh">看中文</button><button data-v="audio">听音</button>
+      </div>
+      <span class="card-prog" id="cardProg">1 / 1</span>
+    </div>
+    <div class="card-opts">
+      <div class="seg small" data-opt="order"><button data-v="book">课本顺序</button><button data-v="shuffle">打乱</button></div>
+      <div class="seg small" data-opt="range"><button data-v="todo">只背还不会的</button><button data-v="all">全部</button></div>
+    </div>
+    <div class="flash" id="flash" role="button" tabindex="0" aria-label="点一下翻面">
+      <div class="flash-front" id="flashFront"></div>
+      <div class="flash-back" id="flashBack" hidden></div>
+      <div class="flash-tip" id="flashTip">点卡片翻面</div>
+    </div>
+    <div class="card-btns">
+      <button class="btn icon say" id="btnSay" aria-label="再读一遍">🔊</button>
+      <button class="btn big no" id="btnNo">不会</button>
+      <button class="btn big yes" id="btnYes">会了</button>
+    </div>
+  </section>
+
+  <!-- 背诵结束 -->
+  <section class="view" id="vCardEnd" hidden>
+    <div class="card result">
+      <div class="score" id="endScore"></div>
+      <div class="score-sub" id="endSub"></div>
+      <div id="endList"></div>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnEndHome">回到单元</button>
+      <button class="btn" id="btnEndDict">去默写这些词</button>
+      <button class="btn primary big" id="btnEndAgain">再背不会的</button>
+    </div>
+  </section>
+
+  <!-- 错词本 -->
+  <section class="view" id="vWrong" hidden>
+    <div class="card">
+      <h2 id="wrongTitle">错词本</h2>
+      <p class="hint" id="wrongHint">默写写错的词会进错词本，再默写写对一次就移出。</p>
+      <div id="wrongRows"></div>
+      <p class="empty" id="wrongEmpty" hidden>没有错词，真棒！</p>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn big" id="btnWrongStudy">背错词</button>
+      <button class="btn primary big" id="btnWrongDict">默写错词</button>
+    </div>
+  </section>
+
+  <!-- 默写设置 / 默写中 / 批改 / 结果：js/dict-run.js 生成（和单词听写页共用） -->
+  <div id="dictRun"></div>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="data/words/books.js"></script>
+<script src="js/dict-run.js"></script>
+<script>
+  DictRun.mount(document.getElementById('dictRun'), {
+    act: '默写', listWord: '组词', start: '开始默写', scopeWrong: '只默错词', orderList: '按课本顺序',
+    stop: '结束默写', back: '返回单元', again: '全部再默一遍', wrongAgain: '错词再默写'
+  });
+</script>
+<script src="js/words.js"></script>
+</body>
+</html>
