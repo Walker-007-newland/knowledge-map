@@ -18,7 +18,7 @@ token 读 knowledge-map-app/signing/github-token.txt（已 gitignore，不要打
   python team/gh.py setup                       建仓库标签和团队状态单（只需一次）
 正文文件写成 UTF-8 的 .md，避免命令行中文编码问题。
 """
-import json, os, sys, urllib.request, urllib.error, urllib.parse, datetime
+import json, os, re, sys, urllib.request, urllib.error, urllib.parse, datetime
 
 sys.stdout.reconfigure(encoding='utf-8')
 REPO = 'Walker-007-newland/knowledge-map-team'
@@ -88,6 +88,25 @@ def is_status(i):
 def brief(i):
     return {'number': i['number'], 'title': i['title'], 'state': state_of(i),
             'updated': i['updated_at'], 'url': i['html_url']}
+
+
+ADMIN_HEADS = ('## 给管理员',)
+ADMIN_LIMIT = 500
+
+
+def admin_len(body):
+    """摘要字数：去掉标题行、Markdown 符号和空白后的字符数。"""
+    lines = body.strip().splitlines()[1:]
+    text = re.sub(r'[#*`>|\-]', '', '\n'.join(lines))
+    return len(re.sub(r'\s', '', text))
+
+
+def check_admin(body):
+    head = body.strip().splitlines()[0] if body.strip() else ''
+    if head.startswith(ADMIN_HEADS):
+        n = admin_len(body)
+        if n > ADMIN_LIMIT:
+            raise SystemExit(f'「给管理员」摘要 {n} 字，超过 {ADMIN_LIMIT} 字上限。只写结论、理由、管理员要做什么；细节另发一条「## 详细说明」。')
 
 
 def read_file(p):
@@ -185,6 +204,7 @@ def main(argv):
         i = api('POST', f'/repos/{REPO}/issues', {'title': a[0], 'body': read_file(a[1]), 'labels': [PREFIX + '待评审']})
         print(json.dumps(brief(i), ensure_ascii=False))
     elif cmd == 'comment':
+        check_admin(read_file(a[1]))
         c = api('POST', f'/repos/{REPO}/issues/{a[0]}/comments', {'body': read_file(a[1])})
         print(c['html_url'])
     elif cmd == 'state':
