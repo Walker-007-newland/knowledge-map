@@ -2,6 +2,7 @@
 // 册 id：mj 闽教版 / ra 仁爱版 + 年级 + a 上册 / b 下册。没录入的册不要写进来（年级标签会灰掉）
 // checked：管理员已对照纸质课本抽查确认（false 时页面显示「待核对」）
 // mustMarked：课本词表区分了必背（四会）和认读词；false 时全部按必背，页面不显示「只看必背」
+// old：新版课本还没出版、暂用现行旧版课本的词表（页面显示「旧版教材」），新版出版后替换整册（管理员 2026-10-22 决定）
 // units、mustMarked 由 docs/wordlists/unit_build.py 根据 docs/unit-words/<册id>.json 更新，其余手工维护
 window.KW = window.KW || {
   books: [],
@@ -49,6 +50,19 @@ KW.books = [
       { id: "u3", name: "Unit 3 Plans and Dates" },
       { id: "u4", name: "Unit 4 Our Dream Jobs" }
     ] },
+  { id: 'mj5b', grade: 5, term: '下', pub: '闽教版', ed: '旧版（三年级起点）', old: true, checked: false, mustMarked: true,
+    src: '闽教版五年级下册旧版（三年级起点，2025 年 12 月第 20 次印刷），书末 Words and Expressions 第 76–77 页；国家中小学智慧教育平台电子课本。新版 2027 春出版后替换',
+    units: [
+      { id: "u1", name: "Unit 1 Winter Vacation" },
+      { id: "u2", name: "Unit 2 A Visit to the Zoo" },
+      { id: "u3", name: "Unit 3 Zhong Nanshan" },
+      { id: "u4", name: "Unit 4 A Spring Outing" },
+      { id: "r1", name: "Review 1" },
+      { id: "u5", name: "Unit 5 Sports Day" },
+      { id: "u6", name: "Unit 6 Feelings" },
+      { id: "u7", name: "Unit 7 Tall Buildings" },
+      { id: "u8", name: "Unit 8 Dates of the Month" }
+    ] },
   { id: 'mj6a', grade: 6, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: false, mustMarked: true,
     src: '闽教版六年级上册（2026 年度印次），书末 Words and Expressions 第 93–95 页；国家中小学智慧教育平台电子课本',
     units: [
@@ -56,5 +70,17 @@ KW.books = [
       { id: "u2", name: "Unit 2 Healthy Life" },
       { id: "u3", name: "Unit 3 Good Manners" },
       { id: "u4", name: "Unit 4 Great People" }
+    ] },
+  { id: 'mj6b', grade: 6, term: '下', pub: '闽教版', ed: '旧版（三年级起点）', old: true, checked: false, mustMarked: true,
+    src: '闽教版六年级下册旧版（三年级起点，2025 年 12 月第 19 次印刷），书末 Words and Expressions 第 76–77 页；国家中小学智慧教育平台电子课本。新版 2027 春出版后替换',
+    units: [
+      { id: "u1", name: "Unit 1 Winter Activities" },
+      { id: "u2", name: "Unit 2 Helping Each Other" },
+      { id: "u3", name: "Unit 3 Seeing a Doctor" },
+      { id: "u4", name: "Unit 4 Mother's Day" },
+      { id: "u5", name: "Unit 5 Occupation" },
+      { id: "u6", name: "Unit 6 Dream Job" },
+      { id: "u7", name: "Unit 7 A Visit to a Middle School" },
+      { id: "u8", name: "Unit 8 Farewell" }
     ] }
 ];

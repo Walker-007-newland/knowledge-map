@@ -159,6 +159,7 @@
     $('#terms').querySelectorAll('button').forEach(x => { x.classList.toggle('on', x.dataset.t === b.term); x.disabled = !terms.has(x.dataset.t); });
     $('#bookName').textContent = `${b.pub} · ${b.ed}`;
     $('#bookUnchecked').hidden = !!b.checked;
+    $('#bookOld').hidden = !b.old;
     $('#mustWrap').hidden = !b.mustMarked;
     $('#chkMust').checked = !!S.must;
     $('#bookSrc').textContent = b.src ? '词表来源：' + b.src : '';
