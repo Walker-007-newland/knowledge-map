@@ -454,16 +454,26 @@ async function openIssue(n, keepScroll) {
   if (current !== i) return;
   const st = stateOf(i);
   const lastProposal = [...comments].reverse().find(c => roleOf(c.body) === '产品');
-  $('main').innerHTML = `
-    <div class="card"><div style="font-size:18px;font-weight:700">${esc(i.title)}</div>
-      <div class="meta"><span class="chip s-${st}">${st}</span><span>提出于 ${when(i.created_at)}</span>${i.state === 'closed' ? '<span>已关闭</span>' : ''}</div></div>
-    <div class="card"><div class="role"><span><b>需求员</b> · 需求</span><span>${when(i.created_at)}</span></div><div class="md">${md(i.body)}</div></div>
-    ${comments.map(c => `<div class="card ${c === lastProposal && st === '待审批' ? 'proposal' : ''}">
+  // 团队写给管理员的摘要（≤500 字）：有就只显示它，其余记录收起
+  const brief = [...comments].reverse().find(c => /^##\s*给管理员/.test((c.body || '').trim()));
+  const head = `<div class="card"><div style="font-size:18px;font-weight:700">${esc(i.title)}</div>
+      <div class="meta"><span class="chip s-${st}">${st}</span><span>提出于 ${when(i.created_at)}</span>${i.state === 'closed' ? '<span>已关闭</span>' : ''}</div></div>`;
+  const full = `<div class="card"><div class="role"><span><b>需求员</b> · 需求</span><span>${when(i.created_at)}</span></div><div class="md">${md(i.body)}</div></div>
+    ${comments.filter(c => c !== brief).map(c => `<div class="card ${c === lastProposal && st === '待审批' && !brief ? 'proposal' : ''}">
       <div class="role"><span><b>${roleOf(c.body)}</b>${c === lastProposal ? ' · 最新方案' : ''}</span><span>${when(c.created_at)}</span></div>
       <div class="md">${md(c.body)}</div></div>`).join('')}`;
+  $('main').innerHTML = brief ? `${head}
+    <div class="card proposal brief"><div class="role"><span><b>给你的摘要</b></span><span>${when(brief.created_at)}</span></div>
+      <div class="md">${md(String(brief.body).trim().replace(/^##[^\n]*\n/, ''))}</div></div>
+    <button class="board" id="moreLog">展开全部记录（需求 + ${comments.length - 1} 条）</button>
+    <div id="fullLog" hidden>${full}</div>` : head + full;
+  if (brief) $('moreLog').onclick = () => {
+    const h = !$('fullLog').hidden; $('fullLog').hidden = h;
+    $('moreLog').textContent = h ? `展开全部记录（需求 + ${comments.length - 1} 条）` : '收起全部记录';
+  };
   if (!keepScroll) {
     const p = $('main').querySelector('.proposal');
-    if (p) p.scrollIntoView(); else window.scrollTo(0, 0);
+    if (p && !brief) p.scrollIntoView(); else window.scrollTo(0, 0);
   }
   renderActions(i, st);
 }
