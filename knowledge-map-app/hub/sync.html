@@ -186,6 +186,27 @@
     if (el.dataset.p && (!kind || el.dataset.p === kind)) { show(el, ''); clearTimeout(progT); }
   }
 
+  // 第一次同步（扫加入码加入、局域网配对后）：先显示「正在第一次同步…」，同步完（状态回到已同步、而且是这之后同步的）换成结果；
+  // 中间合并进来的报告接在后面；出错 / 1 分钟还没完成就说清楚现在卡在哪
+  let firstSync = null;
+  function firstStart(base, note) {
+    clearTimeout(firstSync && firstSync.timer);
+    firstSync = { at: Date.now() - 1000, base, note: note || '', report: '' };
+    show($('groupMsg'), base + '，正在第一次同步…' + firstSync.note, 'good');
+    firstSync.timer = setTimeout(() => firstEnd(true), 60000);
+  }
+  function firstEnd(timeout) {
+    const f = firstSync;
+    if (!f || !st || !st.inGroup) return;
+    let text, cls = 'good';
+    if (st.status === 'ok' && (st.lastOk || 0) >= f.at) text = f.base + '，第一次同步完成' + (f.report ? '。' + f.report : '') + f.note;
+    else if (st.status === 'error' || st.status === 'offline' || timeout) { text = f.base + '，第一次同步还没完成：' + KMSync.statusText(st); cls = 'bad'; }
+    else return;
+    clearTimeout(f.timer);
+    firstSync = null;
+    show($('groupMsg'), text, cls);
+  }
+
   function render() {
     st = KMSync.state() || st;
     $('statusCard').hidden = false;
@@ -389,6 +410,7 @@
       // 立即同步：看到过「同步中」、或者状态已经回到同步完的样子，就收起「正在同步…」
       if (st && st.status === 'syncing') sawBusy = true;
       else if (st && (sawBusy || st.status === 'ok' || st.status === 'error' || st.status === 'offline')) clearProgress('sync');
+      firstEnd(false);
     }
     else if (t === 'action-result') {
       if (d.op === 'pairOpen' || d.op === 'pairConfirm') {
@@ -411,8 +433,10 @@
       if (d.ok) {
         if (d.first) backup();
         render();
-        show($('groupMsg'), d.msg + (d.first ? '（配对前的备份在 下载/知识图谱/）' : ''), 'good');
+        if (d.first) firstStart('已和「' + (d.name || '另一台设备') + '」配对', '（配对前的备份在 下载/知识图谱/）');
+        else show($('groupMsg'), d.msg, 'good');
         lanMsg('');
+        firstEnd(false);
       } else {
         lanMsg(d.msg, 'bad');
         if ($('lanCard').hidden) show(!(st && st.inGroup) ? $('startMsg') : $('groupMsg'), d.msg, 'bad');
@@ -431,7 +455,7 @@
       if (d.role === 'guest' || joinRole === 'guest') {
         joinRole = '';
         $('joinWait').hidden = true;
-        if (d.ok) { backup(); show($('groupMsg'), d.msg + '，正在第一次同步…（同步前的备份在 下载/知识图谱/）', 'good'); }
+        if (d.ok) { backup(); firstStart(d.msg, '（同步前的备份在 下载/知识图谱/）'); }
         else show($('startMsg'), d.msg, 'bad');
       } else {
         closeJoin(false);
@@ -440,7 +464,11 @@
       render();
     }
   });
-  window.addEventListener('km-sync-merged', e => { if (e.detail && e.detail.text) show($('groupMsg'), e.detail.text, 'good'); });
+  window.addEventListener('km-sync-merged', e => {
+    if (!(e.detail && e.detail.text)) return;
+    if (firstSync) { firstSync.report = e.detail.text; show($('groupMsg'), firstSync.base + '，正在第一次同步…' + e.detail.text, 'good'); return; }
+    show($('groupMsg'), e.detail.text, 'good');
+  });
 
   /* ---------------- 按钮 ---------------- */
   bindScan($('scanInvite'), $('startMsg'));

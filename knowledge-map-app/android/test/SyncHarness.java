@@ -1377,6 +1377,76 @@ public class SyncHarness {
         b.lanOff();
     }
 
+    /** #1 第二期真机验收退回的第 2 条：经局域网加入节点组后，局域网带来的变化让节点上「待推」，却没有人安排节点那一轮 */
+    static void scenarioLanNodeDue(NodeCtl node) throws Exception {
+        section("L7. 返工：局域网带来的组名单变化让节点上有待推的分区时，自动补一轮节点同步，状态不再一直「待同步」");
+        Dev a = new Dev("dueA", "客厅的平板"), b = new Dev("dueB", "书房的平板");
+        a.put("s1", "a", "来自 A");
+        b.put("s1", "b", "来自 B");
+        a.m.nodeJoin(fixPort(invite(node), node));
+        a.sync();
+        track(a);
+        a.lanOn("w7");
+        b.lanOn("w7");
+        boolean same = lanPairUp(b, a, true);
+        track(a, b);
+        check(same && b.m.inGroup() && b.m.g.node != null && a.m.g.gid().equals(b.m.g.gid()), "B 经局域网配对加入 A 的节点组，同步节点设置随组包带过去");
+        rounds(2, a, b);
+        check("ok".equals(SyncJson.s(a.state(), "status")) && !a.m.nodeDue(), "两边同步过后 A「已同步」、节点上没有待推的", a.m.state());
+        // B 给 A 改名，只经局域网送到 A：A 的组名单变了 → 节点上待推一个分区；以前要等 15 分钟定时或下次学习才推
+        b.m.rename(a.id, "改过名的客厅平板");
+        b.publish();
+        b.m.lanWith("127.0.0.1", a.port());
+        a.m.lanProcess();
+        Map<String, Object> as = a.state();
+        check("改过名的客厅平板".equals(a.m.g.member(a.id).name) && "pending".equals(SyncJson.s(as, "status")) && a.m.nodeDue(),
+            "复现：局域网带来的组名单变化让 A 节点上待推（状态「待同步」），nodeDue() 报告该补一轮节点同步", a.m.state());
+        a.m.syncNow();
+        check("ok".equals(SyncJson.s(a.state(), "status")) && !a.m.nodeDue(), "补一轮节点同步后「已同步」，没有待推的", a.m.state());
+        a.lanOff();
+        b.lanOff();
+
+        // 同步外壳（SyncService）：局域网那条路的任务做完后发现节点上有待推的，自己安排一轮节点同步
+        long base = SyncService.nodeRetryBase;
+        SyncService.nodeRetryBase = 60000;                  // 先不让补推掺进来：单看「立即同步」有没有被推迟
+        File d = new File(tmp, "svc-due");
+        Rec r = new Rec();
+        SyncService s = new SyncService(d, new TestWrap(new File(tmp, "keystore/svc-due.key")), System::currentTimeMillis, r, r);
+        try {
+            s.setDevice("devDue", "补推的平板");
+            s.nodeJoin(fixPort(invite(node), node));
+            s.drain();
+            track2(s);
+            resetCounts();
+            s.publish("{\"device\":{\"id\":\"devDue\",\"name\":\"补推的平板\"},\"sections\":[{\"name\":\"s1\",\"content\":\"{\\\"a\\\":1}\"}]}");
+            s.syncNow();
+            s.drain();
+            Thread.sleep(800);
+            s.drain();
+            check("ok".equals(SyncJson.s(SyncJson.obj(s.state()), "status")) && count("push") > 0,
+                "外壳：先发布再「立即同步」（网页「立即同步」、刚进组时都是这个顺序），这一轮马上做、没被发布的 10 秒防抖推迟，「已同步」", s.state());
+            resetCounts();
+            SyncService.nodeRetryBase = 300;
+            s.manager().putOut("s2", "{\"b\":2}");        // 模拟局域网收到的变化让本机分区变了（不经网页发布，不会触发同步）
+            s.manager().refreshState();
+            check("pending".equals(SyncJson.s(SyncJson.obj(s.state()), "status")), "本机有分区没推上节点：「待同步」");
+            s.lanSoon(0);                                   // 局域网那一轮（这台没连 Wi-Fi，什么也不做）之后检查节点
+            long t0 = System.currentTimeMillis();
+            while (System.currentTimeMillis() - t0 < 5000 && !"ok".equals(SyncJson.s(SyncJson.obj(s.state()), "status"))) Thread.sleep(100);
+            s.drain();
+            Map<String, Object> ss = SyncJson.obj(s.state());
+            check("ok".equals(SyncJson.s(ss, "status")) && SyncJson.n(ss, "pending", -1) == 0 && count("push") > 0,
+                "局域网任务做完后自动补了一轮节点同步（push " + count("push") + " 次），状态回到「已同步」", s.state());
+            resetCounts();
+            Thread.sleep(1500);
+            check(count("push") == 0 && count("pull") == 0, "没有待推的就不再补，不会一直连节点", PATHS);
+        } finally {
+            SyncService.nodeRetryBase = base;
+            s.leave();
+            s.drain();
+        }
+    }
+
     static void scenarioJoinFull(NodeCtl node, Dev a) throws IOException {
         section("3b. 第一期遗留：转交点「差一条就满」时给出友好提示（第二期顺手修）");
         NodeClient raw = new NodeClient(node.host, node.port, (gg, at) -> at);
@@ -1481,6 +1551,7 @@ public class SyncHarness {
                     scenarioLanRobust(l[0], l[1], lc);
                     scenarioLanRemove(l[0], l[1], lc);
                     scenarioLanMixed(node);
+                    scenarioLanNodeDue(node);
                 }
             } else {
                 System.out.println("真实节点 " + remote + "（临时测试邀请码，结束时删组、作废邀请码）");

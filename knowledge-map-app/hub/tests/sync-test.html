@@ -352,13 +352,29 @@
       ok(/没有配对/.test($('lanMsg').textContent), '配对失败：卡片里显示原因');
       // 配对成功（第一次）：先备份，再显示「已配对，正在第一次同步」
       const saves = called('saveFile').length;
+      const pubs0 = called('syncPublish').length, now0 = called('syncNow').length;
       emit('pair-request', { role: 'client', name: '书房的平板', code: '4821' });
       mockState = { inGroup: true, notice: '', me: { dev: 'devA', name: '家里的平板' }, status: 'pending', error: '', lastOk: 0, inbox: 0, pending: 2, node: null,
         members: [{ dev: 'devA', name: '家里的平板', me: true, last: 0, via: '局域网', near: false }, { dev: 'devB', name: '书房的平板', me: false, last: Date.now() - 30000, via: '局域网', near: true }],
         lan: Object.assign({}, lan0, { disc: 0, online: ['devB'] }) };
       emit('pair-result', { ok: true, role: 'client', name: '书房的平板', first: true, msg: '已和「书房的平板」配对，正在第一次同步…' });
       ok(called('saveFile').length === saves + 1 && /同步前备份/.test(called('saveFile')[saves][1]), '第一次配对成功：先在「下载/知识图谱」里备份一份');
-      ok(!d.querySelector('.modal.pair') && /已和「书房的平板」配对/.test($('groupMsg').textContent) && /备份/.test($('groupMsg').textContent), '提示已配对、正在第一次同步、备份在哪');
+      ok(!d.querySelector('.modal.pair') && /已和「书房的平板」配对/.test($('groupMsg').textContent) && /正在第一次同步/.test($('groupMsg').textContent) && /备份/.test($('groupMsg').textContent), '提示已配对、正在第一次同步、备份在哪');
+      ok(called('syncPublish').length === pubs0 + 1 && called('syncNow').length === now0 + 1, '配对成功后马上发布本机数据（syncPublish）并同步一轮（syncNow），不用等离开页面或点「立即同步」');
+      emit('state', mockState);
+      ok(/正在第一次同步/.test($('groupMsg').textContent), '还没同步完（待同步）：仍显示「正在第一次同步…」');
+      const pendingState = mockState;
+      mockState = Object.assign({}, mockState, { status: 'ok', lastOk: Date.now(), pending: 0 });
+      emit('state', mockState);
+      mockState = pendingState;
+      ok(/已和「书房的平板」配对，第一次同步完成/.test($('groupMsg').textContent) && !/正在第一次同步/.test($('groupMsg').textContent), '第一次同步完成后换成结果：' + $('groupMsg').textContent);
+      // 非第一次（本机已有组、把对方加进来）也要马上发布、同步
+      const pubs1 = called('syncPublish').length, now1 = called('syncNow').length;
+      w.KMSync._reset();
+      emit('pair-result', { ok: true, role: 'server', name: '妈妈的手机', first: false, msg: '已和「妈妈的手机」配对' });
+      ok(called('syncPublish').length === pubs1 + 1 && called('syncNow').length === now1 + 1 && /已和「妈妈的手机」配对/.test($('groupMsg').textContent), '给出组包的一方（非第一次）配对成功后也马上发布并同步');
+      emit('pair-result', { ok: false, role: 'client', name: '书房的平板', msg: '已取消，没有配对' });
+      ok(called('syncPublish').length === pubs1 + 1, '配对失败不发布');
       emit('state', mockState);
       ok(vis($('group')) && !vis($('lanCard')) && !vis($('start')), '配对后显示「我的设备」，配对卡片收起');
       ok(/局域网/.test($('devices').textContent) && /在附近/.test($('devices').textContent) && /只在同一个 Wi-Fi 下同步/.test($('devices').textContent),

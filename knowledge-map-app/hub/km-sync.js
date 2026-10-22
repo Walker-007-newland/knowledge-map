@@ -3,7 +3,7 @@
 //
 // 分工：Java 同步内核负责密钥、加密、组名单、和同步节点收发；网页只交「明文分区」、取「明文分区」，拿不到任何密钥。
 // 1. 分区：#2 的每个键一个分区，内容是规范化 JSON { k: 键名, data: 键值, meta: km-meta-v1[键名], s: schema }（KMData._canon，键名排序、无空格）
-// 2. 发布：本机数据变了（km-data-change 之后 5 秒）、切后台或离开页面、合并完以后，collect() → 分区 → KMApp.syncPublish
+// 2. 发布：本机数据变了（km-data-change 之后 5 秒）、切后台或离开页面、合并完以后、刚进组（建组 / 加入 / 配对成功）时，collect() → 分区 → KMApp.syncPublish
 //    任何 file:// 页面都能发布（只读不写）；Java 只给内容变了的分区换新版本
 // 3. 合并：只在安全页面（总入口、设备同步、我的数据、学习统计）写本机：syncTake() 取出收件箱 → 按来源设备逐个 KMData.merge →
 //    有变化就 apply → 重新发布 → syncAck；其它页面（图谱页、宠物页）的 app.js 把数据放在内存里，在它们底下改 localStorage
@@ -218,8 +218,15 @@
     let data = {};
     try { data = json ? JSON.parse(json) : {}; } catch (e) { data = {}; }
     if (type === 'inbox') mergeNow();
-    if (type === 'state' && data && data.joined !== undefined) lastPub = '';
-    if (type === 'join-result' && data.ok) lastPub = '';
+    // 刚进组（扫邀请码建组 / 扫加入码加入 / 局域网配对，两边都算）：本机数据马上发布进组，再同步一轮。
+    // 设备同步页打开时还没在组里，publish() 那时什么也没发；不在这里补发，本机分区要等到离开页面或数据变了才进组，
+    // 第一次同步就停在一半（#1 第二期真机验收第 1 条）
+    if ((type === 'state' && data && data.joined !== undefined) || ((type === 'join-result' || type === 'pair-result') && data && data.ok)) {
+      lastPub = '';
+      publish();
+      const s = state();
+      if (s && s.inGroup && B && B.syncNow) B.syncNow();
+    }
     try { window.dispatchEvent(new CustomEvent('km-sync', { detail: { type, data } })); } catch (e) { /* 忽略 */ }
   }
 

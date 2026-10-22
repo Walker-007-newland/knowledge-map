@@ -596,6 +596,17 @@ public final class SyncManager {
         }
     }
 
+    /**
+     * 有同步节点、上一轮没出错、没在退避，而且还有没推上去的分区：该来一轮节点同步了。
+     * 局域网收到组名单的变化（改名、移除、新组员）、换了钥匙，或推送期间网页又发布了新版本时，本机分区变了却没有人安排节点那一轮，
+     * 状态会一直停在「待同步」（#1 第二期真机验收第 2 条）；SyncService 在局域网收发和每轮同步之后用它补一轮。
+     * 节点连不上（offline）、出错时不在这里重试，交给前台定时和下次发布
+     */
+    public synchronized boolean nodeDue() {
+        if (g == null || busy || skipNode || !errCode.isEmpty() || now() < backoffUntil || client() == null) return false;
+        return pendingCount() > 0;
+    }
+
     int pendingCount() {
         if (g == null) return 0;
         String gid = g.gid();
