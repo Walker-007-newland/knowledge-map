@@ -76,30 +76,53 @@
   /* ---------------- 页面切换（配合返回键） ---------------- */
   const VIEWS = ['vHome', 'vCard', 'vCardEnd', 'vWrong', 'vSetup', 'vRun', 'vCheck', 'vResult'];
   const TITLES = { vHome: '单元单词', vCard: '背诵', vCardEnd: '本轮背诵结果', vWrong: '错词本', vSetup: '默写设置', vRun: '默写中', vCheck: '批改', vResult: '默写结果' };
+  // 历史记录：首页是第 0 层（state.d = 0），每进一层子页面 pushState 一条（d + 1）；
+  // 子页面之间的流转（设置 → 默写中 → 批改 → 结果、背诵 → 结果）在同一条记录上 replaceState。
+  // 回到单元一律用 goHome() 退回首页那条记录，不再压新记录，保证首页之上不留旧页面：
+  // 首页按返回（系统返回键 / App 的 goBack）直接回英语图谱（#9 真机确认问题 1）
   let current = 'vHome';
+  const depth = () => (history.state && +history.state.d) || 0;
   function show(v, push = true) {
     current = v;
     VIEWS.forEach(id => { document.getElementById(id).hidden = id !== v; });
     $('#title').textContent = TITLES[v];
     $('#subtitle').hidden = v !== 'vHome';
     document.body.classList.toggle('on-home', v === 'vHome');
-    if (push) history.pushState({ v }, '', '#' + v.slice(1).toLowerCase());
+    if (push) history.pushState({ v, d: depth() + 1 }, '', '#' + v.slice(1).toLowerCase());
     window.scrollTo(0, 0);
     DictRun.keepAwake(v === 'vRun');
   }
-  history.replaceState({ v: 'vHome' }, '', location.pathname + location.search);
+  let homing = false;
+  function goHome() {
+    endRound();
+    const d = depth();
+    if (d > 0) { homing = true; history.go(-d); }      // popstate 里显示首页
+    else { show('vHome', false); renderHome(); }
+  }
+  history.replaceState({ v: 'vHome', d: 0 }, '', location.pathname + location.search);
   window.addEventListener('popstate', e => {
     const to = (e.state && e.state.v) || 'vHome';
+    const toD = (e.state && +e.state.d) || 0;
+    const stay = () => history.pushState({ v: current, d: toD + 1 }, '', '#' + current.slice(1).toLowerCase());
+    if (homing) { homing = false; show('vHome', false); renderHome(); return; }
     if (current === 'vRun' && runner.isRunning()) {
-      if (!confirm('要结束这次默写吗？')) { history.pushState({ v: 'vRun' }, '', '#run'); return; }
+      if (!confirm('要结束这次默写吗？')) { stay(); return; }
       runner.stopRun();
     }
+    // 批改页（还没点「批改完成」）：返回会丢掉这次默写，先确认（#9 真机确认问题 2）
+    if (current === 'vCheck' && runner.isChecking()) {
+      if (!confirm('批改还没完成，要放弃这次默写吗？\n（选「取消」继续批改，批改完成后才会记分、记错词）')) { stay(); return; }
+      runner.dropCheck();
+    }
     if (current === 'vCard' && round && round.marked > 0 && round.idx < round.items.length) {
-      if (!confirm('要结束这轮背诵吗？已标记的会保存')) { history.pushState({ v: 'vCard' }, '', '#card'); return; }
+      if (!confirm('要结束这轮背诵吗？已标记的会保存')) { stay(); return; }
     }
     if (current === 'vCard') endRound(false);
-    // 默写 / 批改 / 背诵中途不能靠返回键回去重来，统一回到单元
-    if (to === 'vRun' || to === 'vCheck' || to === 'vCard') { show('vHome', false); renderHome(); return; }
+    // 默写 / 批改 / 背诵中途不能靠返回键回去重来（一般不会出现，比如用了前进键），统一回到单元
+    if (to === 'vRun' || to === 'vCheck' || to === 'vCard' || to === 'vCardEnd' || to === 'vResult') {
+      if (toD > 0) { homing = true; history.go(-toD); return; }
+      show('vHome', false); renderHome(); return;
+    }
     show(to, false);
     if (to === 'vHome') renderHome();
     else if (to === 'vWrong') renderWrong();
@@ -257,7 +280,10 @@
     }
     round = { words, name, items, idx: 0, flipped: false, again: new Set(), result: new Map(), marked: 0 };
     syncCardOpts();
-    if (current === 'vCard') show('vCard', false); else show('vCard');
+    // 从背诵结果页「再背不会的」：在同一条历史记录上换成卡片，不多压一层
+    if (current === 'vCard') show('vCard', false);
+    else if (current === 'vCardEnd') { history.replaceState({ v: 'vCard', d: depth() }, '', '#card'); show('vCard', false); }
+    else show('vCard');
     renderCard(true);
   }
   function syncCardOpts() {
@@ -340,11 +366,11 @@
     $('#endList').innerHTML = endWords.length
       ? '<div class="wrong-list">' + endWords.map(w => `<div><b>${esc(w.en)}</b>${esc(w.zh)}</div>`).join('') + '</div>' : '';
     $('#btnEndAgain').hidden = $('#btnEndDict').hidden = !endWords.length;
-    history.replaceState({ v: 'vCardEnd' }, '', '#cardend');
+    history.replaceState({ v: 'vCardEnd', d: depth() }, '', '#cardend');
     show('vCardEnd', false);
   }
   function endRound() { DictRun.stopSay(); round = null; }
-  $('#btnEndHome').onclick = () => { endRound(); show('vHome'); renderHome(); };
+  $('#btnEndHome').onclick = goHome;
   $('#btnEndAgain').onclick = () => { const ws = endWords.slice(), name = round ? round.name : ''; startRound(ws, 'all', name); };
   $('#btnEndDict').onclick = () => {
     const ws = endWords.slice();
@@ -412,7 +438,7 @@
         all[k] = e;
       }));
     },
-    onBack: () => { show('vHome'); renderHome(); }
+    onBack: goHome
   });
 
   /* ---------------- 启动 ---------------- */

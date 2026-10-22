@@ -40,5 +40,21 @@ KW.books = [
       { id: "u2", name: "Unit 2 My Favorite Subject" },
       { id: "u3", name: "Unit 3 Our Feelings" },
       { id: "u4", name: "Unit 4 Getting Around" }
+    ] },
+  { id: 'mj5a', grade: 5, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: false, mustMarked: true,
+    src: '闽教版五年级上册（2026 年度印次），书末 Words and Expressions 第 91–93 页；国家中小学智慧教育平台电子课本',
+    units: [
+      { id: "u1", name: "Unit 1 Weather in Different Seasons" },
+      { id: "u2", name: "Unit 2 Months of the Year" },
+      { id: "u3", name: "Unit 3 Plans and Dates" },
+      { id: "u4", name: "Unit 4 Our Dream Jobs" }
+    ] },
+  { id: 'mj6a', grade: 6, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: false, mustMarked: true,
+    src: '闽教版六年级上册（2026 年度印次），书末 Words and Expressions 第 93–95 页；国家中小学智慧教育平台电子课本',
+    units: [
+      { id: "u1", name: "Unit 1 Wonderful Sports Events" },
+      { id: "u2", name: "Unit 2 Healthy Life" },
+      { id: "u3", name: "Unit 3 Good Manners" },
+      { id: "u4", name: "Unit 4 Great People" }
     ] }
 ];
