@@ -2,6 +2,7 @@
 
 本文是 #1 产品方案 v2 第七节 + #6 产品方案第三节补充的实现说明，`km_sync_node.py` 按它实现，
 #1 第二期的 Java 客户端也按它写。参考客户端是 `test_node.py` 里的 `DevClient`（设备）和 `AdminClient`（管理）。
+第 7 节是 1.4.0 的账号（#12），参考客户端是 `test_node.py` 的 `AcctClient`。
 
 节点只是一个「永远在线、只会保管不会合并」的组员：每台设备一个**槽**，槽里是这台设备各分区最新的**密文**。
 节点看不懂内容，也不知道分区名（分区编号是设备算的 HMAC）。
@@ -240,3 +241,100 @@ admin.db 表结构 4：`tombstones` 加一列 `purged`（升级前备份 `admin.
 admin.db 表结构 2（只新增，不动旧表；升级前自动备份成 `admin.db.v1.bak`；回滚到 1.0.0 不受影响）：
 `web_user(id=1, user, pw_hash, totp_secret, totp_pending, totp_last_step, enabled, pw_changed, fail_times)`、
 `web_sessions(kid, enc_key, last_ctr, user, created, last_used, expires, ip, ua)`（存的是 `HMAC(S, …)`，不存 S）。
+
+## 7. 账号（1.4.0，#12）
+
+「账号 = 同步组的钥匙」：一个账号绑定一个组（gid）。节点保存用户名、口令派生的验证钥和两份包着组密钥的「账号包」，
+自己解不开任何一份；同步本身还是第 4 节，只是账号组的请求多带一张设备通行证。没有绑定账号的组和 1.3.0 完全一样。
+
+### 7.1 派生（设备上算，密码和下面这些钥都不上网）
+
+```
+salt    = 16 字节随机数（注册时生成；重设密码时换新的）
+iters   = PBKDF2 次数，100000–2000000（App 默认 200000）
+mk      = PBKDF2-HMAC-SHA256(密码 UTF-8, salt, iters, 32)
+authKey = HKDF(mk, salt="km-acct-v1", info="km-acct-auth", 32)       证明「知道密码」，节点保存
+wrapKey = HKDF(mk, salt="km-acct-v1", info="km-acct-wrap", 32)       包账号包，节点拿不到
+HKDF 即 HKDF-SHA256（RFC 5869）；AES-GCM 盒子 = iv(12) ‖ 密文 ‖ 标签(16)，附加数据见各处
+账号包 bundle = {"v":1,"user","gk":b64(组密钥),"epoch","gkT","invite":"组的邀请码 / 注册码原文（节点数据丢了时重建用）"}（UTF-8 JSON）
+wrap_pw    = AES-GCM(wrapKey, bundle, 附加数据 "km-acct-pw|" user)
+wrap_admin = UTF-8 JSON {"v":1,"kid":恢复公钥编号,"epk":b64(临时 P-256 公钥 X.509),"box":b64(AES-GCM(k, bundle, "km-acct-admin|" user))}
+             k = HKDF(ECDH(临时私钥, 恢复公钥), salt="km-acct-v1", info="km-acct-admin", 32)
+             恢复公钥打包在 App 里（signing/km-recovery.json，make_recovery_key.py 生成），私钥只在审批 App
+```
+用户名：3–20 位小写字母、数字、下划线（`^[a-z0-9_]{3,20}$`），大写一律先转小写。
+
+### 7.2 注册码
+
+管理员用 `invites.create {kind:"acct"}` 生成：12 位 Crockford base32（`0-9A-Z` 去掉 `I L O U`），显示成 `XXXX-XXXX-XXXX`；
+二维码 `kmreg:1?c=XXXX-XXXX-XXXX&h=<节点地址>&p=<端口>`。前 4 位是邀请号（列表、日志里显示），后 8 位是秘密。
+输入时忽略大小写、空格和连字符，`I`/`L` 当 `1`、`O` 当 `0`。
+```
+ik  = HMAC(后 8 位秘密的 ASCII, "km-invite")                        （和 #1 邀请码的 ik 同一个算法）
+abox = AES-GCM(HKDF(ik, salt="km-acct-v1", info="km-acct-abox"), authKey, 附加数据 "km-acct-abox|" user "|" gid)
+```
+注册码只能用来注册（拿它当 `inv` 调 `/v1/create` 建新组 → 403 invite）；但已绑定账号的组在节点数据丢失后，可以照第 3 节
+用组登记的那个注册码（`inv` = 前 4 位，包裹用上面的 ik）`create` 重建，即使注册码已过期、用完、作废（账号说了算）。
+
+### 7.3 接口（不签名，计入每 IP 限速）
+
+| 接口 | 正文 → 返回 |
+|---|---|
+| `POST /v1/acct/pre` | `{user}` → `{ok, salt, iters, nonce}`。nonce 16 字节、2 分钟有效、只能用一次。用户名不存在时 salt 由节点秘密假造（同一用户名每次一样）、iters 是默认值，格式完全一样 |
+| `POST /v1/acct/login` | `{user, nonce, dev, devName, appVer, proof}`，`proof = b64(HMAC(authKey, "km-login|" user "|" nonce "|" dev))`（nonce 用 pre 返回的 b64 原文）→ `{ok, user, gid, wrap_pw, pw_ver, tok}` |
+| `POST /v1/acct/register` 新建组 | `{user, code, gid, n, w, mac, salt, iters, abox, wrap_pw, wrap_admin, dev, devName, appVer}`。n/w/mac 同第 3 节 create 的包裹，ik 用注册码的。建组和建账号一起完成 → `{ok, user, gen, pw_ver:1, tok, legacy:0}` |
+| `POST /v1/acct/register` 把已有的组升级成账号 | 正文同上但**不带 n/w/mac**，请求头带 `X-KM-Auth`（用这个组的 nodeKey 签名，`PATH` = `/v1/acct/register`，计数和组请求共用）。组里另有的设备记为「老设备」→ `{ok, …, legacy:<老设备数>}` |
+
+`tok = b64(AES-GCM(HKDF(authKey, salt="km-acct-v1", info="km-devtok"), devToken, 附加数据 "km-devtok|" user "|" dev))`：
+devToken 是这台设备在这个账号下的 32 字节通行证（每次登录 / 注册发新的，旧的作废）。节点只存 `SHA256(devToken)`。
+
+| 错误 | 含义 |
+|---|---|
+| 400 bad | 格式不对（用户名不合规则、iters 不在范围、字段长度） |
+| 403 `{"err":"login"}` | 用户名或密码不对、nonce 过期 / 用过（用户名不存在时也是这句） |
+| 403 `{"err":"disabled"}` | 账号已停用（只有密码对了才这样回） |
+| 429 `{"err":"paused"}` | 这个账号 15 分钟内密码错 5 次，暂停 15 分钟 |
+| 403 `{"err":"code"}` | 注册码不存在、不对、过期、用完、作废 |
+| 409 `{"err":"user"}` | 用户名已被占用 |
+| 409 `{"err":"bound","user":…}` | 这个组已经绑定了别的账号 |
+| 403 blocked / 404 nogroup / 409 exists / 401 auth | 同第 2 节（升级已有组时组不在节点上 → 404 nogroup，先 create 重建） |
+| 503 `{"err":"crypto"}` | 节点没有 cryptography（不应出现） |
+
+### 7.4 账号组的同步请求：设备通行证
+
+已绑定账号的组，所有 `/v1/g/<gid>/…` 请求除 `X-KM-Auth` 外还要带
+```
+X-KM-Dev: b64(HMAC(SHA256(devToken), 与 X-KM-Auth 相同的签名串))
+```
+检查顺序（在 blocked / nogroup / 401 之后）：账号停用 → `403 {"err":"disabled"}`；这台设备没有有效通行证 → `403 {"err":"relogin"}`
+（设备回登录页，**不删本机任何数据**）；`successor`、`drop` → `403 {"err":"acct"}`（账号组不换钥）。
+**老设备**：组绑定账号那一刻已在组里（有计数或槽）的设备，绑定后 60 天内不带通行证也放行（还没升级的旧版 App 照常同步）；
+它用新版登录后有了通行证，老设备标记消失。管理员停用账号、重设密码时老设备标记一起清掉。
+`pull` / `push` 的响应多一个 `acct`：组绑定的用户名（同组还没登录的新版 App 据此在登录页填好用户名；旧版 App 忽略）。
+
+### 7.5 管理操作（第 5 节的信封）
+
+| op | 谁能调 | 参数 → 返回 |
+|---|---|---|
+| `accounts.list` | 都可以 | `{q?}` → `[{user, gid, created, last_login, last_dev, devices, state: ok/disabled/relogin, disabled_at, bytes, note, code, pw_ver, paused}]` |
+| `accounts.get` | 都可以；`wrap:true` 只有管理密钥 | `{user, wrap?}` → 同上 + `list:[{dev, short, name, first, last_seen, last_sync, app_ver, legacy, token, state}]`；`wrap` 时加 `wrap_admin`、`iters` |
+| `accounts.setDisabled` | 都可以 | `{user, disabled}`；停用时作废所有通行证、清老设备标记 |
+| `accounts.removeDevice` | 都可以 | `{user, dev}`：作废它的通行证、删掉它在节点上的槽（它下次联网回登录页） |
+| `accounts.resetPassword` | 只有管理密钥 | `{user, salt, iters, auth_key, wrap_pw}`（审批 App 用恢复私钥解开 wrap_admin 后，用新密码在本机算好）→ pw_ver+1，作废所有通行证 |
+| `accounts.setNote` | 都可以 | `{user, note}`（≤40 字） |
+| `accounts.delete` | 只有管理密钥 | `{user, confirm:user}`：删账号和组数据，组号记进永久墓碑 |
+| `invites.create` | 都可以 | 多了 `kind:"acct"` → `{id, kind, code, qr, expires}` |
+| `invites.list` | 都可以 | `{kind?}` 筛选；每项多 `kind`，注册码多 `code`、`users`（用它注册的用户名） |
+
+`groups.list` 每个组多 `acct`（绑定的用户名或 null）；`status` 多 `accounts`（账号数）。账号操作都写管理日志；
+设备侧的注册、登录写日志（`acct.register`、`acct.login`），暂停、重放、注册码错是安全事件。
+
+### 7.6 数据、限额、搬家
+
+admin.db 表结构 5（只新增，升级前自动备份 `admin.db.v4.bak`，回滚到 1.3.0 时账号组按普通组同步）：
+`accounts(user, gid, salt, iters, auth_key, wrap_pw, wrap_admin, pw_ver, disabled_at, created, code_id, note, last_login, last_dev, fail_n, fail_since, paused_until, bound_at)`、
+`acct_devices(user, dev, name, tok_hash, legacy, first, last_seen, app_ver)`、`invites.kind`（空 = 同步邀请码）。
+默认组数上限 30 → 300（升级时管理员没改过、还是 30 的自动改成 300）。
+
+局域网发现：`config.json` 里 `discovery_port`（Docker 默认 8787，公网服务器上不开）。设备向 UDP 该端口广播 `km-sync?`，
+节点回一行 JSON：`/v1/hello` 的内容加 `host`、`port`（对外地址）。`--backup DIR` 在线备份 node.db、admin.db（搬家用，见 DOCKER.md）。

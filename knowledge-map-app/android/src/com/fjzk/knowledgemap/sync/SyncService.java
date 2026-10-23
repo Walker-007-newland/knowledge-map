@@ -290,6 +290,43 @@ public final class SyncService {
         });
     }
 
+    // ------------------------------------------------------------ 账号（#12）
+
+    /** 默认服务器、恢复公钥（打包时写进 APK）、App 版本：内核建好后马上设上 */
+    public void config(final String host, final int port, final String pub, final String kid, final String appVer) {
+        withM("账号配置", x -> { x.setConfig(host, port, pub, kid); x.setAppVersion(appVer); });
+    }
+
+    /** 登录页的状态（只读，不等同步线程） */
+    public String acctState() {
+        try {
+            SyncManager x = m;
+            if (x != null) return x.acctState();
+            return SyncJson.stringify(SyncJson.of("state", "loading", "msg", broken.isEmpty() ? "正在启动，请稍等" : "账号功能暂时不可用（" + broken + "），可以重启 App 再试"));
+        } catch (Throwable t) { warn("账号状态", t); return ""; }
+    }
+
+    public void acctRegister(final String json) { act("acctRegister", x -> x.acctRegister(json), true); }
+
+    public void acctLogin(final String json) { act("acctLogin", x -> x.acctLogin(json), true); }
+
+    public void acctLogout() { act("acctLogout", SyncManager::acctLogout, false); }
+
+    public void acctServer(final String text) { act("acctServer", x -> x.acctServer(text), true); }
+
+    /** 局域网里找同步节点（UDP 广播，约 2.5 秒）：结果经事件 acct-found {list:[{host, port, ver}]} 回来。单独开线程，不挡同步 */
+    public void acctDiscover(final java.util.List<String> extra) {
+        try {
+            Thread t = new Thread(() -> {
+                java.util.List<Map<String, Object>> l;
+                try { l = NodeClient.discover(8787, 2500, extra); } catch (Throwable e) { warn("局域网找服务器", e); l = new java.util.ArrayList<>(); }
+                emit("acct-found", SyncJson.of("list", new java.util.ArrayList<Object>(l)));
+            }, "kmsync-discover");
+            t.setDaemon(true);
+            t.start();
+        } catch (Throwable e) { warn("局域网找服务器", e); }
+    }
+
     // ------------------------------------------------------------ 局域网配对（第二期）
 
     public void pairOpen() {

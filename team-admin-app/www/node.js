@@ -7,9 +7,10 @@
 
 const NODE_MOCK = (location.search.match(/[?&]node=(\w+)/) || [])[1] || '';
 const KM_WEB = !!window.KM_WEB;
-const NODE_SUBS = [['status', '状态'], ['groups', '同步组'], ['invites', '邀请码'], ['access', '限额与访问'], ['log', '操作日志']]
+// #12：「账号」（学生账号列表）和「注册码」放在前面；原来的「邀请码」改名「同步邀请码（旧）」，放在注册码后面
+const NODE_SUBS = [['status', '状态'], ['accounts', '账号'], ['codes', '注册码'], ['groups', '同步组'], ['invites', '同步邀请码（旧）'], ['access', '限额与访问'], ['log', '操作日志']]
   .concat(KM_WEB ? [['account', '账号安全']] : []);
-const nodeState = { sub: 'status', status: null, err: null, groups: null, invites: null, log: null, logSec: false, busy: false };
+const nodeState = { sub: 'status', status: null, err: null, groups: null, invites: null, log: null, logSec: false, busy: false, accounts: null, acctQ: '' };
 window.nodeAlert = false;
 
 // ---------- 原生桥 ----------
@@ -224,7 +225,8 @@ function renderNode() {
   }
   $('main').innerHTML = `<div class="seg" id="nseg">${NODE_SUBS.map(([k, n]) => `<button data-s="${k}" class="${k === nodeState.sub ? 'on' : ''}">${n}</button>`).join('')}</div><div id="nbody"><div class="empty">加载中…</div></div>`;
   $('nseg').querySelectorAll('button').forEach(b => b.onclick = () => { nodeState.sub = b.dataset.s; renderNode(); });
-  ({ status: nodeStatusView, groups: nodeGroupsView, invites: nodeInvitesView, access: nodeAccessView, log: nodeLogView, account: () => window.webAccountView() })[nodeState.sub]();
+  ({ status: nodeStatusView, accounts: nodeAccountsView, codes: nodeCodesView, groups: nodeGroupsView, invites: nodeInvitesView, access: nodeAccessView, log: nodeLogView,
+    account: () => window.webAccountView() })[nodeState.sub]();
 }
 const nbody = html => { if ($('nbody')) $('nbody').innerHTML = html; return $('nbody'); };
 const downCard = e => `<div class="card"><div class="nbad" style="font-weight:700">● 连不上同步节点</div><div style="margin-top:4px">${esc(e.message)}</div>
@@ -285,7 +287,7 @@ async function nodeGroupsView() {
   const live = gs.filter(g => !g.blocked_at).length;
   nbody(`<div class="hint" style="margin:4px 2px 8px">${live} 个在用${gs.length > live ? `，${gs.length - live} 个已封禁` : ''}。点一行看详情。</div>` +
     (gs.length ? gs.map(g => `<div class="card item ${g.blocked_at ? 'ngray' : ''}" data-g="${esc(g.gid)}">
-      <div class="t">组 ${short(g.gid)}${g.note ? ` · ${esc(g.note)}` : g.invite_label ? ` · ${esc(g.invite_label)}` : ''}${g.blocked_at ? ' <span class="chip">已封禁</span>' : ''}</div>
+      <div class="t">组 ${short(g.gid)}${g.acct ? ` · 👤 ${esc(g.acct)}` : ''}${g.note ? ` · ${esc(g.note)}` : g.invite_label ? ` · ${esc(g.invite_label)}` : ''}${g.blocked_at ? ' <span class="chip">已封禁</span>' : ''}</div>
       <div class="meta"><span>${g.devices.length} 台设备</span><span>${fmtBytes(g.bytes)} / ${fmtBytes(g.quota)}</span><span>${g.blocked_at ? '封禁于 ' + when(g.blocked_at) : agoMs(g.last_seen)}</span></div>
     </div>`).join('') : '<div class="empty">还没有同步组。平板扫邀请码加入后会出现在这里。</div>'));
   $('nbody').querySelectorAll('.item').forEach(el => el.onclick = () => renderGroup(el.dataset.g));
@@ -300,6 +302,7 @@ function renderGroup(gid) {
   $('main').innerHTML = `
     <div class="card"><div class="kv">
       <span>组号</span><b style="word-break:break-all">${esc(g.gid)}</b>
+      <span>账号</span><b>${g.acct ? '👤 ' + esc(g.acct) : '—（#1 的同步组，还没升级成账号）'}</b>
       <span>状态</span><b class="${g.blocked_at ? 'nbad' : 'nok'}">${g.blocked_at ? '已封禁（' + when(g.blocked_at) + '）' : g.live ? '正常' : '正常（节点上暂时没有数据）'}</b>
       <span>创建</span><b>${g.created ? when(g.created) : '—'}</b>
       <span>最后访问</span><b>${agoMs(g.last_seen)}</b>
@@ -344,13 +347,13 @@ function renderGroup(gid) {
 const INV_STATE = { ok: ['有效', 'nok'], expired: ['已过期', 'nwarn'], used: ['已用完', 'nwarn'], revoked: ['已作废', 'nbad'] };
 async function nodeInvitesView() {
   let list;
-  try { list = nodeState.invites = await nodeCall('invites.list'); }
+  try { list = nodeState.invites = (await nodeCall('invites.list')).filter(i => (i.kind || 'node') === 'node'); }
   catch (e) { nbody(downCard(e)); return bindRetry(renderNode); }
   if (nodeState.sub !== 'invites') return;
   const opt = (vals, sel, unit) => vals.map(v => `<option value="${v}" ${v === sel ? 'selected' : ''}>${v} ${unit}</option>`).join('');
   nbody(`<div class="card form">
-      <div style="font-weight:700">生成邀请码</div>
-      <div class="hint">平板在「设备同步」里扫邀请码加入同步节点（知识图谱 App 的同步功能上线后可用）。</div>
+      <div style="font-weight:700">生成同步邀请码（旧）</div>
+      <div class="hint">App 改成账号登录（#12）以后，学生用「注册码」注册，一般不再需要这种邀请码；只给还没升级的旧版 App 建同步组用。</div>
       <label for="ilabel">备注（最多 20 字，如孩子的名字）</label><input id="ilabel" maxlength="20" placeholder="小明">
       <div class="nform2">
         <div><label for="idays">有效期</label><select id="idays">${opt([1, 7, 30], 7, '天')}</select></div>
@@ -380,6 +383,200 @@ async function nodeInvitesView() {
   $('nbody').querySelectorAll('[data-rv]').forEach(b => b.onclick = async () => {
     const i = list.find(x => x.id === b.dataset.rv);
     if (!confirm(`作废邀请码 ${i.id}${i.label ? '（' + i.label + '）' : ''}？\n作废后不能再用它建新组，也不能再凭它重建（已在用的组不受影响；要停掉就再移除组）。`)) return;
+    try { await nodeCall('invites.revoke', { id: i.id }); toast('已作废'); renderNode(); } catch (e) { toast(e.message, 4000); }
+  });
+}
+
+// ---------- #12 账号：学生账号列表、详情（停用、移除设备、重设密码、删除）、注册码、恢复密钥 ----------
+const ACCT_STATE = { ok: ['正常', 'nok'], disabled: ['已停用', 'nbad'], relogin: ['待重新登录', 'nwarn'] };
+
+/** 恢复密钥（只在审批 App：私钥用系统密钥库存在本机，网页后台没有） */
+function recoveryInfo() {
+  if (MOCK) return window.__mockRecovery || { kid: '' };
+  try { return window.Native && Native.recoveryInfo ? JSON.parse(Native.recoveryInfo()) : { kid: '' }; } catch (e) { return { kid: '' }; }
+}
+function recoveryImport(text) {
+  const t = String(text || '').trim();
+  if (!t.startsWith('kmrecov:1?')) return { err: '这不是账号恢复密钥（应该以 kmrecov:1? 开头）' };
+  if (MOCK) { window.__mockRecovery = { kid: '673a79b3' }; return { ok: true, kid: '673a79b3' }; }
+  try { return JSON.parse(Native.recoveryImport(t)); } catch (e) { return { err: '保存失败：' + e.message }; }
+}
+/** 重设密码：原生侧取恢复包、解开、算新密码的参数再发给节点；网页只给用户名和新密码 */
+function acctReset(user, pw) {
+  if (MOCK) return nodeCall('accounts.resetPassword', { user, mockPw: pw });
+  return new Promise((resolve, reject) => {
+    const id = 'n' + (++nodeSeq);
+    nodeWaiting[id] = (s, t) => nodeSettle(s, t).then(resolve, reject);
+    Native.acctReset(id, user, pw);
+  });
+}
+function tempPassword() {
+  if (!MOCK && window.Native && Native.tempPassword) return Native.tempPassword();
+  const a = 'abcdefghjkmnpqrstuvwxyz', d = '23456789';
+  let s = '';
+  while (!/[a-z]/.test(s) || !/[0-9]/.test(s)) { s = ''; for (let i = 0; i < 8; i++) s += (a + d)[Math.floor(Math.random() * (a.length + d.length))]; }
+  return s;
+}
+
+function recoveryCardHtml() {
+  if (KM_WEB) return '<div class="card hint">网页后台不能重设密码、不能删除账号（第一期只在审批 App 里做）。停用账号、移除设备、改备注、发注册码在这里都能做。</div>';
+  const r = recoveryInfo();
+  return `<div class="card"><div style="font-weight:700;margin-bottom:4px">账号恢复密钥</div>
+    ${r.kid ? `<div class="nok">● 已导入（编号 ${esc(r.kid)}）</div><div class="hint">学生忘了密码时，在账号详情里「重设密码」。恢复密钥能解开学生的学习记录，只用于重设密码、找回数据。</div>
+      <div class="row"><button id="rcvre">重新导入</button></div>`
+      : `<div class="nwarn">● 还没导入：不能帮学生重设密码</div><div class="hint">在电脑上打开 <code>knowledge-map-app/signing/km-recovery.png</code>，点下面的按钮扫一次（只需要一次）。
+        <b>另外请把这张图另存一份到安全的地方</b>：丢了就不能帮学生重设密码了。</div>`}
+    <div id="rcvbox" class="form" ${r.kid ? 'hidden' : ''}>
+      <div class="row"><label class="btn primary">扫描恢复密钥<input type="file" accept="image/*" capture="environment" hidden id="rcvscan"></label>
+        <label class="btn">从相册选图<input type="file" accept="image/*" hidden id="rcvpick"></label></div>
+      <textarea id="rcvtext" placeholder="或粘贴 kmrecov:1?… 文字" style="min-height:60px"></textarea>
+      <div class="row"><button class="primary" id="rcvsave">保存</button></div><div class="hint" id="rcvmsg"></div></div></div>`;
+}
+function bindRecovery(onDone) {
+  if (KM_WEB || !$('rcvbox')) return;
+  if ($('rcvre')) $('rcvre').onclick = () => { $('rcvbox').hidden = !$('rcvbox').hidden; };
+  const save = text => {
+    const r = recoveryImport(text);
+    if (r.err) { $('rcvmsg').textContent = r.err; $('rcvmsg').className = 'hint nbad'; return; }
+    toast('已导入账号恢复密钥 ' + r.kid);
+    onDone();
+  };
+  $('rcvsave').onclick = () => save($('rcvtext').value);
+  $('rcvscan').onchange = $('rcvpick').onchange = async ev => {
+    const inp = ev.target, f = inp.files && inp.files[0]; inp.value = '';
+    if (!f) return;
+    $('rcvmsg').textContent = '正在识别…'; $('rcvmsg').className = 'hint';
+    try {
+      await loadScript('vendor/jsQR.js');
+      const text = await decodeQrFile(f);
+      if (!text) { $('rcvmsg').textContent = '没认出二维码，再拍一次或粘贴文字'; $('rcvmsg').className = 'hint nbad'; return; }
+      save(text);
+    } catch (e) { $('rcvmsg').textContent = '识别失败：' + e.message; $('rcvmsg').className = 'hint nbad'; }
+  };
+}
+
+async function nodeAccountsView() {
+  let list;
+  try { list = nodeState.accounts = await nodeCall('accounts.list', nodeState.acctQ ? { q: nodeState.acctQ } : {}); }
+  catch (e) {
+    if (e.kind === 'op' && e.code === 'op') { nbody('<div class="card hint">账号要节点 km-sync 1.4.0 以上（升级节点后可用）。</div>'); return; }
+    nbody(downCard(e)); return bindRetry(renderNode);
+  }
+  if (nodeState.sub !== 'accounts') return;
+  nbody(recoveryCardHtml() + `<div class="card form"><div class="row" style="margin-top:0"><input id="aq" placeholder="按用户名搜索" value="${esc(nodeState.acctQ)}" autocapitalize="none" style="flex:1"><button id="aqb">搜索</button></div>
+      <div class="hint">${list.length} 个账号。学生凭「注册码」页生成的注册码注册；点一行看设备、停用、重设密码。</div></div>` +
+    (list.length ? list.map(a => `<div class="card item ${a.state === 'disabled' ? 'ngray' : ''}" data-u="${esc(a.user)}">
+      <div class="t">👤 ${esc(a.user)}${a.note ? ` · ${esc(a.note)}` : ''} <span class="chip ${ACCT_STATE[a.state][1]}">${ACCT_STATE[a.state][0]}</span>${a.paused ? ' <span class="chip nwarn">密码错太多，暂停中</span>' : ''}</div>
+      <div class="meta"><span>注册 ${when(a.created)}</span><span>最后登录 ${a.last_login ? when(a.last_login) + (a.last_dev ? '（' + esc(a.last_dev) + '）' : '') : '—'}</span>
+        <span>${a.devices} 台设备</span><span>${fmtBytes(a.bytes)}</span></div>
+    </div>`).join('') : `<div class="empty">${nodeState.acctQ ? '没有匹配的账号' : '还没有账号。到「注册码」页给学生生成注册码。'}</div>`));
+  bindRecovery(renderNode);
+  const search = () => { nodeState.acctQ = $('aq').value.trim().toLowerCase(); renderNode(); };
+  $('aqb').onclick = search;
+  $('aq').onkeydown = e => { if (e.key === 'Enter') search(); };
+  $('nbody').querySelectorAll('.item[data-u]').forEach(el => el.onclick = () => renderAccount(el.dataset.u));
+}
+
+async function renderAccount(user) {
+  let a;
+  try { a = await nodeCall('accounts.get', { user }); } catch (e) { toast(e.message, 4000); return renderNode(); }
+  current = { number: -4 }; $('back').hidden = false; $('tabs').hidden = true; $('newReq').hidden = true;
+  $('title').textContent = '👤 ' + user;
+  const canReset = !KM_WEB, rec = recoveryInfo();
+  $('main').innerHTML = `
+    <div class="card"><div class="kv">
+      <span>用户名</span><b>${esc(a.user)}</b>
+      <span>状态</span><b class="${ACCT_STATE[a.state][1]}">${ACCT_STATE[a.state][0]}${a.disabled_at ? '（' + when(a.disabled_at) + ' 停用）' : ''}${a.paused ? ' · 密码错太多，暂停登录中' : ''}</b>
+      <span>注册</span><b>${when(a.created)}${a.code ? ' · 注册码 ' + esc(a.code) + '-…' : ''}</b>
+      <span>最后登录</span><b>${a.last_login ? when(a.last_login) + (a.last_dev ? '（' + esc(a.last_dev) + '）' : '') : '—'}</b>
+      <span>同步组</span><b>${short(a.gid)}</b>
+      <span>占用</span><b>${fmtBytes(a.bytes)}</b>
+      <span>密码</span><b>第 ${a.pw_ver} 版${a.pw_ver > 1 ? '（重设过）' : ''}</b>
+    </div></div>
+    <div class="card"><div style="font-weight:700;margin-bottom:4px">设备（${a.list.length}）</div>
+      ${a.list.length ? a.list.map(d => `<div class="feed">📱 <b>${esc(d.name || '设备 ' + d.short)}</b> <span class="hint">${esc(d.short)}</span>
+          ${d.legacy ? '<span class="chip nwarn">老设备（还没升级登录）</span>' : ''}${d.state === 'relogin' ? '<span class="chip nwarn">待重新登录</span>' : ''}
+          <div class="hint">首次登录 ${d.first ? when(d.first) : '—'} · 最后同步 ${agoMs(d.last_sync)}${d.app_ver ? ' · App ' + esc(d.app_ver) : ''}</div>
+          <div class="row"><button class="danger" data-rm="${esc(d.dev)}" data-nm="${esc(d.name || d.short)}">移除这台设备</button></div></div>`).join('')
+        : '<div class="hint">没有设备记录</div>'}</div>
+    <div class="card form">
+      <label for="anote">备注（最多 40 字，如「初三 2 班 小明」）</label><input id="anote" maxlength="40" value="${esc(a.note)}">
+      <div class="row"><button class="primary" id="asave2">保存备注</button></div></div>
+    ${canReset ? `<div class="card form"><div style="font-weight:700">重设密码</div>
+      ${rec.kid ? `<div class="hint">学生忘了密码时用。重设后，这个账号所有平板下次联网时回到登录页（学习记录都在），用新密码登录。</div>
+        <label for="apw">新密码（8 位以上，字母加数字）</label><div class="row" style="margin-top:0"><input id="apw" autocomplete="off" autocapitalize="none" style="flex:1"><button id="agen">生成临时密码</button></div>
+        <div class="row"><button class="primary" id="areset">重设密码</button></div>`
+        : '<div class="nwarn">还没导入账号恢复密钥，不能重设密码。回到「账号」页导入。</div>'}</div>` : ''}
+    <div class="card"><div class="row">
+      ${a.state === 'disabled' ? '<button class="primary" id="aen">启用账号</button>' : '<button class="danger" id="adis">停用账号</button>'}
+      ${canReset ? '<button class="danger" id="adel">删除账号</button>' : ''}
+    </div><div class="hint">停用后这个账号的平板不能再同步（本机学习记录还在），启用后学生重新输入密码登录。${canReset ? '删除账号会同时删掉服务器上的数据（平板上的不受影响），主要用来清理测试账号。' : ''}</div></div>`;
+  const reload = () => renderAccount(user);
+  const done = async (p, okMsg) => { try { await p; toast(okMsg); reload(); } catch (e) { toast(e.message, 4000); } };
+  $('asave2').onclick = () => done(nodeCall('accounts.setNote', { user, note: $('anote').value.trim() }), '已保存备注');
+  if ($('adis')) $('adis').onclick = () => confirm(`停用账号 ${user}？\n这个账号的所有平板下次联网时回到登录页，提示「账号已被管理员停用」，本机学习记录还在。`) &&
+    done(nodeCall('accounts.setDisabled', { user, disabled: true }), '已停用');
+  if ($('aen')) $('aen').onclick = () => done(nodeCall('accounts.setDisabled', { user, disabled: false }), '已启用：学生重新输入密码就能登录');
+  $('main').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => confirm(`移除设备「${b.dataset.nm}」？\n它下次联网时回到登录页、拿不到以后的新数据（它上面已有的记录收不回）。丢了的平板用这个。`) &&
+    done(nodeCall('accounts.removeDevice', { user, dev: b.dataset.rm }), '已移除'));
+  if ($('agen')) $('agen').onclick = () => { $('apw').value = tempPassword(); };
+  if ($('areset')) $('areset').onclick = async () => {
+    const pw = $('apw').value.trim();
+    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return toast('新密码要 8 位以上，同时有字母和数字');
+    if (pw.toLowerCase().includes(user)) return toast('新密码里不能有用户名');
+    if (!confirm(`把 ${user} 的密码重设为：${pw}\n\n记下来告诉学生。重设后这个账号所有平板都要用新密码重新登录。确定？`)) return;
+    $('areset').disabled = true;
+    try { await acctReset(user, pw); toast(`已重设，新密码：${pw}（请告诉学生）`, 8000); reload(); }
+    catch (e) { toast(e.message, 5000); if ($('areset')) $('areset').disabled = false; }
+  };
+  if ($('adel')) $('adel').onclick = async () => {
+    const v = prompt(`删除账号 ${user} 和它在服务器上的全部数据？这一步不能撤销（平板上的学习记录不受影响）。\n\n请输入用户名 ${user} 确认：`);
+    if (v == null) return;
+    if (v.trim().toLowerCase() !== user) return toast('用户名不对，没有删除');
+    try { await nodeCall('accounts.delete', { user, confirm: user }); toast('已删除账号 ' + user); current = null; nodeState.sub = 'accounts'; renderList(); }
+    catch (e) { toast(e.message, 4000); }
+  };
+  window.scrollTo(0, 0);
+}
+
+async function nodeCodesView() {
+  let list;
+  try { list = (await nodeCall('invites.list', { kind: 'acct' })).filter(i => i.kind === 'acct'); }
+  catch (e) { nbody(downCard(e)); return bindRetry(renderNode); }
+  if (nodeState.sub !== 'codes') return;
+  const opt = (vals, sel, unit) => vals.map(v => `<option value="${v}" ${v === sel ? 'selected' : ''}>${v} ${unit}</option>`).join('');
+  nbody(`<div class="card form">
+      <div style="font-weight:700">生成注册码</div>
+      <div class="hint">每个学生一张，1 次有效。学生在知识图谱 App 的登录页点「注册」，扫码或输入 XXXX-XXXX-XXXX，再起用户名和密码。</div>
+      <label for="clabel">备注（最多 20 字，如孩子的名字）</label><input id="clabel" maxlength="20" placeholder="小明">
+      <div class="nform2">
+        <div><label for="cdays">有效期</label><select id="cdays">${opt([1, 7, 30, 90], 30, '天')}</select></div>
+        <div><label for="cuses">可用次数</label><select id="cuses">${opt([1, 2, 3, 5], 1, '次')}</select></div>
+      </div>
+      <div class="row"><button class="primary" id="ccreate">生成</button></div></div>` +
+    (list.length ? list.map(i => `<div class="card">
+      <div class="t"><span style="font-family:ui-monospace,Consolas,monospace">${esc(i.code)}</span> ${esc(i.label || '')} <span class="chip ${INV_STATE[i.state][1]}">${INV_STATE[i.state][0]}</span></div>
+      <div class="meta"><span>已用 ${i.used}/${i.max_uses}</span>${i.users && i.users.length ? `<span>注册了 👤 ${i.users.map(esc).join('、')}</span>` : ''}
+        <span>${i.state === 'revoked' ? '作废于 ' + when(i.revoked_at) : '到期 ' + when(i.expires)}</span></div>
+      <div class="row"><button data-cqr="${esc(i.id)}">显示二维码</button>${i.state !== 'revoked' ? `<button class="danger" data-crv="${esc(i.id)}">作废</button>` : ''}</div>
+    </div>`).join('') : '<div class="empty">还没有注册码</div>'));
+  $('ccreate').onclick = async () => {
+    const label = $('clabel').value.trim();
+    if (label.length > 20) return toast('备注最多 20 个字');
+    $('ccreate').disabled = true;
+    try {
+      const r = await nodeCall('invites.create', { kind: 'acct', label, days: +$('cdays').value, uses: +$('cuses').value });
+      await showQr(r.qr, `注册码 ${r.code}${label ? ' · ' + label : ''}`, `到期 ${when(r.expires)}，可用 ${$('cuses').value} 次。学生在登录页「注册」里扫码或输入 ${r.code}`);
+      renderNode();
+    } catch (e) { toast(e.message, 4000); if ($('ccreate')) $('ccreate').disabled = false; }
+  };
+  $('nbody').querySelectorAll('[data-cqr]').forEach(b => b.onclick = () => {
+    const i = list.find(x => x.id === b.dataset.cqr);
+    showQr(i.qr, `注册码 ${i.code}${i.label ? ' · ' + i.label : ''}`, `${INV_STATE[i.state][0]} · 已用 ${i.used}/${i.max_uses} · 到期 ${when(i.expires)}`);
+  });
+  $('nbody').querySelectorAll('[data-crv]').forEach(b => b.onclick = async () => {
+    const i = list.find(x => x.id === b.dataset.crv);
+    if (!confirm(`作废注册码 ${i.code}${i.label ? '（' + i.label + '）' : ''}？\n作废后不能再用它注册（已经注册的账号不受影响）。`)) return;
     try { await nodeCall('invites.revoke', { id: i.id }); toast('已作废'); renderNode(); } catch (e) { toast(e.message, 4000); }
   });
 }
@@ -414,7 +611,7 @@ async function nodeAccessView() {
   const f = (id, label, v, lo, hi) => `<div><label for="${id}">${label}（${lo}–${hi}）</label><input id="${id}" type="number" min="${lo}" max="${hi}" value="${v}"></div>`;
   nbody(`<div class="card form"><div style="font-weight:700">限额</div>
       <div class="nform2">
-        ${f('lmg', '最多组数', L.max_groups, 1, 200)}${f('lgm', '每组默认空间 MB', L.group_mb, 1, 500)}
+        ${f('lmg', '最多组数', L.max_groups, 1, 2000)}${f('lgm', '每组默认空间 MB', L.group_mb, 1, 500)}
         ${f('lsm', '单分区 MB', L.sec_mb, 1, 16)}${f('lrm', '单请求 MB', L.req_mb, 1, 32)}
         ${f('lir', '每 IP 每 10 分钟次数', L.ip_rate, 60, 10000)}
       </div>
@@ -430,7 +627,7 @@ async function nodeAccessView() {
   if (!KM_WEB) renderWebLogin($('webbox'), s);
   $('lsave').onclick = async () => {
     const v = { max_groups: +$('lmg').value, group_mb: +$('lgm').value, sec_mb: +$('lsm').value, req_mb: +$('lrm').value, ip_rate: +$('lir').value };
-    const R = { max_groups: [1, 200, '最多组数'], group_mb: [1, 500, '每组默认空间'], sec_mb: [1, 16, '单分区'], req_mb: [1, 32, '单请求'], ip_rate: [60, 10000, '每 IP 次数'] };
+    const R = { max_groups: [1, 2000, '最多组数'], group_mb: [1, 500, '每组默认空间'], sec_mb: [1, 16, '单分区'], req_mb: [1, 32, '单请求'], ip_rate: [60, 10000, '每 IP 次数'] };
     for (const k in R) if (!(Number.isInteger(v[k]) && v[k] >= R[k][0] && v[k] <= R[k][1])) return toast(`${R[k][2]}要在 ${R[k][0]}–${R[k][1]} 之间`);
     if (v.sec_mb > v.req_mb) return toast('单分区不能大于单请求');
     try { await nodeCall('limits.set', v); toast('限额已保存'); } catch (e) { toast(e.message, 4000); }
@@ -590,7 +787,7 @@ function renderNodeSettings(box) {
   box.innerHTML = `<div class="card"><div style="font-weight:700;margin-bottom:4px">同步节点</div>
     ${info.configured ? `<div>地址 <b>${esc(info.host)}:${info.port}</b> · 管理码 kid <b id="nkid">${esc(info.kid)}</b></div>
       <div class="hint">管理密钥用系统密钥库加密存在本机，网页拿不到。在电脑上换过管理密钥（deploy.ps1 -NewAdminKey）后请重新扫码。</div>
-      <div class="row"><button id="nrescan">重新扫码</button><button id="nrotate">换管理密钥</button><button class="danger" id="nclear">清除</button></div><div id="ncode2" hidden>${adminCodeInputsHtml()}</div>`
+      <div class="row"><button id="nrescan">重新扫码</button><button id="nhost">改节点地址</button><button id="nrotate">换管理密钥</button><button class="danger" id="nclear">清除</button></div><div id="ncode2" hidden>${adminCodeInputsHtml()}</div>`
       : `<div class="hint">还没设置。在电脑上打开 <code>knowledge-map-app/signing/sync-node-admin.png</code>，用下面的按钮扫一次。</div><div id="ncode2">${adminCodeInputsHtml()}</div>`}
   </div>
   ${info.configured ? `<div class="card"><div style="font-weight:700;margin-bottom:4px">节点提醒</div>
@@ -600,6 +797,17 @@ function renderNodeSettings(box) {
   </div>` : ''}`;
   bindAdminCodeInputs($('ncode2'), () => { renderNodeSettings(box); nodeCheck(); });
   if ($('nrescan')) $('nrescan').onclick = () => { $('ncode2').hidden = !$('ncode2').hidden; };
+  // #12 服务器搬家（腾讯云 → 家里电脑 / NAS）：管理密钥跟着数据库一起搬过去，不变，这里只改地址
+  if ($('nhost')) $('nhost').onclick = () => {
+    const v = prompt('新的节点地址（服务器搬家后用，如 192.168.1.20:8787）。管理密钥不变。', `${info.host}:${info.port}`);
+    if (v == null || !v.trim()) return;
+    let r;
+    if (MOCK) { const m = /^([0-9A-Za-z.\-]+)(?::(\d+))?$/.exec(v.trim()); r = m ? (Object.assign(window.__mockNodeInfo, { host: m[1], port: +(m[2] || 8787) }), { ok: true }) : { err: '地址格式不对，应该像 192.168.1.20:8787' }; }
+    else { try { r = JSON.parse(Native.nodeSetHost(v.trim())); } catch (e) { r = { err: e.message }; } }
+    if (r.err) return toast(r.err, 4000);
+    toast('节点地址已改为 ' + v.trim());
+    renderNodeSettings(box); nodeCheck();
+  };
   if ($('nrotate')) $('nrotate').onclick = async () => {
     if (!confirm('换一把新的管理密钥？\n\n这台手机自动换上新的，旧的立即失效：电脑上的 sync-node-admin.png、其它装了审批 App 的手机都不能再管理节点' +
       '（以后需要时在电脑上运行 deploy.ps1 -NewAdminKey 重新生成，那时这台手机也要重新扫码）。网页后台的密码和登录不受影响。\n\n怀疑管理码图片外泄、或手机被别人用过时用。确定？')) return;
@@ -638,7 +846,7 @@ function mockNode(op, a) {
   const now = Date.now(), H = 3600e3, D = 86400e3;
   const m = window.__mockNodeData = window.__mockNodeData || {
     // ?mock&node=expiry：预览服务器 5 天后到期；?mock&node=disk：预览磁盘只剩 5%
-    expiry: NODE_MOCK === 'expiry' ? day(now + 5 * D) : '2026-11-16', remote: true, ips: [], limits: { max_groups: 30, group_mb: 50, sec_mb: 4, req_mb: 8, ip_rate: 600 },
+    expiry: NODE_MOCK === 'expiry' ? day(now + 5 * D) : '2026-11-16', remote: true, ips: [], limits: { max_groups: 300, group_mb: 50, sec_mb: 4, req_mb: 8, ip_rate: 600 },
     groups: [
       { gid: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', live: true, bytes: 1258291, created: now - 20 * D, last_seen: now - 10 * 60e3, invite: 'k7m2p9qa', invite_label: '小明', parent: null, blocked_at: null, note: '', quota_mb: null,
         devices: [{ dev: 'Xa91fe', last_seen: now - 10 * 60e3, last_upload: now - 12 * 60e3, sections: 22, bytes: 640000 }, { dev: 'b03c7d', last_seen: now - 2 * H, last_upload: now - 3 * H, sections: 22, bytes: 610000 }, { dev: 'f4e1aa', last_seen: now - 3 * D, last_upload: now - 3 * D, sections: 21, bytes: 8291 }] },
@@ -652,6 +860,20 @@ function mockNode(op, a) {
       { id: 'q9w8e7r6', label: '发错了', created: now - 5 * D, expires: now + 2 * D, max_uses: 1, used: 0, revoked_at: now - 4 * D, groups: 0 },
     ],
     log: [],
+    // #12 账号和注册码
+    accounts: [
+      { user: 'xiaoming', gid: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', created: now - 6 * D, last_login: now - 2 * H, last_dev: 'P70', state: 'ok', disabled_at: null, bytes: 1258291, note: '初三 2 班', code: 'K7M2', pw_ver: 1, paused: false,
+        list: [{ dev: 'Xa91fe00aa', short: 'Xa91fe', name: 'X800', first: now - 6 * D, last_seen: now - 10 * 60e3, last_sync: now - 10 * 60e3, app_ver: '2026.10.23.1200', legacy: false, token: true, state: 'ok' },
+          { dev: 'b03c7d11bb', short: 'b03c7d', name: 'P70', first: now - 2 * H, last_seen: now - 2 * H, last_sync: now - 2 * H, app_ver: '2026.10.23.1200', legacy: false, token: true, state: 'ok' },
+          { dev: 'f4e1aa22cc', short: 'f4e1aa', name: '', first: now - 6 * D, last_seen: null, last_sync: now - 3 * D, app_ver: '', legacy: true, token: false, state: 'ok' }] },
+      { user: 'xiaohong', gid: '77c0ffee1234567890abcdef12345678', created: now - 2 * D, last_login: now - 5 * H, last_dev: 'MatePad', state: 'disabled', disabled_at: now - 3 * H, bytes: 41943040, note: '', code: 'Q9W8', pw_ver: 2, paused: false,
+        list: [{ dev: 'zz0912abcd', short: 'zz0912', name: 'MatePad', first: now - 2 * D, last_seen: now - 5 * H, last_sync: now - 5 * H, app_ver: '2026.10.23.1200', legacy: false, token: false, state: 'relogin' }] },
+    ],
+    codes: [
+      { id: 'K7M2', code: 'K7M2-P9QA-4XHD', label: '小明', created: now - 7 * D, expires: now + 23 * D, max_uses: 1, used: 1, revoked_at: null, kind: 'acct', users: ['xiaoming'] },
+      { id: 'Q9W8', code: 'Q9W8-E7R6-TT2B', label: '小红', created: now - 3 * D, expires: now + 27 * D, max_uses: 1, used: 1, revoked_at: null, kind: 'acct', users: ['xiaohong'] },
+      { id: 'H3N5', code: 'H3N5-V8WZ-6MJC', label: '小刚', created: now - 1 * D, expires: now + 29 * D, max_uses: 1, used: 0, revoked_at: null, kind: 'acct', users: [] },
+    ],
     tlsLeft: NODE_MOCK === 'cert' ? 30 : null,     // ?mock&node=cert：预览证书快过期（续期失败）
     web: { user: 'boss', has_password: true, enabled: true, totp: false, pw_changed: now - 3 * D, paused: false },
     sessions: [
@@ -683,7 +905,7 @@ function mockNode(op, a) {
     case 'status': {
       const exp = new Date(m.expiry + 'T00:00:00+08:00'), today = new Date(new Date(now + 8 * H).toISOString().slice(0, 10) + 'T00:00:00+08:00');
       const tlsLeft = m.tlsLeft != null ? m.tlsLeft : 101.5;
-      return ok({ version: '1.3.0', proto: 1, started: now - 31 * D, uptime: 31 * 86400 + 3600, now, disk_total: 42140479488, disk_free: NODE_MOCK === 'disk' ? 2200000000 : 35540000000,
+      return ok({ version: '1.4.0', proto: 1, accounts: m.accounts.length, started: now - 31 * D, uptime: 31 * 86400 + 3600, now, disk_total: 42140479488, disk_free: NODE_MOCK === 'disk' ? 2200000000 : 35540000000,
         node_db: 45000000, admin_db: 81920, groups: m.groups.filter(x => x.live).length, bytes: m.groups.reduce((s, x) => s + x.bytes, 0),
         requests_24h: 1204, errors_24h: 0, expiry: m.expiry, days_left: Math.round((exp - today) / D), limits: m.limits,
         remote_admin: m.remote, allow_ips: m.ips, breaker_until: 0, your_ip: '192.168.1.5', host: '43.142.41.27', port: 8787,
@@ -707,7 +929,19 @@ function mockNode(op, a) {
       const i = m.sessions.findIndex(x => x.kid === a.kid); if (i < 0) return fail('没有这个会话（可能已经过期或退出）');
       m.sessions.splice(i, 1); log(op, a.kid.slice(0, 4), '成功', '踢下线'); return ok({ removed: 1 });
     }
-    case 'groups.list': return ok(m.groups.map(x => ({ ...x, quota: (x.quota_mb || m.limits.group_mb) * 1048576 })));
+    case 'groups.list': return ok(m.groups.map(x => ({ ...x, quota: (x.quota_mb || m.limits.group_mb) * 1048576, acct: (m.accounts.find(u => u.gid === x.gid) || {}).user || null })));
+    case 'accounts.list': return ok(m.accounts.filter(u => !a.q || u.user.includes(a.q)).map(u => ({ ...u, devices: u.list.filter(d => d.state === 'ok').length, list: undefined })));
+    case 'accounts.get': { const u = m.accounts.find(x => x.user === a.user); if (!u) return fail('没有这个账号'); return ok({ ...u, devices: u.list.filter(d => d.state === 'ok').length }); }
+    case 'accounts.setDisabled': {
+      const u = m.accounts.find(x => x.user === a.user); if (!u) return fail('没有这个账号');
+      u.state = a.disabled ? 'disabled' : 'relogin'; u.disabled_at = a.disabled ? Date.now() : null;
+      if (a.disabled) u.list.forEach(d => { d.state = 'relogin'; d.legacy = false; d.token = false; });
+      log(op, u.user, '成功', a.disabled ? '停用账号（所有设备下次联网时回到登录页）' : '启用账号'); return ok({});
+    }
+    case 'accounts.removeDevice': { const u = m.accounts.find(x => x.user === a.user); if (!u) return fail('没有这个账号'); u.list = u.list.filter(d => d.dev !== a.dev); log(op, u.user, '成功', '移除设备'); return ok({ removed: 1 }); }
+    case 'accounts.resetPassword': { const u = m.accounts.find(x => x.user === a.user); if (!u) return fail('没有这个账号'); u.pw_ver++; u.state = u.state === 'disabled' ? 'disabled' : 'relogin'; u.list.forEach(d => { d.state = 'relogin'; d.legacy = false; }); log(op, u.user, '成功', '重设密码（所有设备下次联网时要用新密码登录）'); return ok({}); }
+    case 'accounts.setNote': { const u = m.accounts.find(x => x.user === a.user); if (!u) return fail('没有这个账号'); u.note = a.note; log(op, u.user, '成功', `备注改为「${a.note}」`); return ok({}); }
+    case 'accounts.delete': { if (a.confirm !== a.user) return fail('请输入用户名确认'); m.accounts = m.accounts.filter(x => x.user !== a.user); log(op, a.user, '成功', '删除账号和组的全部数据'); return ok({}); }
     case 'groups.clear': if (!g || !g.live) return fail('这个组在节点上没有数据'); g.bytes = 0; g.devices.forEach(d => { d.sections = 0; d.bytes = 0; }); log(op, short(g.gid), '成功', '清空数据'); return ok({});
     case 'groups.remove': if (!g || g.blocked_at) return fail('这个组已经被移除了'); g.blocked_at = Date.now(); g.live = false; g.bytes = 0; g.devices = []; log(op, short(g.gid), '成功', '移除并封禁'); return ok({});
     case 'groups.unblock': if (!g || !g.blocked_at) return fail('这个组没有被封禁'); g.blocked_at = null; log(op, short(g.gid), '成功', '解除封禁'); return ok({});
@@ -728,13 +962,21 @@ function mockNode(op, a) {
     case 'groups.setQuota': if (!g) return fail('没有这个组'); g.quota_mb = a.mb; log(op, short(g.gid), '成功', a.mb ? `空间上限改为 ${a.mb} MB` : '空间上限改为默认'); return ok({});
     case 'invites.create': {
       if ((a.label || '').length > 20) return fail('备注最多 20 个字');
+      if (a.kind === 'acct') {
+        const C = '0123456789ABCDEFGHJKMNPQRSTVWXYZ', raw = Array.from({ length: 12 }, () => C[Math.floor(Math.random() * 32)]).join('');
+        const code = raw.slice(0, 4) + '-' + raw.slice(4, 8) + '-' + raw.slice(8);
+        const i = { id: raw.slice(0, 4), code, label: a.label || '', created: Date.now(), expires: Date.now() + a.days * D, max_uses: a.uses, used: 0, revoked_at: null, kind: 'acct', users: [] };
+        m.codes.unshift(i); log(op, i.id, '成功', `生成注册码「${i.label}」${a.days} 天 ${a.uses} 次`);
+        return ok({ id: i.id, kind: 'acct', code, qr: `kmreg:1?c=${code}&h=43.142.41.27&p=8787`, expires: i.expires });
+      }
       const id = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
       const i = { id, label: a.label || '', created: Date.now(), expires: Date.now() + a.days * D, max_uses: a.uses, used: 0, revoked_at: null, groups: 0 };
       m.invites.unshift(i); log(op, id, '成功', `生成邀请码「${i.label}」${a.days} 天 ${a.uses} 次`);
       return ok({ id, qr: qrOf(i), expires: i.expires });
     }
-    case 'invites.list': return ok(m.invites.map(i => ({ ...i, state: stateOfInv(i), qr: qrOf(i) })));
-    case 'invites.revoke': { const i = m.invites.find(x => x.id === a.id); if (!i || i.revoked_at) { log(op, a.id, '失败', '这张邀请码已经作废了'); return fail('这张邀请码已经作废了'); } i.revoked_at = Date.now(); log(op, i.id, '成功', '作废邀请码'); return ok({}); }
+    case 'invites.list': return ok(m.invites.map(i => ({ ...i, kind: 'node', state: stateOfInv(i), qr: qrOf(i) }))
+      .concat(m.codes.map(i => ({ ...i, state: stateOfInv(i), qr: `kmreg:1?c=${i.code}&h=43.142.41.27&p=8787` }))).filter(i => !a.kind || i.kind === a.kind));
+    case 'invites.revoke': { const i = m.invites.find(x => x.id === a.id) || m.codes.find(x => x.id === a.id);if (!i || i.revoked_at) { log(op, a.id, '失败', '这张邀请码已经作废了'); return fail('这张邀请码已经作废了'); } i.revoked_at = Date.now(); log(op, i.id, '成功', '作废邀请码'); return ok({}); }
     case 'limits.set': Object.assign(m.limits, a); log(op, '限额', '成功', JSON.stringify(a)); return ok(m.limits);
     case 'expiry.set': m.expiry = a.date; log(op, '到期日', '成功', '改为 ' + a.date); return ok({});
     case 'access.set': {

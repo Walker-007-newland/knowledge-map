@@ -1,0 +1,28 @@
+# km-sync 同步节点（Docker 版，1.4.0）。在仓库根目录运行：
+#   docker compose -f knowledge-map-app/sync-node/docker-compose.yml up -d --build
+# 第一次启动前把下面 KM_PUBLIC_HOST 改成这台电脑 / NAS 在家里局域网的固定 IP（路由器里给它绑定 IP）。
+# 数据全在 ./km-sync-data（数据库、配置、证书），搬家时停掉容器、拷走这个目录即可。详见 DOCKER.md。
+services:
+  km-sync:
+    build:
+      context: ../..
+      dockerfile: knowledge-map-app/sync-node/Dockerfile
+    image: km-sync:1.4.0
+    container_name: km-sync
+    restart: unless-stopped
+    # 用宿主机网络：平板广播「局域网发现」能直接到达节点；8787（同步）、8788（网页后台，只在本机）直接监听在宿主机上。
+    # 在 Windows / Mac 的 Docker Desktop 上 host 网络不可用：删掉这一行、打开下面的 ports，平板里手动填地址（自动发现不可用）。
+    network_mode: host
+    # ports:
+    #   - "8787:8787"
+    environment:
+      KM_PUBLIC_HOST: "192.168.1.20"     # ← 改成这台电脑的局域网 IP（第一次启动时写进 config.json，之后改 km-sync-data/config.json）
+      KM_PUBLIC_PORT: "8787"
+      KM_HTTPS_PORT: "0"                 # 有正式证书时填 8443 并把证书放进 km-sync-data/tls/
+      KM_DISCOVERY_PORT: "8787"          # 局域网发现（UDP），0 = 关
+    volumes:
+      - ./km-sync-data:/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

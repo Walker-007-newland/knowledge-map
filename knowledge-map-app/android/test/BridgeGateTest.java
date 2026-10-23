@@ -154,6 +154,36 @@ public class BridgeGateTest {
         String bk = g.issue(BILI, tt + 5);
         for (String m : PAIR_METHODS) ok(!g.check(dk, m, tt + 6) && !g.check(bk, m, tt + 6), "听写页、B 站页面调 " + m + " 被拒");
 
+        System.out.println("9. #12 账号：注册、登录、先离线学习只在登录页；退出登录只在账号与同步页；登录页能合并（syncTake / syncAck）");
+        g = new BridgeGate();
+        String LOGIN = BridgeGate.WWW + "login.html";
+        String[] LOGIN_ONLY = { "acctRegister", "acctLogin", "acctOffline" };
+        long ta = t + 400000;
+        String lk = g.issue(LOGIN + "?x=1#y", ta);
+        for (String m : LOGIN_ONLY) ok(g.check(lk, m, ta + 1), "login.html 调 " + m + " 通过");
+        for (String m : new String[]{"acctState", "acctServer", "acctDiscover", "saveBackup", "syncTake", "syncAck", "syncState", "syncPublish", "syncNow"})
+            ok(g.check(lk, m, ta + 1), "login.html 调 " + m + " 通过");
+        ok(!g.check(lk, "acctLogout", ta + 1), "login.html 调 acctLogout 被拒");
+        for (String m : SYNC_METHODS) if (!m.startsWith("sync")) ok(!g.check(lk, m, ta + 1), "login.html 调 " + m + " 被拒（加入码、移除设备等不在登录页）");
+        for (String m : PAIR_METHODS) ok(!g.check(lk, m, ta + 1), "login.html 调 " + m + " 被拒");
+        ta += 20000;
+        String sk3 = g.issue(BridgeGate.WWW + "sync.html", ta);
+        ok(g.check(sk3, "acctLogout", ta + 1) && g.check(sk3, "acctServer", ta + 1) && g.check(sk3, "acctDiscover", ta + 1) && g.check(sk3, "saveBackup", ta + 1),
+            "sync.html 能退出登录、改服务器、找服务器、备份");
+        for (String m : LOGIN_ONLY) ok(!g.check(sk3, m, ta + 1), "sync.html 调 " + m + " 被拒");
+        String[] notLogin = { BridgeGate.WWW + "index.html", DATA, BridgeGate.WWW + "pet/study.html", MAP, BridgeGate.WWW + "skills-map/notes.html",
+            BridgeGate.WWW + "pet/index.html", BridgeGate.WWW + "login.html.evil", BridgeGate.WWW + "x/../login.html" };
+        for (String pg : notLogin) {
+            ta += 20000;
+            String k = g.issue(pg, ta);
+            for (String m : LOGIN_ONLY) ok(!g.check(k, m, ta + 1), pg.substring(pg.lastIndexOf("www/") + 4) + " 调 " + m + " 被拒");
+            ok(!g.check(k, "acctLogout", ta + 1) && !g.check(k, "saveBackup", ta + 1), pg.substring(pg.lastIndexOf("www/") + 4) + " 调 acctLogout、saveBackup 被拒");
+        }
+        ta += 20000;
+        String dk2 = g.issue(DICT, ta), bk2 = g.issue(BILI, ta + 1);
+        for (String m : new String[]{"acctState", "acctRegister", "acctLogin", "acctLogout", "acctServer", "acctOffline", "saveBackup"})
+            ok(!g.check(dk2, m, ta + 2) && !g.check(bk2, m, ta + 2) && !g.check(null, m, ta + 2), "听写页、B 站页面、不带令牌调 " + m + " 被拒");
+
         System.out.println();
         System.out.println("通过 " + pass + "，失败 " + fail);
         System.exit(fail == 0 ? 0 : 1);
