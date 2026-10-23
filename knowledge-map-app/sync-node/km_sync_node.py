@@ -6,7 +6,8 @@
 - 设备协议只用标准库；
 - 管理接口用系统自带的 python3-cryptography（AESGCM），导入不了时管理接口整体关闭（回 403），设备接口照常。
 
-运行：python3 km_sync_node.py --config /etc/km-sync/config.json（1.3.0：彻底删除组登记、App 里换管理密钥、日志一页 500 条）
+运行：python3 km_sync_node.py --config /etc/km-sync/config.json
+（1.3.0：彻底删除组登记、App 里换管理密钥、日志一页 500 条；1.4.0：账号 /v1/acct、注册码、账号管理、局域网发现、--backup、Docker）
 监听（端口都可在 config.json 里改，0 = 不开）：
   8787            设备协议 + 审批 App 管理接口（明文 HTTP + 整包加密）
   443  (TLS)      网页后台：静态页面、/admin/web/login、/admin/v1（会话密钥或管理密钥）；证书 /etc/km-sync/tls/，60 秒内热更新
@@ -19,6 +20,7 @@
   --reset-access     清空 IP 封禁、熔断和 IP 名单，打开外网管理（同时清空网页登录的失败计数）
   --reset-web-login  清空网页用户名、密码、二次验证和所有网页会话，网页登录关闭（要在审批 App 里重新设密码）
   --version          只打印版本号
+  --backup DIR       在线备份 node.db、admin.db（搬家用，见 README「搬家」）
 """
 import argparse
 import base64
@@ -40,7 +42,7 @@ import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 PROTO = 1
 MB = 1024 * 1024
 CN_TZ = datetime.timezone(datetime.timedelta(hours=8))
@@ -52,8 +54,8 @@ except Exception as _e:  # noqa: BLE001
     _AESGCM = None
     CRYPTO_ERR = repr(_e)
 
-DEFAULT_LIMITS = {'max_groups': 30, 'group_mb': 50, 'sec_mb': 4, 'req_mb': 8, 'ip_rate': 600}
-LIMIT_RANGES = {'max_groups': (1, 200), 'group_mb': (1, 500), 'sec_mb': (1, 16), 'req_mb': (1, 32), 'ip_rate': (60, 10000)}
+DEFAULT_LIMITS = {'max_groups': 300, 'group_mb': 50, 'sec_mb': 4, 'req_mb': 8, 'ip_rate': 600}   # 1.4.0：每个账号一个组，默认 30 → 300
+LIMIT_RANGES = {'max_groups': (1, 2000),'group_mb': (1, 500), 'sec_mb': (1, 16), 'req_mb': (1, 32), 'ip_rate': (60, 10000)}
 DEFAULT_EXPIRY = '2026-11-16'
 MAIL_MAX = 64 * 1024          # 单封信件
 MAIL_PER_GROUP = 200
@@ -99,6 +101,20 @@ RE_CID = re.compile(r'^[A-Za-z0-9_-]{0,64}$')
 RE_INV = re.compile(r'^[a-z2-9]{8}$')
 RE_RDV = re.compile(r'^[A-Za-z0-9_-]{16,64}$')
 INV_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
+
+# 账号（1.4.0，#12）
+CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+RE_ACODE_ID = re.compile(r'^[0-9A-HJKMNP-TV-Z]{4}$')   # 注册码前 4 位 = 邀请号
+RE_ACCT = re.compile(r'^[a-z0-9_]{3,20}$')
+ACCT_SALT = b'km-acct-v1'
+ACCT_ITERS = 200000          # 默认 PBKDF2 次数（设备注册时可以在 100000–2000000 之间自选，pre 原样返回）
+ACCT_NONCE_TTL = 120         # 登录挑战 2 分钟有效、只能用一次
+ACCT_FAILS = 5               # 15 分钟内输错 5 次 → 暂停 15 分钟
+ACCT_FAIL_WIN = 15 * 60
+ACCT_PAUSE = 15 * 60
+ACCT_LEGACY_DAYS = 60        # 组绑定账号时已在组里的「老设备」不带通行证也放行，最多 60 天
+ACCT_WRAP_MAX = 8192
+DISCOVERY_MAGIC = b'km-sync?'   # 局域网发现：设备向 UDP 8787 广播这串，节点回 hello JSON
 
 
 # ---------------------------------------------------------------- 编码
@@ -363,6 +379,57 @@ def b32(b):
     return base64.b32encode(b).decode('ascii').rstrip('=')
 
 
+# ---------------------------------------------------------------- 账号（1.4.0，#12）
+
+def hkdf(ikm, salt, info, n=32):
+    """HKDF-SHA256（RFC 5869），和 App 的 SyncCrypto.hkdf 一样：salt 为空时用 32 个 0。"""
+    prk = hm(salt or bytes(32), ikm)
+    out, t, i = b'', b'', 1
+    while len(out) < n:
+        t = hm(prk, t + info.encode() + bytes([i]))
+        out += t
+        i += 1
+    return out[:n]
+
+
+def acct_code_norm(text):
+    """注册码 XXXX-XXXX-XXXX（Crockford base32）规范化：大写、去掉连字符和空格、I/L→1、O→0。不合格返回 None。
+    也接受二维码原文 kmreg:1?c=…"""
+    if not isinstance(text, str):
+        return None
+    t = text.strip()
+    if t.lower().startswith('kmreg:1?'):
+        q = dict(p.split('=', 1) for p in t[8:].split('&') if '=' in p)
+        t = q.get('c', '')
+    t = re.sub(r'[\s-]', '', t).upper().replace('I', '1').replace('L', '1').replace('O', '0')
+    if len(t) != 12 or any(c not in CROCKFORD for c in t):
+        return None
+    return t
+
+
+def acct_code_fmt(c):
+    return f'{c[:4]}-{c[4:8]}-{c[8:]}'
+
+
+def acct_ik(code):
+    """注册码派生的邀请钥：ik = HMAC(后 8 位秘密的 ASCII, "km-invite")，和 #1 邀请码的 ik 同一个算法。"""
+    return hm(code[4:].encode('ascii'), b'km-invite')
+
+
+def aes_box(aes, key, plain, aad):
+    iv = secrets.token_bytes(12)
+    return iv + aes(key).encrypt(iv, plain, aad.encode())
+
+
+def aes_unbox(aes, key, box, aad):
+    if len(box) < 28:
+        return None
+    try:
+        return aes(key).decrypt(box[:12], box[12:], aad.encode())
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ---------------------------------------------------------------- TLS 证书（热更新）
 
 def cert_info(path):
@@ -446,6 +513,7 @@ class Node:
         self.fail_all = deque()         # 管理接口所有外网来源失败时间
         self.kid_hits = {}              # 管理接口每个 kid 成功请求时间
         self.hours = {}                 # 小时 -> [请求数, 错误数]
+        self.nonces = {}                # 账号登录挑战 nonce(b64) -> (用户名, 过期毫秒)（1.4.0）
         # 网页后台（main() / 测试里设置）
         self.tls = None                 # TLS 实例；None = 没配置 443
         self.web_dir = None             # 静态文件目录
@@ -478,6 +546,12 @@ class Node:
                     if i > ver:
                         db.executescript(sql)
                         db.execute("INSERT OR REPLACE INTO meta VALUES('schema', ?)", (str(i),))
+                        if name == 'admin' and i == 5 and ver:
+                            # 1.4.0：每个账号一个组，默认组数上限 30 → 300（管理员没改过、还是 30 的才改）
+                            lim = self.setting('limits', {}) or {}
+                            if lim.get('max_groups') == 30:
+                                lim['max_groups'] = 300
+                                self.set_setting('limits', lim)
                         if ver:
                             self.log('系统', '', 'migrate', name, '成功', f'表结构 {ver} → {i}')
                 db.commit()
@@ -540,6 +614,12 @@ class Node:
                 self.adb.execute('DELETE FROM tombstones WHERE created < ? AND purged IS NULL', (now - TOMBSTONE_DAYS * 86400000,))
             except sqlite3.OperationalError:
                 pass        # 只认旧表结构的库（测试里模拟回滚）
+            try:
+                # 1.4.0：账号组的老设备过渡期 60 天，过了就删掉记录（还没升级登录的旧版 App 之后收到 403 relogin）
+                self.adb.execute('DELETE FROM acct_devices WHERE legacy=1 AND tok_hash IS NULL AND user IN '
+                                 '(SELECT user FROM accounts WHERE bound_at < ?)', (now - ACCT_LEGACY_DAYS * 86400000,))
+            except sqlite3.OperationalError:
+                pass
             for gid in list(self._group_ids()):
                 self._recount(gid)
             self.ndb.commit()
@@ -595,7 +675,7 @@ class Node:
     def device(self, method, path, headers, body, ip):
         """返回 (状态码, dict)。"""
         if path == '/v1/hello' and method == 'GET':
-            return 200, {'node': 'km-sync', 'proto': PROTO, 'ver': VERSION, 'time': self.ms()}
+            return 200, self.hello()
         if method != 'POST':
             raise Reject(405, 'method')
         try:
@@ -606,6 +686,12 @@ class Node:
             raise Reject(400, 'bad', 'JSON 解析失败')
         if path == '/v1/create':
             return self.v_create(req)
+        if path == '/v1/acct/pre':
+            return self.a_pre(req)
+        if path == '/v1/acct/login':
+            return self.a_login(req, ip)
+        if path == '/v1/acct/register':
+            return self.a_register(req, headers, body, ip)
         m = re.fullmatch(r'/v1/rdv/([A-Za-z0-9_-]+)', path)
         if m:
             return self.v_rdv(m.group(1), req)
@@ -623,10 +709,13 @@ class Node:
             if not g:
                 raise Reject(404, 'nogroup')
             dev = self.verify(gid, g[0], method, path, headers.get('X-KM-Auth', ''), body)
+            acct = self.acct_gate(gid, dev, headers, method, path, body, action)
             self.ndb.execute('UPDATE groups SET last_seen=? WHERE gid=?', (self.ms(), gid))
             try:
                 fn = getattr(self, 'v_' + action.replace('/', '_'))
                 res = fn(gid, dev, req, g[0])
+                if acct and action in ('pull', 'push') and res[0] == 200:
+                    res[1]['acct'] = acct      # 组已绑定账号：同组还没登录的设备据此在登录页填好用户名
                 self.ndb.commit()
                 self.adb.commit()
                 return res
@@ -685,7 +774,7 @@ class Node:
         gid, inv = req.get('gid'), req.get('inv')
         if not isinstance(gid, str) or not RE_GID.match(gid):
             raise Reject(400, 'bad', 'gid 格式')
-        if not isinstance(inv, str) or not RE_INV.match(inv):
+        if not isinstance(inv, str) or not (RE_INV.match(inv) or RE_ACODE_ID.match(inv)):
             self.log('设备', '', 'invite.use', gid[:6], '拒绝', '没带邀请码或格式不对')
             raise Reject(403, 'invite')
         with self.lock:
@@ -706,7 +795,12 @@ class Node:
                 if node_key is None:
                     self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '邀请密钥错')
                     raise Reject(403, 'invite')
-                if revoked:
+                # 1.4.0：绑定了账号的组，节点数据丢了时凭组原来的邀请码 / 注册码重建，不管它后来有没有作废（账号说了算）
+                bound = bool(k and k['invite_id'] == inv and self.acct_by_gid(gid))
+                if not bound and RE_ACODE_ID.match(inv):
+                    self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '注册码只能用来注册账号')
+                    raise Reject(403, 'invite')
+                if revoked and not bound:
                     self.log('设备', '', 'invite.use', f'{inv} / {gid[:6]}', '拒绝', '邀请码已作废')
                     raise Reject(403, 'invite')
                 ex = self._existing(gid, node_key)
@@ -899,6 +993,243 @@ class Node:
             self.ndb.commit()
             return 200, {'ok': True, 'n': n, 'exp': expires}
 
+    # ================================================================ 账号 /v1/acct（1.4.0，#12；PROTOCOL.md 第 7 节）
+
+    def hello(self):
+        return {'node': 'km-sync', 'proto': PROTO, 'ver': VERSION, 'time': self.ms(), 'acct': 1}
+
+    def acct_row(self, user):
+        row = self.adb.execute('SELECT user, gid, salt, iters, auth_key, wrap_pw, wrap_admin, pw_ver, disabled_at, created, code_id, note, '
+                               'last_login, last_dev, fail_n, fail_since, paused_until, bound_at FROM accounts WHERE user=?', (user,)).fetchone()
+        keys = ('user', 'gid', 'salt', 'iters', 'auth_key', 'wrap_pw', 'wrap_admin', 'pw_ver', 'disabled_at', 'created', 'code_id', 'note',
+                'last_login', 'last_dev', 'fail_n', 'fail_since', 'paused_until', 'bound_at')
+        return dict(zip(keys, row)) if row else None
+
+    def acct_by_gid(self, gid):
+        try:
+            row = self.adb.execute('SELECT user FROM accounts WHERE gid=?', (gid,)).fetchone()
+        except sqlite3.OperationalError:
+            return None         # 只认旧表结构的库（测试里模拟回滚）
+        return row[0] if row else None
+
+    def acct_gate(self, gid, dev, headers, method, path, body, action):
+        """绑定了账号的组：账号停用 → 403 disabled；这台设备没有有效通行证 → 403 relogin（老设备 60 天内放行）。
+        返回用户名（没绑定账号返回 None，行为和 1.3.0 一样）。"""
+        user = self.acct_by_gid(gid)
+        if not user:
+            return None
+        a = self.acct_row(user)
+        if a['disabled_at']:
+            raise Reject(403, 'disabled')
+        if action in ('successor', 'drop'):
+            raise Reject(403, 'acct', '账号组不换钥、不删组')
+        row = self.adb.execute('SELECT tok_hash, legacy FROM acct_devices WHERE user=? AND dev=?', (user, dev)).fetchone()
+        now = self.ms()
+        if row and row[0]:
+            # X-KM-Dev = b64(HMAC(SHA256(devToken), 与 X-KM-Auth 相同的签名串))；verify() 已经检查过 X-KM-Auth 的格式
+            ctr = headers.get('X-KM-Auth', '').split('.')[1]
+            msg = f'{method}\n{path}\n{dev}\n{ctr}\n{hashlib.sha256(body).hexdigest()}'.encode()
+            try:
+                got = b64d(headers.get('X-KM-Dev', ''))
+            except ValueError:
+                got = b''
+            if not got or not hmac.compare_digest(hm(row[0], msg), got):
+                raise Reject(403, 'relogin', '通行证不对')
+        elif row and row[1] and (a['bound_at'] or 0) > now - ACCT_LEGACY_DAYS * 86400000:
+            pass        # 老设备过渡：组绑定账号前就在组里，旧版 App 不带通行证也照常同步
+        else:
+            raise Reject(403, 'relogin', '没有通行证')
+        self.adb.execute('UPDATE acct_devices SET last_seen=? WHERE user=? AND dev=?', (now, user, dev))
+        return user
+
+    def _acct_need_crypto(self):
+        if self.aes is None:
+            raise Reject(503, 'crypto', '节点缺 cryptography')
+
+    def a_pre(self, req):
+        """登录第一步：{user} → {salt, iters, nonce}。用户名不存在时 salt 由节点秘密假造，返回格式完全一样。"""
+        self._acct_need_crypto()
+        user = req.get('user')
+        if not isinstance(user, str) or not RE_ACCT.match(user.strip().lower()):
+            raise Reject(400, 'bad', '用户名格式')
+        user = user.strip().lower()
+        with self.lock:
+            a = self.acct_row(user)
+            if a:
+                salt, iters = a['salt'], a['iters']
+            else:
+                salt, iters = hm(self.node_secret(), b'fake-salt|' + user.encode())[:16], ACCT_ITERS
+            nonce = secrets.token_bytes(16)
+            now = self.ms()
+            for k in [k for k, v in self.nonces.items() if v[1] < now]:
+                del self.nonces[k]
+            if len(self.nonces) > 20000:
+                raise Reject(429, 'rate')
+            self.nonces[b64e(nonce)] = (user, now + ACCT_NONCE_TTL * 1000)
+            return 200, {'ok': True, 'salt': b64e(salt), 'iters': iters, 'nonce': b64e(nonce)}
+
+    def node_secret(self):
+        s = self.setting('node_secret')
+        if not s:
+            s = b64e(secrets.token_bytes(32))
+            self.set_setting('node_secret', s)
+            self.adb.commit()
+        return b64d(s)
+
+    @staticmethod
+    def _dev_fields(req):
+        dev, name, ver = req.get('dev'), req.get('devName', ''), req.get('appVer', '')
+        if not isinstance(dev, str) or not RE_DEV.match(dev):
+            raise Reject(400, 'bad', 'dev')
+        name = re.sub(r'[\x00-\x1f]', '', name if isinstance(name, str) else '')[:40]
+        ver = re.sub(r'[^\w.\-]', '', ver if isinstance(ver, str) else '')[:32]
+        return dev, name, ver
+
+    def _issue_token(self, a, dev, name, ver, auth_key):
+        """给这台设备发一张新通行证（旧的作废）：返回 AES-GCM(HKDF(authKey,"km-devtok"), devToken)。节点只存 SHA-256(devToken)。"""
+        tok = secrets.token_bytes(32)
+        now = self.ms()
+        self.adb.execute('INSERT INTO acct_devices(user, dev, name, tok_hash, legacy, first, last_seen, app_ver) VALUES(?,?,?,?,0,?,?,?) '
+                         'ON CONFLICT(user, dev) DO UPDATE SET name=excluded.name, tok_hash=excluded.tok_hash, legacy=0, '
+                         'last_seen=excluded.last_seen, app_ver=excluded.app_ver',
+                         (a['user'], dev, name, hashlib.sha256(tok).digest(), now, now, ver))
+        self.adb.execute('UPDATE accounts SET last_login=?, last_dev=? WHERE user=?', (now, name or dev[:6], a['user']))
+        return b64e(aes_box(self.aes, hkdf(auth_key, ACCT_SALT, 'km-devtok'), tok, f'km-devtok|{a["user"]}|{dev}'))
+
+    def a_login(self, req, ip):
+        """登录第二步：{user, nonce, dev, devName, appVer, proof = HMAC(authKey, "km-login|" user "|" nonce "|" dev)}"""
+        self._acct_need_crypto()
+        user, nonce, proof = req.get('user'), req.get('nonce'), req.get('proof')
+        if not all(isinstance(x, str) for x in (user, nonce, proof)):
+            raise Reject(400, 'bad', '字段')
+        user = user.strip().lower()
+        dev, name, ver = self._dev_fields(req)
+        with self.lock:
+            ent = self.nonces.pop(nonce, None)
+            now = self.ms()
+            if not ent or ent[0] != user or ent[1] < now:
+                self.log('设备', ip, 'acct.login', user[:20], '拒绝', '登录挑战过期或用过（重放）', sec=True)
+                raise Reject(403, 'login')
+            a = self.acct_row(user) if RE_ACCT.match(user) else None
+            if not a:
+                self.log('设备', ip, 'acct.login', user[:20], '拒绝', '没有这个用户名')
+                raise Reject(403, 'login')
+            if (a['paused_until'] or 0) > now:
+                raise Reject(429, 'paused')
+            try:
+                got = b64d(proof)
+            except ValueError:
+                got = b''
+            want = hm(a['auth_key'], f'km-login|{user}|{nonce}|{dev}'.encode())
+            if not hmac.compare_digest(want, got):
+                n = (a['fail_n'] or 0) + 1 if (a['fail_since'] or 0) > now - ACCT_FAIL_WIN * 1000 else 1
+                since = a['fail_since'] if n > 1 else now
+                if n >= ACCT_FAILS:
+                    self.adb.execute('UPDATE accounts SET fail_n=0, fail_since=NULL, paused_until=? WHERE user=?', (now + ACCT_PAUSE * 1000, user))
+                    self.adb.commit()
+                    self.log('设备', ip, 'acct.pause', user, '成功', f'15 分钟内密码错 {ACCT_FAILS} 次，这个账号暂停登录 15 分钟', sec=True)
+                else:
+                    self.adb.execute('UPDATE accounts SET fail_n=?, fail_since=? WHERE user=?', (n, since, user))
+                    self.adb.commit()
+                    self.log('设备', ip, 'acct.login', user, '拒绝', f'密码不对（第 {n} 次）')
+                raise Reject(403, 'login')
+            if a['disabled_at']:
+                self.log('设备', ip, 'acct.login', user, '拒绝', '账号已停用')
+                raise Reject(403, 'disabled')
+            self.adb.execute('UPDATE accounts SET fail_n=0, fail_since=NULL WHERE user=?', (user,))
+            tok = self._issue_token(a, dev, name, ver, a['auth_key'])
+            self.adb.commit()
+            self.log('设备', ip, 'acct.login', user, '成功', f'登录：{name or dev[:6]}' + (f'（{ver}）' if ver else ''))
+            return 200, {'ok': True, 'user': user, 'gid': a['gid'], 'wrap_pw': b64e(a['wrap_pw']), 'pw_ver': a['pw_ver'], 'tok': tok}
+
+    def a_register(self, req, headers, body, ip):
+        """注册：新建组（带 n/w/mac）或把本机已在的组升级成账号（带 X-KM-Auth，不带 n/w/mac）。都要注册码。"""
+        self._acct_need_crypto()
+        user, gid = req.get('user'), req.get('gid')
+        if not isinstance(user, str) or not RE_ACCT.match(user) or not isinstance(gid, str) or not RE_GID.match(gid):
+            raise Reject(400, 'bad', '用户名或组号格式')
+        dev, name, ver = self._dev_fields(req)
+        try:
+            salt, abox, wrap_pw, wrap_admin = (b64d(req.get(k, '')) for k in ('salt', 'abox', 'wrap_pw', 'wrap_admin'))
+        except ValueError:
+            raise Reject(400, 'bad', '编码')
+        iters = req.get('iters')
+        if len(salt) != 16 or not isinstance(iters, int) or isinstance(iters, bool) or not 100000 <= iters <= 2000000 \
+                or not 28 < len(wrap_pw) <= ACCT_WRAP_MAX or not 28 < len(wrap_admin) <= ACCT_WRAP_MAX:
+            raise Reject(400, 'bad', '字段')
+        bind = 'n' not in req
+        code = acct_code_norm(req.get('code'))
+        with self.lock:
+            try:
+                if not code:
+                    self.log('设备', ip, 'acct.register', user, '拒绝', '注册码格式不对')
+                    raise Reject(403, 'code')
+                cid = code[:4]
+                row = self.adb.execute("SELECT secret, expires, max_uses, used, revoked_at FROM invites WHERE id=? AND kind='acct'", (cid,)).fetchone()
+                ik = acct_ik(code)
+                if not row or not hmac.compare_digest(row[0], code[4:].encode('ascii')):
+                    self.log('设备', ip, 'acct.register', f'{user} / {cid}', '拒绝', '注册码不存在或不对', sec=True)
+                    raise Reject(403, 'code')
+                _, expires, max_uses, used, revoked = row
+                why = '已作废' if revoked else '已过期' if expires < self.ms() else '已用完' if used >= max_uses else None
+                if why:
+                    self.log('设备', ip, 'acct.register', f'{user} / {cid}', '拒绝', '注册码' + why)
+                    raise Reject(403, 'code')
+                auth_key = aes_unbox(self.aes, hkdf(ik, ACCT_SALT, 'km-acct-abox'), abox, f'km-acct-abox|{user}|{gid}')
+                if not auth_key or len(auth_key) != 32:
+                    self.log('设备', ip, 'acct.register', f'{user} / {cid}', '拒绝', '注册码对不上（abox 解不开）', sec=True)
+                    raise Reject(403, 'code')
+                if self.acct_row(user):
+                    raise Reject(409, 'user')
+                k = self.known(gid)
+                if (k and k['blocked_at']) or self.purged(gid):
+                    raise Reject(403, 'blocked')
+                other = self.acct_by_gid(gid)
+                if other:
+                    self.log('设备', ip, 'acct.register', f'{user} / {gid[:6]}', '拒绝', f'这个组已经是账号 {other} 的')
+                    return 409, {'err': 'bound', 'user': other}
+                now = self.ms()
+                legacy = []
+                if bind:
+                    g = self.ndb.execute('SELECT node_key FROM groups WHERE gid=?', (gid,)).fetchone()
+                    if not g:
+                        raise Reject(404, 'nogroup')
+                    if self.verify(gid, g[0], 'POST', '/v1/acct/register', headers.get('X-KM-Auth', ''), body) != dev:
+                        raise Reject(401, 'auth', '签名的设备号和正文不一致')
+                    legacy = sorted({r[0] for r in self.ndb.execute('SELECT dev FROM counters WHERE gid=? UNION SELECT dev FROM slots WHERE gid=?',
+                                                                    (gid, gid))} - {dev})
+                    note = f'把已有的组升级成账号（组里另有 {len(legacy)} 台老设备）'
+                else:
+                    node_key = self._unwrap(ik, gid, req)
+                    if node_key is None:
+                        raise Reject(403, 'code')
+                    if self._existing(gid, node_key) is None:
+                        if self.adb.execute('SELECT 1 FROM tombstones WHERE gid=?', (gid,)).fetchone():
+                            raise Reject(403, 'replaced')
+                        self._new_group(gid, node_key)
+                    if k:
+                        self.adb.execute('UPDATE known_groups SET invite_id=? WHERE gid=?', (cid, gid))
+                    else:
+                        self.adb.execute('INSERT INTO known_groups(gid, invite_id, created) VALUES(?,?,?)', (gid, cid, now))
+                    note = '新建账号和组'
+                self.adb.execute('INSERT INTO accounts(user, gid, salt, iters, auth_key, wrap_pw, wrap_admin, pw_ver, created, code_id, note, '
+                                 'fail_n, bound_at) VALUES(?,?,?,?,?,?,?,1,?,?,?,0,?)',
+                                 (user, gid, salt, iters, auth_key, wrap_pw, wrap_admin, now, cid, '', now))
+                for d in legacy:
+                    self.adb.execute('INSERT OR IGNORE INTO acct_devices(user, dev, name, tok_hash, legacy, first, last_seen, app_ver) '
+                                     'VALUES(?,?,?,NULL,1,?,NULL,?)', (user, d, '', now, ''))
+                self.adb.execute('UPDATE invites SET used=used+1 WHERE id=?', (cid,))
+                tok = self._issue_token(self.acct_row(user), dev, name, ver, auth_key)
+                self.ndb.commit()
+                self.adb.commit()
+                self.log('设备', ip, 'acct.register', f'{user} / {cid}', '成功', note + f'：{name or dev[:6]}')
+                gen = self.ndb.execute('SELECT gen FROM groups WHERE gid=?', (gid,)).fetchone()[0]
+                return 200, {'ok': True, 'user': user, 'gen': gen, 'pw_ver': 1, 'tok': tok, 'legacy': len(legacy)}
+            except BaseException:
+                self.ndb.rollback()
+                self.adb.rollback()
+                raise
+
     # ================================================================ 管理接口 /admin/v1
 
     def admin_key(self, kid):
@@ -1029,8 +1360,9 @@ class Node:
             rct = aead.encrypt(riv, json.dumps(result, ensure_ascii=False, separators=(',', ':')).encode('utf-8'), f'km-admin-resp|{kid}|{ctr}'.encode())
             return 200, {'iv': b64e(riv), 'ct': b64e(rct)}, {}
 
-    READ_OPS = ('status', 'groups.list', 'invites.list', 'log.list', 'web.status', 'web.sessions', 'web.whoami')
-    KEY_ONLY_OPS = ('web.status', 'web.setPassword', 'web.setEnabled', 'web.totpReset', 'web.reset', 'admin.rotateKey')
+    READ_OPS = ('status', 'groups.list', 'invites.list', 'log.list', 'web.status', 'web.sessions', 'web.whoami', 'accounts.list', 'accounts.get')
+    KEY_ONLY_OPS = ('web.status', 'web.setPassword', 'web.setEnabled', 'web.totpReset', 'web.reset', 'admin.rotateKey',
+                    'accounts.resetPassword', 'accounts.delete')     # 1.4.0：重设密码、删除账号第一期只在审批 App 里
     SESSION_ONLY_OPS = ('web.changePassword', 'web.totpBegin', 'web.totpConfirm', 'web.totpDisable', 'web.whoami', 'web.logout')
 
     @staticmethod
@@ -1064,7 +1396,7 @@ class Node:
             self.ndb.rollback()
             self.adb.rollback()
             if op not in self.READ_OPS:
-                self.log(who, ip, op, str(args.get('gid') or args.get('id') or args.get('kid') or '')[:8], '失败', e.msg)
+                self.log(who, ip, op, str(args.get('gid') or args.get('id') or args.get('kid') or args.get('user') or '')[:20], '失败', e.msg)
             return {'ok': False, 'err': e.code, 'msg': e.msg}
 
     # ---------- 各操作：返回 (data, 日志对象, 日志说明)
@@ -1090,6 +1422,7 @@ class Node:
             'now': self.ms(), 'disk_total': du.total, 'disk_free': du.free,
             'node_db': size(self.ndb_path), 'admin_db': size(self.adb_path),
             'groups': total[0], 'bytes': total[1], 'requests_24h': req, 'errors_24h': err,
+            'accounts': self.adb.execute('SELECT COUNT(*) FROM accounts').fetchone()[0],
             'expiry': expiry, 'days_left': days, 'limits': self.limits(),
             'remote_admin': bool(self.setting('remote_admin', True)), 'allow_ips': self.setting('allow_ips', []) or [],
             'breaker_until': self.setting('breaker_until', 0) or 0,
@@ -1106,8 +1439,10 @@ class Node:
             g = groups.setdefault(k[0], {'gid': k[0], 'live': False, 'bytes': 0, 'created': k[3], 'last_seen': None, 'devices': []})
             g.update({'invite': k[1], 'parent': k[2], 'blocked_at': k[4], 'note': k[5] or '', 'quota_mb': k[6]})
         labels = dict(self.adb.execute('SELECT id, label FROM invites').fetchall())
+        accts = dict(self.adb.execute('SELECT gid, user FROM accounts').fetchall())
         default_mb = self.limits()['group_mb']
         for gid, g in groups.items():
+            g['acct'] = accts.get(gid)
             g.setdefault('invite', None)
             g.setdefault('parent', None)
             g.setdefault('blocked_at', None)
@@ -1211,31 +1546,60 @@ class Node:
                          (iid, secret, label, now, now + days * 86400000, uses))
         return {'id': iid, 'qr': self.invite_qr(iid, secret), 'expires': now + days * 86400000}
 
+    def acct_qr(self, code):
+        return f'kmreg:1?c={acct_code_fmt(code)}&h={self.public_host}&p={self.public_port}'
+
+    def create_acct_code(self, label, days, uses):
+        while True:
+            code = ''.join(secrets.choice(CROCKFORD) for _ in range(12))
+            if not self.adb.execute('SELECT 1 FROM invites WHERE id=?', (code[:4],)).fetchone():
+                break
+        now = self.ms()
+        self.adb.execute("INSERT INTO invites(id, secret, label, created, expires, max_uses, used, kind) VALUES(?,?,?,?,?,?,0,'acct')",
+                         (code[:4], code[4:].encode('ascii'), label, now, now + days * 86400000, uses))
+        return {'id': code[:4], 'kind': 'acct', 'code': acct_code_fmt(code), 'qr': self.acct_qr(code), 'expires': now + days * 86400000}
+
     def op_invites_create(self, args, ip):
-        label, days, uses = args.get('label', ''), args.get('days'), args.get('uses')
+        label, days, uses, kind = args.get('label', ''), args.get('days'), args.get('uses'), args.get('kind', 'node')
+        if kind not in ('node', 'acct'):
+            raise OpError('邀请码种类不对')
         if not isinstance(label, str) or len(label.strip()) > 20:
             raise OpError('备注最多 20 个字')
         if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 90:
             raise OpError('有效期要在 1–90 天之间')
         if not isinstance(uses, int) or isinstance(uses, bool) or not 1 <= uses <= 50:
             raise OpError('可用次数要在 1–50 次之间')
+        if kind == 'acct':
+            inv = self.create_acct_code(label.strip(), days, uses)
+            return inv, inv['id'], f'生成注册码「{label.strip()}」{days} 天 {uses} 次'
         inv = self.create_invite(label.strip(), days, uses)
         return inv, inv['id'], f'生成邀请码「{label.strip()}」{days} 天 {uses} 次'
 
     def op_invites_list(self, args, ip):
         now = self.ms()
         used_by = dict(self.adb.execute('SELECT invite_id, COUNT(*) FROM known_groups WHERE invite_id IS NOT NULL GROUP BY invite_id').fetchall())
+        users = {}
+        for u, cid in self.adb.execute('SELECT user, code_id FROM accounts ORDER BY created'):
+            users.setdefault(cid, []).append(u)
         out = []
-        for iid, secret, label, created, expires, max_uses, used, revoked in self.adb.execute(
-                'SELECT id, secret, label, created, expires, max_uses, used, revoked_at FROM invites ORDER BY created DESC'):
+        for iid, secret, label, created, expires, max_uses, used, revoked, kind in self.adb.execute(
+                'SELECT id, secret, label, created, expires, max_uses, used, revoked_at, kind FROM invites ORDER BY created DESC'):
             state = 'revoked' if revoked else 'expired' if expires < now else 'used' if used >= max_uses else 'ok'
-            out.append({'id': iid, 'label': label or '', 'created': created, 'expires': expires, 'max_uses': max_uses, 'used': used,
-                        'revoked_at': revoked, 'state': state, 'groups': used_by.get(iid, 0), 'qr': self.invite_qr(iid, secret)})
+            it = {'id': iid, 'kind': kind or 'node', 'label': label or '', 'created': created, 'expires': expires, 'max_uses': max_uses,
+                  'used': used, 'revoked_at': revoked, 'state': state, 'groups': used_by.get(iid, 0)}
+            if kind == 'acct':
+                code = iid + secret.decode('ascii')
+                it.update({'code': acct_code_fmt(code), 'qr': self.acct_qr(code), 'users': users.get(iid, [])})
+            else:
+                it['qr'] = self.invite_qr(iid, secret)
+            if args.get('kind') in ('node', 'acct') and it['kind'] != args['kind']:
+                continue
+            out.append(it)
         return out, '', ''
 
     def op_invites_revoke(self, args, ip):
         iid = args.get('id')
-        if not isinstance(iid, str) or not RE_INV.match(iid):
+        if not isinstance(iid, str) or not (RE_INV.match(iid) or RE_ACODE_ID.match(iid)):
             raise OpError('邀请号不对')
         row = self.adb.execute('SELECT revoked_at FROM invites WHERE id=?', (iid,)).fetchone()
         if not row:
@@ -1309,6 +1673,126 @@ class Node:
         rows = self.adb.execute(sql + ' ORDER BY id DESC LIMIT ?', p + [limit + 1]).fetchall()
         keys = ('id', 't', 'who', 'ip', 'op', 'obj', 'result', 'note', 'sec')
         return {'items': [dict(zip(keys, r)) for r in rows[:limit]], 'more': len(rows) > limit}, '', ''
+
+    # ---------- 账号（1.4.0，#12）
+    def _user_arg(self, args):
+        user = args.get('user')
+        if not isinstance(user, str) or not RE_ACCT.match(user):
+            raise OpError('用户名不对')
+        a = self.acct_row(user)
+        if not a:
+            raise OpError('没有这个账号')
+        return a
+
+    def _acct_devices(self, a):
+        now = self.ms()
+        last_sync = dict(self.ndb.execute('SELECT dev, last_seen FROM counters WHERE gid=?', (a['gid'],)).fetchall())
+        out = []
+        for dev, name, tok, legacy, first, last_seen, ver in self.adb.execute(
+                'SELECT dev, name, tok_hash, legacy, first, last_seen, app_ver FROM acct_devices WHERE user=? ORDER BY first', (a['user'],)):
+            live_legacy = bool(legacy) and (a['bound_at'] or 0) > now - ACCT_LEGACY_DAYS * 86400000
+            out.append({'dev': dev, 'short': dev[:6], 'name': name or '', 'first': first, 'last_seen': last_seen,
+                        'last_sync': last_sync.get(dev), 'app_ver': ver or '', 'legacy': live_legacy, 'token': bool(tok),
+                        'state': 'ok' if tok or live_legacy else 'relogin'})
+        return out
+
+    def _acct_summary(self, a, devs=None):
+        devs = self._acct_devices(a) if devs is None else devs
+        g = self.ndb.execute('SELECT bytes FROM groups WHERE gid=?', (a['gid'],)).fetchone()
+        state = 'disabled' if a['disabled_at'] else 'ok' if any(d['state'] == 'ok' for d in devs) else 'relogin'
+        return {'user': a['user'], 'gid': a['gid'], 'created': a['created'], 'last_login': a['last_login'], 'last_dev': a['last_dev'] or '',
+                'devices': len([d for d in devs if d['state'] == 'ok']), 'state': state, 'disabled_at': a['disabled_at'],
+                'bytes': g[0] if g else 0, 'note': a['note'] or '', 'code': a['code_id'] or '', 'pw_ver': a['pw_ver'],
+                'paused': (a['paused_until'] or 0) > self.ms()}
+
+    def op_accounts_list(self, args, ip):
+        q = args.get('q', '')
+        q = q.strip().lower() if isinstance(q, str) else ''
+        out = []
+        for (user,) in self.adb.execute('SELECT user FROM accounts ORDER BY created DESC').fetchall():
+            if q and q not in user:
+                continue
+            out.append(self._acct_summary(self.acct_row(user)))
+        return out, '', ''
+
+    def op_accounts_get(self, args, ip):
+        a = self._user_arg(args)
+        devs = self._acct_devices(a)
+        out = dict(self._acct_summary(a, devs), list=devs)
+        if args.get('wrap'):
+            if not self.cur or self.cur['kind'] != 'key':
+                raise OpError('网页上不能重设密码，请在审批 App 里做', 'perm')
+            out.update({'wrap_admin': b64e(a['wrap_admin']), 'iters': a['iters']})
+            self.log(self.who_of(self.cur), ip, 'accounts.get', a['user'], '成功', '取恢复包（准备重设密码）')
+        return out, '', ''
+
+    def _clear_tokens(self, user):
+        """作废这个账号所有设备的通行证、删掉老设备过渡记录（设备下次联网时回登录页）。"""
+        self.adb.execute('UPDATE acct_devices SET tok_hash=NULL, legacy=0 WHERE user=?', (user,))
+
+    def op_accounts_setDisabled(self, args, ip):
+        a = self._user_arg(args)
+        on = args.get('disabled')
+        if not isinstance(on, bool):
+            raise OpError('参数不对')
+        if on == bool(a['disabled_at']):
+            raise OpError('这个账号已经停用了' if on else '这个账号没有停用')
+        self.adb.execute('UPDATE accounts SET disabled_at=? WHERE user=?', (self.ms() if on else None, a['user']))
+        if on:
+            self._clear_tokens(a['user'])
+        return self._acct_summary(self.acct_row(a['user'])), a['user'], '停用账号（所有设备下次联网时回到登录页）' if on else '启用账号'
+
+    def op_accounts_removeDevice(self, args, ip):
+        a = self._user_arg(args)
+        dev = args.get('dev')
+        if not isinstance(dev, str) or not RE_DEV.match(dev):
+            raise OpError('设备号不对')
+        row = self.adb.execute('SELECT name FROM acct_devices WHERE user=? AND dev=?', (a['user'], dev)).fetchone()
+        if not row:
+            raise OpError('这个账号没有这台设备')
+        self.adb.execute('DELETE FROM acct_devices WHERE user=? AND dev=?', (a['user'], dev))
+        n = self.ndb.execute('DELETE FROM slots WHERE gid=? AND dev=?', (a['gid'], dev)).rowcount
+        self._recount(a['gid'])
+        return {'removed': n}, a['user'], f'移除设备 {row[0] or dev[:6]}（作废通行证，删掉它在节点上的 {n} 个分区）'
+
+    def op_accounts_resetPassword(self, args, ip):
+        """审批 App 用恢复私钥解开 wrap_admin 后，本机算好新的 salt / authKey / wrap_pw 发来；节点拿不到组密钥，也拿不到新密码。"""
+        a = self._user_arg(args)
+        try:
+            salt, auth_key, wrap_pw = (b64d(args.get(k, '')) for k in ('salt', 'auth_key', 'wrap_pw'))
+        except ValueError:
+            raise OpError('参数编码不对')
+        iters = args.get('iters')
+        if len(salt) != 16 or len(auth_key) != 32 or not 28 < len(wrap_pw) <= ACCT_WRAP_MAX \
+                or not isinstance(iters, int) or isinstance(iters, bool) or not 100000 <= iters <= 2000000:
+            raise OpError('参数不对')
+        self.adb.execute('UPDATE accounts SET salt=?, iters=?, auth_key=?, wrap_pw=?, pw_ver=pw_ver+1, fail_n=0, fail_since=NULL, '
+                         'paused_until=NULL WHERE user=?', (salt, iters, auth_key, wrap_pw, a['user']))
+        self._clear_tokens(a['user'])
+        return self._acct_summary(self.acct_row(a['user'])), a['user'], '重设密码（所有设备下次联网时要用新密码登录）'
+
+    def op_accounts_setNote(self, args, ip):
+        a = self._user_arg(args)
+        note = args.get('note', '')
+        if not isinstance(note, str) or len(note) > 40:
+            raise OpError('备注最多 40 个字')
+        self.adb.execute('UPDATE accounts SET note=? WHERE user=?', (note.strip(), a['user']))
+        return {}, a['user'], f'备注改为「{note.strip()}」'
+
+    def op_accounts_delete(self, args, ip):
+        """删除账号和它的组数据（主要给测试员清理测试账号）。要再输一遍用户名。组号记进永久墓碑，设备不能凭它重建。"""
+        a = self._user_arg(args)
+        if args.get('confirm') != a['user']:
+            raise OpError('请输入用户名确认')
+        gid = a['gid']
+        self._delete_group_data(gid)
+        self.adb.execute('DELETE FROM acct_devices WHERE user=?', (a['user'],))
+        self.adb.execute('DELETE FROM accounts WHERE user=?', (a['user'],))
+        self.adb.execute('DELETE FROM known_groups WHERE gid=?', (gid,))
+        now = self.ms()
+        if self.adb.execute('UPDATE tombstones SET purged=? WHERE gid=?', (now, gid)).rowcount == 0:
+            self.adb.execute('INSERT INTO tombstones(gid, successor, created, purged) VALUES(?,?,?,?)', (gid, None, now, now))
+        return {}, a['user'], f'删除账号和组 {gid[:6]} 的全部数据'
 
     # ================================================================ 网页后台：账号、会话、二次验证
 
@@ -1637,6 +2121,15 @@ ADMIN_SCHEMA = [
     """
     ALTER TABLE tombstones ADD COLUMN purged INTEGER;
     """,
+    # 5（1.4.0，#12）：账号。只加表、加一列（invites.kind，空 = 原来的同步邀请码），回滚到 1.3.0 时账号组按普通组同步
+    """
+    CREATE TABLE accounts(user TEXT PRIMARY KEY, gid TEXT UNIQUE, salt BLOB, iters INTEGER, auth_key BLOB, wrap_pw BLOB, wrap_admin BLOB,
+                          pw_ver INTEGER, disabled_at INTEGER, created INTEGER, code_id TEXT, note TEXT, last_login INTEGER, last_dev TEXT,
+                          fail_n INTEGER, fail_since INTEGER, paused_until INTEGER, bound_at INTEGER);
+    CREATE TABLE acct_devices(user TEXT, dev TEXT, name TEXT, tok_hash BLOB, legacy INTEGER, first INTEGER, last_seen INTEGER, app_ver TEXT,
+                              PRIMARY KEY(user, dev));
+    ALTER TABLE invites ADD COLUMN kind TEXT;
+    """,
 ]
 
 
@@ -1835,7 +2328,64 @@ def load_config(path):
     if path and os.path.exists(path):
         with open(path, encoding='utf-8') as f:
             cfg.update(json.load(f))
+    # 1.4.0：Docker 里用环境变量改对外地址（搬家到家里电脑 / NAS 时只改 docker-compose.yml）
+    if os.environ.get('KM_PUBLIC_HOST'):
+        cfg['public_host'] = os.environ['KM_PUBLIC_HOST']
+    if os.environ.get('KM_PUBLIC_PORT', '').isdigit():
+        cfg['public_port'] = int(os.environ['KM_PUBLIC_PORT'])
     return cfg
+
+
+def discovery_loop(node, host, port, stop):
+    """局域网发现（1.4.0）：平板向 UDP <port> 广播 b'km-sync?'，节点回一行 hello JSON（加上对外地址和端口）。
+    只回固定内容，不读库、不改任何东西；每个来源 IP 每秒最多回 5 次。"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((host, port))
+        s.settimeout(1.0)
+    except OSError as e:
+        print(f'局域网发现 UDP {host}:{port} 起不来：{e}（只影响自动发现，平板可以手动填地址）', flush=True)
+        return
+    print(f'局域网发现 监听 UDP {host}:{port}', flush=True)
+    hits = {}
+    while not stop.is_set():
+        try:
+            data, addr = s.recvfrom(256)
+        except socket.timeout:
+            continue
+        except OSError:
+            break
+        if data.strip() != DISCOVERY_MAGIC:
+            continue
+        t = int(time.time())
+        k = (addr[0], t)
+        hits = {kk: v for kk, v in hits.items() if kk[1] >= t - 1}
+        hits[k] = hits.get(k, 0) + 1
+        if hits[k] > 5:
+            continue
+        reply = dict(node.hello(), host=node.public_host, port=node.public_port)
+        try:
+            s.sendto(json.dumps(reply, separators=(',', ':')).encode(), addr)
+        except OSError:
+            pass
+    s.close()
+
+
+def backup_to(node, out_dir):
+    """在线备份（1.4.0，搬家用）：用 SQLite 备份接口复制 node.db、admin.db，服务不用停。返回备份目录。"""
+    stamp = datetime.datetime.now(CN_TZ).strftime('%Y%m%d-%H%M%S')
+    d = os.path.join(out_dir, f'km-sync-backup-{stamp}')
+    os.makedirs(d, exist_ok=True)
+    with node.lock:
+        for src, name in ((node.ndb, 'node.db'), (node.adb, 'admin.db')):
+            dst = sqlite3.connect(os.path.join(d, name))
+            src.backup(dst)
+            dst.close()
+    with open(os.path.join(d, 'README.txt'), 'w', encoding='utf-8') as f:
+        f.write(f'km-sync {VERSION} 备份 {stamp}\n把 node.db、admin.db 放进新节点的数据目录（Docker：卷里的 db/），再启动。\n'
+                '账号、组、邀请码、管理密钥、网页登录都在 admin.db 里；证书不在这里（新地址要重新签发或不用 443）。\n')
+    return d
 
 
 def start_web(node, cfg, test_ip_header=False):
@@ -1872,12 +2422,16 @@ def main():
     ap.add_argument('--reset-access', action='store_true')
     ap.add_argument('--reset-web-login', action='store_true')
     ap.add_argument('--version', action='store_true')
+    ap.add_argument('--backup', metavar='DIR', help='在线备份 node.db、admin.db 到 DIR/km-sync-backup-<时间>/（搬家用）')
     a = ap.parse_args()
     if a.version:
         print(VERSION)
         return
     cfg = load_config(a.config)
     node = Node(cfg['data_dir'], cfg['public_host'], cfg['public_port'])
+    if a.backup:
+        print('KMJSON ' + json.dumps({'version': VERSION, 'backup': backup_to(node, a.backup)}, ensure_ascii=True))
+        return
     if a.init or a.new_admin_key or a.reset_access or a.reset_web_login:
         out = {'version': VERSION, 'crypto': CRYPTO_ERR is None}
         with node.lock:
@@ -1903,6 +2457,9 @@ def main():
     srv = serve(node, cfg['listen'], int(cfg['port']))
     stop = threading.Event()
     threading.Thread(target=janitor_loop, args=(node, stop), daemon=True).start()
+    # 局域网发现只在家里部署时打开（config.json 里 discovery_port，Docker 默认 8787）；公网服务器上不开，免得被拿去做 UDP 反射
+    if int(cfg.get('discovery_port') or 0):
+        threading.Thread(target=discovery_loop, args=(node, cfg['listen'], int(cfg['discovery_port']), stop), daemon=True).start()
     start_web(node, cfg)
     print(f'km-sync {VERSION} 监听 {cfg["listen"]}:{cfg["port"]}，数据目录 {cfg["data_dir"]}', flush=True)
     try:

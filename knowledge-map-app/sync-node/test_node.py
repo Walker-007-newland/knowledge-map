@@ -769,6 +769,428 @@ def run_local(java=True):
         ln.cleanup()
 
 
+# ---------------------------------------------------------------- 账号（1.4.0，#12）参考客户端：PROTOCOL.md 第 7 节
+
+ACCT_SALT = b'km-acct-v1'
+
+
+def aes(key):
+    return K._AESGCM(key) if K._AESGCM else K.PyAESGCM(key)
+
+
+def box(key, plain, aad):
+    return K.aes_box(aes, key, plain, aad)
+
+
+def unbox(key, b, aad):
+    return K.aes_unbox(aes, key, b, aad)
+
+
+class AcctClient:
+    """一台设备上的账号客户端。pw 只在内存里；mk / authKey / wrapKey 按协议派生。"""
+    ITERS = 100000          # 测试用最低次数，省时间
+
+    def __init__(self, http, user, pw, dev, name='测试平板'):
+        self.http, self.user, self.pw, self.dev, self.name = http, user, pw, dev, name
+        self.sent = []          # 本客户端发出的全部请求正文（检查里面没有密码和密钥）
+        self.tok = None
+        self.gk = self.gid = self.node_key = None
+
+    def post(self, path, obj, headers=None):
+        body = json.dumps(obj).encode()
+        self.sent.append(body + json.dumps(headers or {}).encode())
+        st, res, _ = self.http.send('POST', path, body, headers)
+        return st, res
+
+    def keys(self, salt, iters):
+        mk = hashlib.pbkdf2_hmac('sha256', self.pw.encode(), salt, iters, 32)
+        self.mk = mk
+        return K.hkdf(mk, ACCT_SALT, 'km-acct-auth'), K.hkdf(mk, ACCT_SALT, 'km-acct-wrap')
+
+    def bundle(self, invite=''):
+        return json.dumps({'v': 1, 'user': self.user, 'gk': b64e(self.gk or bytes(32)),'epoch': 1, 'gkT': 1, 'invite': invite}, separators=(',', ':')).encode()
+
+    def new_gk(self):
+        self.gk = secrets.token_bytes(32)
+        self.gid = K.hkdf(self.gk, b'km-sync-v1', 'gid', 16).hex()
+        self.node_key = K.hkdf(self.gk, b'km-sync-v1', 'node', 32)
+
+    def register(self, code, bind=None, iters=None, user=None):
+        """bind=DevClient（把这个已有的组升级成账号）；否则新建组"""
+        user = user or self.user
+        code_n = K.acct_code_norm(code)
+        salt = secrets.token_bytes(16)
+        iters = iters or self.ITERS
+        self.auth, self.wrapk = self.keys(salt, iters)
+        if bind is not None:
+            self.gid = bind.gid
+        elif self.gk is None:
+            self.new_gk()
+        ik = K.acct_ik(code_n) if code_n else secrets.token_bytes(32)
+        body = {'user': user, 'code': code, 'gid': self.gid, 'salt': b64e(salt), 'iters': iters, 'dev': self.dev, 'devName': self.name,
+                'appVer': '2026.10.23.0000',
+                'abox': b64e(box(K.hkdf(ik, ACCT_SALT, 'km-acct-abox'), self.auth, f'km-acct-abox|{user}|{self.gid}')),
+                'wrap_pw': b64e(box(self.wrapk, self.bundle(), f'km-acct-pw|{user}')),
+                'wrap_admin': b64e(json.dumps({'v': 1, 'epk': b64e(secrets.token_bytes(91)), 'box': b64e(secrets.token_bytes(120))}).encode())}
+        headers = None
+        if bind is None:
+            body.update(wrap(ik, self.gid, self.node_key))
+        else:
+            raw = json.dumps(body).encode()
+            headers = {'X-KM-Auth': bind.auth('POST', '/v1/acct/register', raw)}
+            self.sent.append(raw)
+            st, res, _ = self.http.send('POST', '/v1/acct/register', raw, headers)
+            return self._took(st, res)
+        st, res = self.post('/v1/acct/register', body)
+        return self._took(st, res)
+
+    def _took(self, st, res):
+        if st == 200 and res.get('tok'):
+            self.tok = unbox(K.hkdf(self.auth, ACCT_SALT, 'km-devtok'), b64d(res['tok']), f'km-devtok|{self.user}|{self.dev}')
+        return st, res
+
+    def pre(self):
+        return self.post('/v1/acct/pre', {'user': self.user})
+
+    def login(self, pw=None, nonce_override=None, dev=None):
+        pw0 = self.pw
+        if pw is not None:
+            self.pw = pw
+        try:
+            st, p = self.pre()
+            if st != 200:
+                return st, p
+            self.auth, self.wrapk = self.keys(b64d(p['salt']), p['iters'])
+            nonce = nonce_override or p['nonce']
+            dev = dev or self.dev
+            proof = H(self.auth, f'km-login|{self.user}|{nonce}|{dev}'.encode())
+            st, res = self.post('/v1/acct/login', {'user': self.user, 'nonce': nonce, 'dev': dev, 'devName': self.name,
+                                                   'appVer': '2026.10.23.0000', 'proof': b64e(proof)})
+            self.last_nonce = nonce
+            if st == 200:
+                plain = unbox(self.wrapk, b64d(res['wrap_pw']), f'km-acct-pw|{self.user}')
+                self.bundle_got = json.loads(plain) if plain else None
+                if self.bundle_got:
+                    self.gk = b64d(self.bundle_got['gk'])
+                    self.gid = K.hkdf(self.gk, b'km-sync-v1', 'gid', 16).hex()
+                    self.node_key = K.hkdf(self.gk, b'km-sync-v1', 'node', 32)
+                self._took(st, res)
+            return st, res
+        finally:
+            self.pw = pw0
+
+    def dev_client(self):
+        """带 X-KM-Dev 的组客户端"""
+        acct = self
+
+        class D(DevClient):
+            def call(self, action, obj, ctr=None, key=None, raw=None, tok=None):
+                path = f'/v1/g/{self.gid}/{action}'
+                body = raw if raw is not None else json.dumps(obj).encode()
+                a = self.auth('POST', path, body, ctr, key)
+                h = {'X-KM-Auth': a}
+                t = tok if tok is not None else acct.tok
+                if t:
+                    msg = f'POST\n{path}\n{self.dev}\n{a.split(".")[1]}\n{hashlib.sha256(body).hexdigest()}'.encode()
+                    h['X-KM-Dev'] = b64e(H(hashlib.sha256(t).digest(), msg))
+                acct.sent.append(body + json.dumps(h).encode())
+                st, res, _ = self.http.send('POST', path, body, h)
+                return st, res
+        return D(self.http, self.gid, self.node_key, self.dev)
+
+
+def run_accounts():
+    ln = LocalNode()
+    http = Http('127.0.0.1', ln.port)
+    adm = AdminClient(http, ln.node.new_admin_key()['admin_qr'].replace('p=0', f'p={ln.port}'))
+    A = adm.ok
+    clients = []
+    try:
+        section('账号：注册码（1.4.0）')
+        c1 = A('invites.create', {'kind': 'acct', 'label': '小明', 'days': 30, 'uses': 1})
+        check(re.fullmatch(r'[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}', c1['code']) and c1['qr'] == f'kmreg:1?c={c1["code"]}&h=127.0.0.1&p={ln.port}',
+              '生成注册码：XXXX-XXXX-XXXX，二维码 kmreg:1?c=…', c1)
+        lst = A('invites.list', {'kind': 'acct'})
+        check(len(lst) == 1 and lst[0]['kind'] == 'acct' and lst[0]['code'] == c1['code'] and lst[0]['users'] == [], 'invites.list 按种类筛选，带注册码原文', lst)
+        st, res, _ = http.send('GET', '/v1/hello')
+        check(res['ver'] == '1.4.0' and res.get('acct') == 1, '/v1/hello 显示 1.4.0、支持账号', res)
+
+        section('账号：注册新建组')
+        x = AcctClient(http, 'xiaoming', 'shuxue2026a', 'devX800', 'X800')
+        clients.append(x)
+        st, res = x.register(c1['code'].lower().replace('-', ' '))
+        check(st == 200 and res['ok'] and res['pw_ver'] == 1 and x.tok and len(x.tok) == 32, '注册成功（注册码大小写、空格不敏感），拿到通行证', (st, res))
+        row = ln.node.acct_row('xiaoming')
+        check(row and row['gid'] == x.gid and row['auth_key'] == x.auth and ln.node.known(x.gid)['invite_id'] == c1['id'],
+              '节点存了 authKey、组号；组登记的邀请号 = 注册码前 4 位', '')
+        dv = ln.node.adb.execute('SELECT tok_hash FROM acct_devices WHERE user=?', ('xiaoming',)).fetchone()
+        check(dv and dv[0] == hashlib.sha256(x.tok).digest(), '节点只存通行证的 SHA-256', '')
+        y = AcctClient(http, 'xiaohong', 'yuwen2026b', 'devP70')
+        clients.append(y)
+        st, res = y.register(c1['code'])
+        check(st == 403 and res == {'err': 'code'}, '注册码用完 → 403 code', (st, res))
+        c2 = A('invites.create', {'kind': 'acct', 'label': '小红', 'days': 30, 'uses': 3})
+        st, res = AcctClient(http, 'xiaoming', 'abcdefg123', 'devQ').register(c2['code'])
+        check(st == 409 and res == {'err': 'user'}, '用户名已被占用 → 409 user', (st, res))
+        st, res = y.register('ABCD-EFGH-JKMN')
+        check(st == 403 and res == {'err': 'code'}, '注册码不存在 → 403 code', (st, res))
+        bad = c2['code'][:5] + ('0' if c2['code'][5] != '0' else '1') + c2['code'][6:]
+        st, res = y.register(bad)
+        check(st == 403 and res == {'err': 'code'}, '注册码秘密部分错一位 → 403 code', (st, res))
+        st, res = y.register('kmreg:1?c=xx')
+        check(st == 403 and res == {'err': 'code'}, '注册码格式不对 → 403 code', (st, res))
+        c3 = A('invites.create', {'kind': 'acct', 'label': '作废', 'days': 30, 'uses': 1})
+        A('invites.revoke', {'id': c3['id']})
+        st, res = y.register(c3['code'])
+        check(st == 403 and res == {'err': 'code'}, '注册码作废 → 403 code', (st, res))
+        c4 = A('invites.create', {'kind': 'acct', 'label': '过期', 'days': 1, 'uses': 1})
+        ln.advance(2 * 86400)
+        st, res = y.register(c4['code'])
+        check(st == 403 and res == {'err': 'code'}, '注册码过期 → 403 code', (st, res))
+        ln.advance(-2 * 86400)
+        st, res = y.register(c2['code'], user='Bad-Name')
+        check(st == 400, '用户名不合规则 → 400', (st, res))
+        st, res = y.register(c2['code'], iters=50000)
+        check(st == 400, 'PBKDF2 次数低于 100000 → 400', (st, res))
+        zg, zk = new_group()
+        body = {'gid': zg, 'inv': c2['id'], **wrap(K.acct_ik(K.acct_code_norm(c2['code'])), zg, zk)}
+        st, res, _ = http.send('POST', '/v1/create', json.dumps(body).encode())
+        check(st == 403 and res == {'err': 'invite'}, '注册码不能当同步邀请码建组（403 invite）', (st, res))
+        lst = {i['id']: i for i in A('invites.list', {'kind': 'acct'})}
+        check(lst[c1['id']]['users'] == ['xiaoming'] and lst[c1['id']]['state'] == 'used' and lst[c2['id']]['used'] == 0,
+              '列表里用掉的注册码显示用户名；失败的注册不占次数', lst[c1['id']])
+
+        section('账号：登录（挑战应答）')
+        p = AcctClient(http, 'xiaoming', 'shuxue2026a', 'devP70', 'P70')
+        clients.append(p)
+        st, res = p.login()
+        check(st == 200 and res['gid'] == x.gid and p.gk == x.gk and p.bundle_got['user'] == 'xiaoming', '新设备登录：解开 wrap_pw 拿到同一把组密钥', (st, res))
+        st, r1 = AcctClient(http, 'xiaoming', 'wrongpass1', 'devP70').login()
+        st2, r2 = AcctClient(http, 'nosuchuser', 'wrongpass1', 'devP70').login()
+        check(st == 403 and st2 == 403 and r1 == r2 == {'err': 'login'}, '密码错和用户名不存在：响应完全一样（403 login）', (r1, r2))
+        _, pa = AcctClient(http, 'xiaoming', '', 'd').pre()
+        _, pb = AcctClient(http, 'nosuchuser', '', 'd').pre()
+        _, pb2 = AcctClient(http, 'nosuchuser', '', 'd').pre()
+        check(set(pa) == set(pb) and len(b64d(pb['salt'])) == 16 and pb['iters'] == K.ACCT_ITERS and pb['salt'] == pb2['salt'],
+              'pre：不存在的用户名也返回同样格式、固定的假盐（不能探测用户名）', (pa, pb))
+        st, res = p.login(nonce_override=p.last_nonce)
+        check(st == 403 and res == {'err': 'login'}, 'nonce 重放 → 403', (st, res))
+        q = AcctClient(http, 'xiaoming', 'shuxue2026a', 'devQ')
+        st, pre = q.pre()
+        ln.advance(130)
+        q.auth, _ = q.keys(b64d(pre['salt']), pre['iters'])
+        st, res = q.post('/v1/acct/login', {'user': 'xiaoming', 'nonce': pre['nonce'], 'dev': 'devQ',
+                                            'proof': b64e(H(q.auth, f'km-login|xiaoming|{pre["nonce"]}|devQ'.encode()))})
+        check(st == 403, 'nonce 超过 2 分钟 → 403', (st, res))
+        ln.advance(-130)
+        st, pre = q.pre()
+        st, res = q.post('/v1/acct/login', {'user': 'xiaoming', 'nonce': pre['nonce'], 'dev': 'devOther',
+                                            'proof': b64e(H(q.auth, f'km-login|xiaoming|{pre["nonce"]}|devQ'.encode()))})
+        check(st == 403, 'proof 绑定设备号：换个设备号 → 403', (st, res))
+
+        section('账号：设备通行证 X-KM-Dev')
+        dx, dp = x.dev_client(), p.dev_client()
+        st, res = dx.push([('s1', 1, 'c1', b'from-x800')])
+        check(st == 200 and res.get('acct') == 'xiaoming', '带通行证 push 成功，响应带 acct', (st, res))
+        st, res = dp.pull(0)
+        check(st == 200 and res['acct'] == 'xiaoming' and b64d(res['items'][0]['data']) == b'from-x800', '另一台登录的设备 pull 到数据', (st, res))
+        st, res = dp.call('pull', {'since': 0}, tok=b'')
+        check(st == 403 and res == {'err': 'relogin'}, '账号组请求不带 X-KM-Dev → 403 relogin', (st, res))
+        st, res = dp.call('pull', {'since': 0}, tok=secrets.token_bytes(32))
+        check(st == 403 and res == {'err': 'relogin'}, '带错的 X-KM-Dev → 403 relogin', (st, res))
+        st, res = DevClient(http, x.gid, x.node_key, 'stranger').pull(0)
+        check(st == 403 and res == {'err': 'relogin'}, '知道组密钥但没登录过的设备 → 403 relogin', (st, res))
+        st, res = dx.call('successor', {'gid': secrets.token_hex(16), **wrap(x.node_key, secrets.token_hex(16), secrets.token_bytes(32))})
+        check(st == 403 and res == {'err': 'acct'}, '账号组不能换钥（successor → 403 acct）', (st, res))
+        old_tok = p.tok
+        st, res = p.login()
+        st2, res2 = p.dev_client().call('pull', {'since': 0}, tok=old_tok)
+        check(st == 200 and st2 == 403 and res2['err'] == 'relogin', '同一设备重新登录后旧通行证作废', (st, st2))
+
+        section('账号：错 5 次暂停 15 分钟')
+        w = AcctClient(http, 'xiaoming', 'wrong-pass-0', 'devW')
+        codes = [w.login()[0] for _ in range(5)]
+        st, res = p.login()
+        check(codes == [403] * 5 and st == 429 and res == {'err': 'paused'}, '15 分钟内错 5 次 → 正确密码也 429 paused', (codes, st, res))
+        check(any(i['op'] == 'acct.pause' and i['sec'] for i in A('log.list', {'limit': 20, 'sec': True})['items']), '暂停记进安全日志', '')
+        ln.advance(15 * 60 + 1)
+        st, res = p.login()
+        check(st == 200, '15 分钟后恢复', (st, res))
+
+        section('账号：把已有的同步组升级成账号（老设备过渡）')
+        inv = Invite(A('invites.create', {'label': '老同步组', 'days': 7, 'uses': 3})['qr'])
+        h = AcctClient(http, 'xiaohong', 'yuwen2026b', 'hA')
+        clients.append(h)
+        h.new_gk()
+        ga, gb, gc = (DevClient(http, h.gid, h.node_key, d) for d in ('hA', 'hB', 'hC'))
+        ga.create(inv)
+        ga.push([('s', 1, 'c', b'a')])
+        gb.push([('s', 1, 'c', b'b')])
+        gc.pull(0)
+        st, res = h.register(c2['code'], bind=ga)
+        check(st == 200 and res['legacy'] == 2, '组员注册（X-KM-Auth 证明是组员），不新建组；另两台记为老设备', (st, res))
+        check(ln.node.known(h.gid)['invite_id'] == inv.id, '组登记的邀请号还是原来的同步邀请码', ln.node.known(h.gid))
+        st, res = gb.pull(0)
+        check(st == 200 and res['acct'] == 'xiaohong', '老设备（旧版 App，不带通行证）照常同步，并看到 acct 用户名', (st, res))
+        h2 = AcctClient(http, 'xiaohong2', 'yuwen2026b', 'hX')
+        st, res = h2.register(c2['code'], bind=ga)
+        check(st == 409 and res == {'err': 'bound', 'user': 'xiaohong'}, '同一个组再注册 → 409 bound', (st, res))
+        st, res = h2.register(c2['code'], bind=DevClient(http, h.gid, b'\0' * 32, 'hA'))
+        check(st in (401, 409), '签名不对不能绑定', (st, res))
+        hb = AcctClient(http, 'xiaohong', 'yuwen2026b', 'hB')
+        st, res = hb.login()
+        st2, res2 = hb.dev_client().pull(0)
+        legacy = ln.node.adb.execute("SELECT legacy, tok_hash IS NOT NULL FROM acct_devices WHERE user='xiaohong' AND dev='hB'").fetchone()
+        check(st == 200 and res['gid'] == h.gid and st2 == 200 and legacy == (0, 1), '老设备升级后登录：同一个组，老设备标记消失、有了通行证', (st, legacy))
+        st, res = gb.pull(0)
+        check(st == 403 and res['err'] == 'relogin', '登录后再不带通行证 → 403 relogin', (st, res))
+        ln.advance(61 * 86400)
+        ln.node.janitor()
+        st, res = gc.pull(0)
+        check(st == 403 and res['err'] == 'relogin', '老设备过渡满 60 天后要登录（403 relogin）', (st, res))
+        ln.advance(-61 * 86400)
+
+        section('账号：管理（停用、重设密码、移除设备、备注、删除）')
+        lst = {a['user']: a for a in A('accounts.list')}
+        check(set(lst) == {'xiaoming', 'xiaohong'} and lst['xiaoming']['devices'] == 2 and lst['xiaoming']['state'] == 'ok'
+              and lst['xiaoming']['last_dev'] == 'P70' and lst['xiaoming']['bytes'] > 0, 'accounts.list 字段齐全', lst.get('xiaoming'))
+        check([a['user'] for a in A('accounts.list', {'q': 'hong'})] == ['xiaohong'], '按用户名搜索', '')
+        g = A('accounts.get', {'user': 'xiaoming'})
+        check(len(g['list']) == 2 and {d['name'] for d in g['list']} == {'X800', 'P70'} and 'wrap_admin' not in g, 'accounts.get 设备列表（不带恢复包）', g)
+        A('accounts.setDisabled', {'user': 'xiaoming', 'disabled': True})
+        st, res = dx.pull(0)
+        st2, res2 = p.login()
+        check(st == 403 and res == {'err': 'disabled'} and st2 == 403 and res2 == {'err': 'disabled'}, '停用后同步和登录（密码对）都 → 403 disabled', (res, res2))
+        st3, res3 = AcctClient(http, 'xiaoming', 'wrong-pass-9', 'd').login()
+        check(res3 == {'err': 'login'}, '停用时密码错只说 login（不泄露停用）', res3)
+        A('accounts.setDisabled', {'user': 'xiaoming', 'disabled': False})
+        st, res = dx.pull(0)
+        st2, _ = p.login()
+        check(st == 403 and res['err'] == 'relogin' and st2 == 200, '启用后旧通行证作废（relogin），重新登录成功', (st, st2))
+        x.login()
+        dx = x.dev_client()
+        # 重设密码：审批 App 解开 wrap_admin 后算新的 salt / authKey / wrap_pw
+        g = A('accounts.get', {'user': 'xiaoming', 'wrap': True})
+        check('wrap_admin' in g, '管理密钥能取恢复包 wrap_admin', '')
+        nx = AcctClient(http, 'xiaoming', 'newpass2026x', 'devX800')
+        nx.gk = x.gk
+        salt = secrets.token_bytes(16)
+        na, nw = nx.keys(salt, 100000)
+        A('accounts.resetPassword', {'user': 'xiaoming', 'salt': b64e(salt), 'iters': 100000, 'auth_key': b64e(na),
+                                     'wrap_pw': b64e(box(nw, nx.bundle(), 'km-acct-pw|xiaoming'))})
+        st, res = dx.pull(0)
+        st2, res2 = p.dev_client().pull(0)
+        check(st == 403 and res['err'] == 'relogin' and st2 == 403, '重设密码后所有设备 → 403 relogin', (res, res2))
+        st, res = x.login()
+        st2, res2 = nx.login()
+        check(st == 403 and st2 == 200 and nx.gk == x.gk and res2['pw_ver'] == 2, '旧密码登录失败，新密码登录成功、组密钥不变', (st, st2))
+        check(nx.dev_client().pull(0)[0] == 200, '新密码登录后照常同步', '')
+        A('accounts.removeDevice', {'user': 'xiaoming', 'dev': 'devX800'})
+        st, res = nx.dev_client().pull(0)
+        check(st == 403 and res['err'] == 'relogin' and not ln.node.ndb.execute("SELECT 1 FROM slots WHERE dev='devX800' AND gid=?", (x.gid,)).fetchone(),
+              '移除设备：它回登录页（relogin），它在节点上的槽删掉', (st, res))
+        A('accounts.setNote', {'user': 'xiaoming', 'note': '初三 2 班'})
+        check(A('accounts.list')[-1]['note'] == '初三 2 班' or any(a['note'] == '初三 2 班' for a in A('accounts.list')), '修改备注', '')
+        logs = A('log.list', {'limit': 100})['items']
+        for op in ('accounts.setDisabled', 'accounts.resetPassword', 'accounts.removeDevice', 'accounts.setNote', 'acct.register', 'acct.login'):
+            check(any(i['op'] == op and i['result'] == '成功' for i in logs), f'日志里有 {op}', '')
+        st, r = adm.call('accounts.delete', {'user': 'xiaohong', 'confirm': 'xiaoming'})
+        check(st == 200 and not r['ok'], '删除账号要输入正确的用户名确认', r)
+        A('accounts.delete', {'user': 'xiaohong', 'confirm': 'xiaohong'})
+        st, res = hb.dev_client().pull(0)
+        check(st == 403 and res['err'] == 'blocked' and not ln.node.acct_row('xiaohong'), '删除账号后组号永久封禁', (st, res))
+
+        section('账号：网页会话的权限')
+        ln.node.web_dir = None
+        pw = 'acct-test-' + secrets.token_urlsafe(10)
+        A('web.setPassword', {'user': 'boss', 'pw': pw})
+        wsrv = K.serve(ln.node, '127.0.0.1', 0, test_ip_header=True, channel='web')
+        threading.Thread(target=wsrv.serve_forever, daemon=True).start()
+        whttp = Http('127.0.0.1', wsrv.server_address[1])
+        st, res, _ = web_login(whttp, 'boss', pw)
+        sess = AdminClient.session(whttp, res['kid'], res['key'])
+        check(len(sess.ok('accounts.list')) == 1 and sess.ok('invites.create', {'kind': 'acct', 'label': '网页', 'days': 30, 'uses': 1})['code'],
+              '网页后台能看账号列表、发注册码', '')
+        r1 = sess.call('accounts.resetPassword', {'user': 'xiaoming'})[1]
+        r2 = sess.call('accounts.delete', {'user': 'xiaoming', 'confirm': 'xiaoming'})[1]
+        r3 = sess.call('accounts.get', {'user': 'xiaoming', 'wrap': True})[1]
+        check(r1['err'] == 'perm' and r2['err'] == 'perm' and r3['err'] == 'perm', '网页后台不能重设密码、删除账号、取恢复包（第一期）', (r1, r2, r3))
+        check(sess.ok('accounts.setDisabled', {'user': 'xiaoming', 'disabled': True})['state'] == 'disabled'
+              and sess.ok('accounts.setDisabled', {'user': 'xiaoming', 'disabled': False}), '网页后台能停用 / 启用', '')
+        wsrv.shutdown()
+        wsrv.server_close()
+
+        section('账号：节点数据丢失后用注册码重建')
+        k = AcctClient(http, 'xiaoke', 'huaxue2026c', 'kA')
+        clients.append(k)
+        c5 = A('invites.create', {'kind': 'acct', 'label': '重建', 'days': 30, 'uses': 1})
+        k.register(c5['code'])
+        A('invites.revoke', {'id': c5['id']})
+        ln.lose_node_db()
+        http.port = ln.port
+        dk = k.dev_client()
+        st, res = dk.pull(0)
+        st2, res2 = dk.create(Invite(f'kmnode:1?h=127.0.0.1&p={ln.port}&i={c5["id"]}&s=AAAA'))   # secret 不对
+        ik_ok = DevClient(http, k.gid, k.node_key, 'kA')
+        body = {'gid': k.gid, 'inv': c5['id'], **wrap(K.acct_ik(K.acct_code_norm(c5['code'])), k.gid, k.node_key)}
+        st3, res3, _ = http.send('POST', '/v1/create', json.dumps(body).encode())
+        st4, res4 = dk.pull(0)
+        check(st == 404 and st2 == 403 and st3 == 200 and res3['rebuilt'] and st4 == 200 and res4['acct'] == 'xiaoke',
+              '数据丢失 → nogroup → 用注册码重建（注册码已作废也行，账号说了算）→ 通行证照常', (st, st2, st3, res3, st4))
+
+        section('账号：网络上没有明文密码和密钥（验收 8）')
+        secrets_found = []
+        for c in clients:
+            vals = [c.pw.encode()]
+            for attr in ('mk', 'auth', 'wrapk', 'gk', 'tok'):
+                v = getattr(c, attr, None)
+                if v:
+                    vals.append(v)
+            blob = b'\n'.join(c.sent)
+            for v in vals:
+                for form in (v, v.hex().encode(), b64e(v).encode(), base64.b64encode(v).rstrip(b'=')):
+                    if len(form) >= 8 and form in blob:
+                        secrets_found.append((c.user, form[:12]))
+        check(not secrets_found, f'{len(clients)} 个客户端发出的全部请求里搜不到密码、mk、authKey、wrapKey、gk、devToken（原文 / hex / base64）', secrets_found)
+
+        section('搬家：在线备份、局域网发现（1.4.0）')
+        out = tempfile.mkdtemp(prefix='km-sync-bak-')
+        try:
+            d = K.backup_to(ln.node, out)
+            b = sqlite3.connect(os.path.join(d, 'admin.db'))
+            users = {r[0] for r in b.execute('SELECT user FROM accounts')}
+            b.close()
+            n2 = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            ok = n2.acct_row('xiaoke') and n2.ndb.execute('SELECT 1 FROM groups WHERE gid=?', (k.gid,)).fetchone() \
+                and n2.adb.execute('SELECT kid FROM admin_keys').fetchone()[0] == adm.kid
+            n2.ndb.close()
+            n2.adb.close()
+            check(users == {'xiaoming', 'xiaoke'} and ok, '--backup 复制出的 node.db / admin.db 直接能当新节点的数据目录用（账号、组、管理密钥都在）', users)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+        stop = threading.Event()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.bind(('127.0.0.1', 0))
+        port = s.getsockname()[1]
+        s.close()
+        threading.Thread(target=K.discovery_loop, args=(ln.node, '127.0.0.1', port, stop), daemon=True).start()
+        time.sleep(0.3)
+        c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        c.settimeout(2)
+        c.sendto(b'hello?', ('127.0.0.1', port))
+        c.sendto(K.DISCOVERY_MAGIC, ('127.0.0.1', port))
+        try:
+            reply = json.loads(c.recvfrom(1024)[0])
+        except (socket.timeout, ValueError):
+            reply = None
+        c.close()
+        stop.set()
+        check(reply and reply['node'] == 'km-sync' and reply['acct'] == 1 and reply['port'] == ln.node.public_port and 'host' in reply,
+              '局域网发现：广播 km-sync? 收到 hello（带对外地址、端口），别的内容不理', reply)
+    finally:
+        ln.cleanup()
+
+
 # ---------------------------------------------------------------- 网页后台（1.1.0）
 
 def find_openssl():
@@ -1310,7 +1732,7 @@ def run_migration():
         finally:
             K.ADMIN_SCHEMA = saved
         cols = [r[1] for r in sqlite3.connect(os.path.join(d, 'admin.db')).execute('PRAGMA table_info(tombstones)')]
-        check('purged' in cols and len(saved) == 4, '表结构 4（1.3.0）：tombstones 加了 purged 列', cols)
+        check('purged' in cols and len(saved) >= 4, '表结构 4（1.3.0）：tombstones 加了 purged 列', cols)
     finally:
         shutil.rmtree(d, ignore_errors=True)
     # 1.2.0（表结构 3）的库：已有的换钥墓碑升级后还在、仍按 90 天清理
@@ -1328,6 +1750,7 @@ def run_migration():
             K.ADMIN_SCHEMA = saved
         n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
         row = n.adb.execute('SELECT successor, purged FROM tombstones WHERE gid=?', ('cd' * 16,)).fetchone()
+        check(os.path.exists(os.path.join(d, 'admin.db.v3.bak')), '1.2.0 → 1.4.0 也备份了 admin.db.v3.bak', os.listdir(d))
         check(row == ('ef' * 16, None) and not n.purged('cd' * 16) and os.path.exists(os.path.join(d, 'admin.db.v3.bak')),
               '1.2.0 的库升级到表结构 4：换钥墓碑还在（不是永久的），备份了 admin.db.v3.bak', row)
         n.ndb.close()
@@ -1340,6 +1763,65 @@ def run_migration():
             n.adb.close()
         finally:
             K.ADMIN_SCHEMA = saved
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    run_migration_v5()
+
+
+def run_migration_v5():
+    """1.3.0（表结构 4）→ 1.4.0（表结构 5，账号）：只加表和一列；组数上限 30 → 300；回滚到 1.3.0 照常。"""
+    section('admin.db 从 1.3.0（表结构 4）升级到 1.4.0（表结构 5，账号）')
+    d = tempfile.mkdtemp(prefix='km-sync-mig5-')
+    try:
+        saved = K.ADMIN_SCHEMA
+        K.ADMIN_SCHEMA = saved[:4]
+        try:
+            n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            key = n.new_admin_key()
+            inv = n.create_invite('旧邀请码', 30, 5)
+            n.adb.execute("INSERT INTO known_groups(gid, invite_id, created, note) VALUES(?,?,1,'小明')", ('ab' * 16, inv['id']))
+            n.set_setting('limits', dict(K.DEFAULT_LIMITS, max_groups=30))
+            n.adb.commit()
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
+        n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+        ver = n.adb.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0]
+        check(ver == '5' and os.path.exists(os.path.join(d, 'admin.db.v4.bak')), '表结构 4 → 5，升级前备份了 admin.db.v4.bak', (ver, os.listdir(d)))
+        lst = n.op_invites_list({}, '127.0.0.1')[0]
+        check(lst[0]['id'] == inv['id'] and lst[0]['kind'] == 'node' and n.known('ab' * 16)['note'] == '小明'
+              and n.adb.execute('SELECT kid FROM admin_keys').fetchone()[0] == key['kid'], '升级后旧邀请码（种类 node）、组登记、管理密钥都在', lst[:1])
+        check(n.limits()['max_groups'] == 300, '组数上限 30 自动提到 300', n.limits())
+        cols = [r[1] for r in n.adb.execute('PRAGMA table_info(accounts)')]
+        check('wrap_admin' in cols and 'bound_at' in cols, '新表 accounts、acct_devices 建好了', cols)
+        n.ndb.close()
+        n.adb.close()
+        K.ADMIN_SCHEMA = saved[:4]
+        try:
+            n = K.Node(d, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            check(n.adb.execute('SELECT COUNT(*) FROM invites').fetchone()[0] == 1 and n.acct_by_gid('ab' * 16) is None,
+                  '用只认表结构 4 的程序打开新库也正常（模拟回滚到 1.3.0）', '')
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
+        # 管理员自己改过的上限不动
+        d2 = tempfile.mkdtemp(prefix='km-sync-mig5b-')
+        K.ADMIN_SCHEMA = saved[:4]
+        try:
+            n = K.Node(d2, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+            n.set_setting('limits', dict(K.DEFAULT_LIMITS, max_groups=50))
+            n.adb.commit()
+            n.ndb.close()
+            n.adb.close()
+        finally:
+            K.ADMIN_SCHEMA = saved
+        n = K.Node(d2, '127.0.0.1', 8787, aes=K._AESGCM or K.PyAESGCM)
+        check(n.limits()['max_groups'] == 50, '管理员改过的组数上限（50）升级后不变', n.limits())
+        n.ndb.close()
+        n.adb.close()
+        shutil.rmtree(d2, ignore_errors=True)
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -1600,6 +2082,7 @@ def main():
         run_remote(a.remote, web=not a.no_web)
     else:
         run_local(java=not a.no_java)
+        run_accounts()
         if not a.no_web:
             run_web_local()
             run_migration()
