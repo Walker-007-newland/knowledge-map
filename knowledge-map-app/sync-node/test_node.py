@@ -1951,6 +1951,46 @@ def run_remote_web(http, adm, pub):
         check(any(i['op'] == 'web.login' and i['result'] == '拒绝' for i in logs), '错误密码记进了安全日志', '')
 
 
+def run_remote_accounts(http, adm, made_inv):
+    """远程节点的账号（1.4.0，#12 验收 22）：只用备注「自动测试」的临时注册码和 autotest_ 开头的临时账号，结束时删账号、作废注册码，
+    不消耗管理员的码。"""
+    section('远程节点：账号（1.4.0）')
+    user = 'autotest_' + secrets.token_hex(3)
+    made = []
+    try:
+        c = adm.ok('invites.create', {'kind': 'acct', 'label': '自动测试', 'days': 1, 'uses': 1})
+        made_inv.append(c['id'])
+        x = AcctClient(http, user, 'auto' + secrets.token_hex(6) + '9', 'autotestX')
+        st, r = x.register(c['code'])
+        made.append(user)
+        check(st == 200 and r.get('ok'), f'临时注册码注册 {user}', (st, r))
+        p = AcctClient(http, user, x.pw, 'autotestP')
+        st, r = p.login()
+        check(st == 200 and p.gk == x.gk, '另一台登录拿到同一把组密钥', (st, r))
+        blob = secrets.token_bytes(3000)
+        st, r = x.dev_client().push([('s1', 1, 'c1', blob)])
+        st2, r2 = p.dev_client().pull(0)
+        check(st == 200 and st2 == 200 and r2.get('acct') == user and b64d(r2['items'][0]['data']) == blob, '带通行证 push / pull，响应带 acct', (st, st2))
+        st, r = DevClient(http, x.gid, x.node_key, 'autotestZ').pull(0)
+        check(st == 403 and r == {'err': 'relogin'}, '没登录的设备 → 403 relogin', (st, r))
+        st, r = AcctClient(http, user, 'wrong-pass-1', 'autotestW').login()
+        check(st == 403 and r == {'err': 'login'}, '密码错 → 403 login', (st, r))
+        adm.ok('accounts.setDisabled', {'user': user, 'disabled': True})
+        st, r = x.dev_client().pull(0)
+        check(st == 403 and r == {'err': 'disabled'}, '停用 → 403 disabled', (st, r))
+        adm.ok('accounts.setDisabled', {'user': user, 'disabled': False})
+        lst = [a for a in adm.ok('accounts.list', {'q': user}) if a['user'] == user]
+        check(len(lst) == 1 and lst[0]['state'] in ('ok', 'relogin'), '账号列表里看得到', lst)
+    finally:
+        for u in made:
+            try:
+                adm.ok('accounts.delete', {'user': u, 'confirm': u})
+            except AssertionError:
+                pass
+        left = [a for a in adm.ok('accounts.list', {}) if a['user'].startswith('autotest_')]
+        check(not left, '清理完毕：没有 autotest_ 开头的测试账号', left)
+
+
 def run_remote(addr, web=True):
     host, port = addr.rsplit(':', 1)
     port = int(port)
@@ -2039,6 +2079,8 @@ def run_remote(addr, web=True):
         check(st == 403 and r == {}, '设备签名访问管理接口 → 403 {}', (st, r))
         logs = adm.ok('log.list', {'limit': 30})['items']
         check(any(i['op'] == 'groups.remove' and i['obj'] == g2[:6] for i in logs), '管理日志里有刚才的操作', '')
+        if s['version'] >= '1.4.0':
+            run_remote_accounts(http, adm, made_inv)
         if web:
             run_remote_web(http, adm, info.get('host') or '43.142.41.27')
     finally:

@@ -4,8 +4,10 @@
 # 数据（数据库、证书、配置）全在卷 /data 里，搬家时拷走这个卷即可。详见 DOCKER.md。
 FROM python:3.12-slim
 
+# 国内网络装 pip 包慢时：docker compose build --build-arg PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+ARG PIP_INDEX_URL=
 # cryptography：管理接口和账号接口的 AES-GCM；qrcode：第一次启动时在日志里画管理码（纯文字二维码，不需要图片库）
-RUN pip install --no-cache-dir "cryptography>=41,<46" "qrcode>=7.4,<9" \
+RUN pip install --no-cache-dir ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"} "cryptography>=41,<46" "qrcode>=7.4,<9" \
  && useradd --system --uid 10001 --home-dir /data --shell /usr/sbin/nologin kmsync \
  && mkdir -p /app/web/vendor /data && chown kmsync:kmsync /data
 
