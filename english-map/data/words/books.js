@@ -42,7 +42,7 @@ KW.books = [
       { id: "u3", name: "Unit 3 Our Feelings" },
       { id: "u4", name: "Unit 4 Getting Around" }
     ] },
-  { id: 'mj5a', grade: 5, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: false, mustMarked: true,
+  { id: 'mj5a', grade: 5, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: true, mustMarked: true,
     src: '闽教版五年级上册（2026 年度印次），书末 Words and Expressions 第 91–93 页；国家中小学智慧教育平台电子课本',
     units: [
       { id: "u1", name: "Unit 1 Weather in Different Seasons" },
@@ -50,7 +50,7 @@ KW.books = [
       { id: "u3", name: "Unit 3 Plans and Dates" },
       { id: "u4", name: "Unit 4 Our Dream Jobs" }
     ] },
-  { id: 'mj5b', grade: 5, term: '下', pub: '闽教版', ed: '旧版（三年级起点）', old: true, checked: false, mustMarked: true,
+  { id: 'mj5b', grade: 5, term: '下', pub: '闽教版', ed: '旧版（三年级起点）', old: true, checked: true, mustMarked: true,
     src: '闽教版五年级下册旧版（三年级起点，2025 年 12 月第 20 次印刷），书末 Words and Expressions 第 76–77 页；国家中小学智慧教育平台电子课本。新版 2027 春出版后替换',
     units: [
       { id: "u1", name: "Unit 1 Winter Vacation" },
@@ -63,7 +63,7 @@ KW.books = [
       { id: "u7", name: "Unit 7 Tall Buildings" },
       { id: "u8", name: "Unit 8 Dates of the Month" }
     ] },
-  { id: 'mj6a', grade: 6, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: false, mustMarked: true,
+  { id: 'mj6a', grade: 6, term: '上', pub: '闽教版', ed: '2026 秋新版', checked: true, mustMarked: true,
     src: '闽教版六年级上册（2026 年度印次），书末 Words and Expressions 第 93–95 页；国家中小学智慧教育平台电子课本',
     units: [
       { id: "u1", name: "Unit 1 Wonderful Sports Events" },
@@ -71,7 +71,7 @@ KW.books = [
       { id: "u3", name: "Unit 3 Good Manners" },
       { id: "u4", name: "Unit 4 Great People" }
     ] },
-  { id: 'mj6b', grade: 6, term: '下', pub: '闽教版', ed: '旧版（三年级起点）', old: true, checked: false, mustMarked: true,
+  { id: 'mj6b', grade: 6, term: '下', pub: '闽教版', ed: '旧版（三年级起点）', old: true, checked: true, mustMarked: true,
     src: '闽教版六年级下册旧版（三年级起点，2025 年 12 月第 19 次印刷），书末 Words and Expressions 第 76–77 页；国家中小学智慧教育平台电子课本。新版 2027 春出版后替换',
     units: [
       { id: "u1", name: "Unit 1 Winter Activities" },
