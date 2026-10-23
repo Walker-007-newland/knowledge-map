@@ -250,7 +250,10 @@
       $('#runTotal').textContent = words.length;
       $('#runInput').hidden = run.mode !== 'type';
       $('#btnPause').hidden = run.mode !== 'paper';
-      if (o.current() === 'vSetup') history.replaceState(keepState('vRun'), '', '#run'), o.show('vRun', false);
+      // 从设置页或结果页（错词再听写 / 全部再听一遍）出发都在当前记录上替换，不再压新记录，
+      // 否则「返回词单」的 history.back() 会退回上一轮的结果页（#9 第 2 期测试问题 1）
+      const cur = o.current();
+      if (cur === 'vSetup' || cur === 'vResult') history.replaceState(keepState('vRun'), '', '#run'), o.show('vRun', false);
       else o.show('vRun');
       playCurrent();
     }
