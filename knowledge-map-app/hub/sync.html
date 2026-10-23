@@ -69,6 +69,9 @@
   .bigcode { font: 700 48px ui-monospace, Consolas, monospace; letter-spacing: 10px; text-align: center; margin: 10px 0; color: var(--accent); }
   .row { display: flex; gap: 10px; }
   .row .btn { flex: 1; }
+  .near { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--good); color: #fff; margin-left: 6px; font-weight: 400; }
+  #lanList .btn { text-align: left; }
+  #lanList .none { font-size: 14px; color: var(--muted); margin: 8px 0; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -95,6 +98,8 @@
     <div class="small" style="margin-top:6px">第一台设备用：邀请码是管理员给的二维码。</div>
     <label class="btn">📷 扫加入码，加入我的另一台设备<input type="file" accept="image/*" capture="environment" hidden id="scanJoin"></label>
     <div class="small" style="margin-top:6px">在已经同步的那台设备上点「添加设备」，它会显示加入码。</div>
+    <button class="btn" id="btnLanStart">📶 和同一个 Wi-Fi 下的设备配对</button>
+    <div class="small" style="margin-top:6px">不用邀请码：两台设备连同一个 Wi-Fi，都打开「设备同步」点这个按钮，在一台上点另一台，核对 4 位数字。</div>
     <details>
       <summary>扫不了？手动输入</summary>
       <p class="small" style="margin-top:8px">粘贴邀请码文字（kmnode:1?…），或另一台设备上显示的加入码（地址 · 26 位码）。</p>
@@ -102,6 +107,22 @@
       <button class="btn" id="btnManual">确定</button>
     </details>
     <div class="msg" id="startMsg" hidden></div>
+  </section>
+
+  <section class="card" id="lanCard" hidden>
+    <h2>📶 同一个 Wi-Fi 下添加设备</h2>
+    <p id="lanLeft"></p>
+    <div class="small">本机地址：<b class="code-text" id="lanAddr"></b></div>
+    <div class="small" style="margin-top:10px">附近正在「添加设备」的平板、手机（点一台就开始配对）：</div>
+    <div id="lanList"></div>
+    <details>
+      <summary>找不到？手动输入对方地址</summary>
+      <p class="small" style="margin-top:8px">在对方设备的这一栏里看「本机地址」，照着输入（如 192.168.1.23:47811）。</p>
+      <input type="text" id="lanAddrIn" placeholder="192.168.1.23:47811" inputmode="url">
+      <button class="btn" id="btnLanAddr">连接</button>
+    </details>
+    <div class="msg" id="lanMsg" hidden></div>
+    <button class="btn" id="btnLanClose">关闭</button>
   </section>
 
   <section class="card" id="joinWait" hidden>
@@ -129,7 +150,7 @@
   <section class="card" id="more" hidden>
     <h2>其它</h2>
     <label class="btn">📷 重新扫邀请码<input type="file" accept="image/*" capture="environment" hidden id="rescan"></label>
-    <div class="small" style="margin-top:6px">同步节点换了地址、或提示「邀请码已失效」时用。</div>
+    <div class="small" style="margin-top:6px">同步节点换了地址、或提示「邀请码已失效」时用；只在 Wi-Fi 下同步的组，扫一次邀请码就能加上同步节点（不在一起时也能同步）。</div>
     <button class="btn danger" id="btnLeave">退出同步组</button>
     <div class="small" style="margin-top:6px">退出后本机学习数据保留，只是不再和别的设备同步。</div>
   </section>
@@ -165,6 +186,27 @@
     if (el.dataset.p && (!kind || el.dataset.p === kind)) { show(el, ''); clearTimeout(progT); }
   }
 
+  // 第一次同步（扫加入码加入、局域网配对后）：先显示「正在第一次同步…」，同步完（状态回到已同步、而且是这之后同步的）换成结果；
+  // 中间合并进来的报告接在后面；出错 / 1 分钟还没完成就说清楚现在卡在哪
+  let firstSync = null;
+  function firstStart(base, note) {
+    clearTimeout(firstSync && firstSync.timer);
+    firstSync = { at: Date.now() - 1000, base, note: note || '', report: '' };
+    show($('groupMsg'), base + '，正在第一次同步…' + firstSync.note, 'good');
+    firstSync.timer = setTimeout(() => firstEnd(true), 60000);
+  }
+  function firstEnd(timeout) {
+    const f = firstSync;
+    if (!f || !st || !st.inGroup) return;
+    let text, cls = 'good';
+    if (st.status === 'ok' && (st.lastOk || 0) >= f.at) text = f.base + '，第一次同步完成' + (f.report ? '。' + f.report : '') + f.note;
+    else if (st.status === 'error' || st.status === 'offline' || timeout) { text = f.base + '，第一次同步还没完成：' + KMSync.statusText(st); cls = 'bad'; }
+    else return;
+    clearTimeout(f.timer);
+    firstSync = null;
+    show($('groupMsg'), text, cls);
+  }
+
   function render() {
     st = KMSync.state() || st;
     $('statusCard').hidden = false;
@@ -178,20 +220,59 @@
     $('start').hidden = st.inGroup || joinRole === 'guest' || !!st.unavailable;   // 内核建不出来：只显示原因
     $('group').hidden = !st.inGroup;
     $('more').hidden = !st.inGroup;
+    renderLan();
     if (!st.inGroup) return;
     $('joinWait').hidden = true;
     const rows = (st.members || []).slice().sort((a, b) => (b.me - a.me) || String(a.name).localeCompare(String(b.name)));
+    const nodeOn = st.node && !st.node.off;
     let html = rows.map(m => {
-      const when = m.me ? (st.lastOk ? '上次同步：' + KMSync.fmtTime(st.lastOk) + ' · 节点' : '还没同步过')
-        : (m.last ? '上次收到它的改动：' + KMSync.fmtTime(m.last) + ' · 节点' : '还没收到它的改动');
+      const when = m.me ? (st.lastOk ? '上次同步：' + KMSync.fmtTime(st.lastOk) + (nodeOn ? '' : ' · 局域网') : '还没同步过')
+        : (m.last ? '上次收到它的改动：' + KMSync.fmtTime(m.last) + ' · ' + (m.via || '节点') : '还没收到它的改动');
       return '<div class="dev"><span class="ico">' + (m.me ? '📱' : '💻') + '</span><div class="info"><div class="name">' + esc(m.name || '未命名设备') +
-        (m.me ? '<span class="tag">本机</span>' : '') + '</div><div class="sub">' + esc(when) + '</div></div><div class="acts">' +
+        (m.me ? '<span class="tag">本机</span>' : '') + (m.near ? '<span class="near">在附近</span>' : '') + '</div><div class="sub">' + esc(when) + '</div></div><div class="acts">' +
         '<button class="mini" data-rename="' + esc(m.dev) + '">改名</button>' + (m.me ? '' : '<button class="mini danger" data-remove="' + esc(m.dev) + '">移除</button>') + '</div></div>';
     }).join('');
     const n = st.node;
     if (n) html += '<div class="dev"><span class="ico">☁️</span><div class="info"><div class="name">同步节点 ' + esc(n.h + ':' + n.p) + '</div><div class="sub">' +
       esc(n.off ? '已停用' : n.msg ? n.msg : n.last ? '上次同步：' + KMSync.fmtTime(n.last) : '还没同步过') + '</div></div></div>';
+    else html += '<div class="dev"><span class="ico">📶</span><div class="info"><div class="name">只在同一个 Wi-Fi 下同步</div><div class="sub">' +
+      '没有同步节点：两台设备要连同一个 Wi-Fi、都打开 App 才会同步。要在不同网络之间同步，在下面「重新扫邀请码」加上同步节点</div></div></div>';
     $('devices').innerHTML = html;
+  }
+
+  /* ---------------- 局域网「添加设备」（可被发现 3 分钟） ---------------- */
+  let lanTimer = 0;
+  function renderLan() {
+    const l = st && st.lan, open = !!(l && l.disc && l.disc > Date.now());
+    $('lanCard').hidden = !open;
+    $('btnLanStart').hidden = !st || !st.lan;               // 原生不支持局域网（旧测试桥）时不显示
+    if (!open) { clearInterval(lanTimer); lanTimer = 0; return; }
+    const anchor = st.inGroup ? $('group') : $('start');    // 紧跟在点「添加设备」/「配对」的那张卡片下面
+    if (anchor.nextElementSibling !== $('lanCard')) anchor.after($('lanCard'));
+    $('lanAddr').textContent = l.addr || '（没连 Wi-Fi）';
+    renderNearby(l.nearby || []);
+    const tick = () => {
+      const left = Math.max(0, (st && st.lan && st.lan.disc || 0) - Date.now());
+      $('lanLeft').textContent = left ? '正在被附近的设备发现，还剩 ' + Math.floor(left / 60000) + ' 分 ' + Math.floor(left / 1000) % 60 + ' 秒' : '已停止被发现';
+      if (!left) { clearInterval(lanTimer); lanTimer = 0; }
+    };
+    tick();
+    if (!lanTimer) lanTimer = setInterval(tick, 1000);
+  }
+  function renderNearby(list) {
+    $('lanList').innerHTML = list.length ? list.map(p => '<button class="btn" data-peer="' + esc(p.key) + '">📱 ' + esc(p.name) + '</button>').join('')
+      : '<div class="none">还没找到。对方也要连同一个 Wi-Fi、打开「设备同步」点「添加设备」（或「和同一个 Wi-Fi 下的设备配对」）；一般几秒钟就会出现。</div>';
+  }
+  function lanMsg(text, cls) { show($('lanMsg'), text, cls); }
+  function askPair(d) {
+    document.querySelectorAll('.modal.pair').forEach(x => x.remove());
+    const ov = modal('<h2>和「' + esc(d.name) + '」配对</h2><p>看一下那台设备上显示的数字，和下面的一样才点「数字一样，配对」。</p>' +
+      '<div class="bigcode">' + esc(d.code) + '</div>' +
+      '<p>配对后两台设备的学习记录会合并成一份，<b>只配对同一个学生自己的设备</b>。</p>' +
+      '<div class="row"><button class="btn danger" id="mNo">不一样，取消</button><button class="btn primary" id="mYes">数字一样，配对</button></div>');
+    ov.classList.add('pair');
+    ov.querySelector('#mYes').onclick = () => { ov.remove(); A.pairConfirm(true); lanMsg('等「' + d.name + '」上也点「数字一样」…'); };
+    ov.querySelector('#mNo').onclick = () => { ov.remove(); A.pairConfirm(false); };
   }
 
   /* ---------------- 扫码 ---------------- */
@@ -329,12 +410,37 @@
       // 立即同步：看到过「同步中」、或者状态已经回到同步完的样子，就收起「正在同步…」
       if (st && st.status === 'syncing') sawBusy = true;
       else if (st && (sawBusy || st.status === 'ok' || st.status === 'error' || st.status === 'offline')) clearProgress('sync');
+      firstEnd(false);
     }
     else if (t === 'action-result') {
+      if (d.op === 'pairOpen' || d.op === 'pairConfirm') {
+        // 局域网配对：成功的不用再说（卡片、弹窗本身就是结果）；失败的（没连 Wi-Fi 等）显示在开始配对的地方
+        if (!d.ok) show(!(st && st.inGroup) ? $('startMsg') : $('groupMsg'), d.msg, 'bad');
+        else if (d.op === 'pairConfirm' && d.msg) lanMsg(d.msg);
+        render();
+        return;
+      }
       const el = d.op === 'nodeJoin' && !(st && st.inGroup) ? $('startMsg') : $('groupMsg');
       show(el, d.msg, d.ok ? 'good' : 'bad');
       if (d.op === 'leave' && d.ok) show($('startMsg'), d.msg, 'good');
       render();
+    } else if (t === 'pair-open') { lanMsg(''); render(); }
+    else if (t === 'peers') renderNearby(d.list || []);
+    else if (t === 'pair-close') { lanMsg(d.msg || '', 'bad'); show(!(st && st.inGroup) ? $('startMsg') : $('groupMsg'), d.msg || '', 'bad'); render(); }
+    else if (t === 'pair-request') { lanMsg(''); askPair(d); }
+    else if (t === 'pair-result') {
+      document.querySelectorAll('.modal.pair').forEach(x => x.remove());
+      if (d.ok) {
+        if (d.first) backup();
+        render();
+        if (d.first) firstStart('已和「' + (d.name || '另一台设备') + '」配对', '（配对前的备份在 下载/知识图谱/）');
+        else show($('groupMsg'), d.msg, 'good');
+        lanMsg('');
+        firstEnd(false);
+      } else {
+        lanMsg(d.msg, 'bad');
+        if ($('lanCard').hidden) show(!(st && st.inGroup) ? $('startMsg') : $('groupMsg'), d.msg, 'bad');
+      }
     } else if (t === 'join-code') showJoinCode(d);
     else if (t === 'join-request') {
       if (d.role === 'host') askJoin(d);
@@ -349,7 +455,7 @@
       if (d.role === 'guest' || joinRole === 'guest') {
         joinRole = '';
         $('joinWait').hidden = true;
-        if (d.ok) { backup(); show($('groupMsg'), d.msg + '，正在第一次同步…（同步前的备份在 下载/知识图谱/）', 'good'); }
+        if (d.ok) { backup(); firstStart(d.msg, '（同步前的备份在 下载/知识图谱/）'); }
         else show($('startMsg'), d.msg, 'bad');
       } else {
         closeJoin(false);
@@ -358,7 +464,11 @@
       render();
     }
   });
-  window.addEventListener('km-sync-merged', e => { if (e.detail && e.detail.text) show($('groupMsg'), e.detail.text, 'good'); });
+  window.addEventListener('km-sync-merged', e => {
+    if (!(e.detail && e.detail.text)) return;
+    if (firstSync) { firstSync.report = e.detail.text; show($('groupMsg'), firstSync.base + '，正在第一次同步…' + e.detail.text, 'good'); return; }
+    show($('groupMsg'), e.detail.text, 'good');
+  });
 
   /* ---------------- 按钮 ---------------- */
   bindScan($('scanInvite'), $('startMsg'));
@@ -366,8 +476,26 @@
   bindScan($('rescan'), $('groupMsg'));
   $('btnManual').onclick = () => handleCode($('manual').value, $('startMsg'));
   $('btnSync').onclick = () => { KMSync.publish(); A.syncNow(); progress('正在同步…', 'sync'); };
-  $('btnAdd').onclick = () => { progress('正在生成加入码…', 'join'); A.joinOpen(); };
-  $('btnAddClose').onclick = () => closeJoin(true);
+  // 添加设备：有同步节点时显示加入码（不在同一个网络也能加）；同时在同一个 Wi-Fi 下可被发现 3 分钟（局域网配对）
+  $('btnAdd').onclick = () => {
+    if (st && st.node && !st.node.off) { progress('正在生成加入码…', 'join'); A.joinOpen(); }
+    if (A.pairOpen && st && st.lan) A.pairOpen();
+  };
+  $('btnAddClose').onclick = () => { closeJoin(true); if (A.pairClose && st && st.lan && st.lan.disc) A.pairClose(); };
+  $('btnLanStart').onclick = () => { show($('startMsg'), ''); A.pairOpen(); };
+  $('btnLanClose').onclick = () => { A.pairClose(); $('lanCard').hidden = true; clearInterval(lanTimer); lanTimer = 0; };
+  $('btnLanAddr').onclick = () => {
+    const v = $('lanAddrIn').value.trim();
+    if (!/^[A-Za-z0-9.-]+(\s*[:：]\s*\d{1,5})?$/.test(v)) { lanMsg('地址格式不对，应该像 192.168.1.23:47811', 'bad'); return; }
+    lanMsg('正在连接 ' + v + '…');
+    A.pairAddr(v);
+  };
+  $('lanList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-peer]');
+    if (!b) return;
+    lanMsg('正在连接「' + b.textContent.replace(/^📱\s*/, '') + '」…');
+    A.pairWith(b.dataset.peer);
+  });
   $('btnRejoin').onclick = () => {
     if (!confirm('退出同步组后，用另一台设备上的「添加设备」生成加入码，再在这台设备上扫码加入。\n本机学习数据保留，重新加入时会合并。')) return;
     A.syncLeave();
@@ -389,6 +517,9 @@
       show($('groupMsg'), '正在移除「' + m.name + '」并更换同步钥匙…');
     }
   });
+
+  // 离开设备同步页就不再被发现（别的页面收不到配对请求，留着只会让对方白等）
+  window.addEventListener('pagehide', () => { try { if (A.pairClose && st && st.lan && st.lan.disc) A.pairClose(); } catch (e) { /* 忽略 */ } });
 
   const start = () => { render(); KMSync.mergeNow(); };
   if (A.ready) A.ready().then(start); else start();

@@ -626,6 +626,43 @@ public class MainActivity extends Activity {
             if (sync == null) return;
             sync.leave();
         }
+
+        // ---------------- 局域网配对（#1 第二期）：可被发现 3 分钟、点附近的设备或手输地址、核对 4 位确认码
+
+        @JavascriptInterface
+        public void pairOpen(String token) {
+            if (!gate.check(token, "pairOpen", now())) return;
+            if (sync == null) return;
+            sync.pairOpen();
+        }
+
+        @JavascriptInterface
+        public void pairClose(String token) {
+            if (!gate.check(token, "pairClose", now())) return;
+            if (sync == null) return;
+            sync.pairClose();
+        }
+
+        @JavascriptInterface
+        public void pairWith(String token, String key) {
+            if (!gate.check(token, "pairWith", now()) || key == null) return;
+            if (sync == null) return;
+            sync.pairWith(key);
+        }
+
+        @JavascriptInterface
+        public void pairAddr(String token, String addr) {
+            if (!gate.check(token, "pairAddr", now()) || addr == null) return;
+            if (sync == null) return;
+            sync.pairAddr(addr);
+        }
+
+        @JavascriptInterface
+        public void pairConfirm(String token, boolean ok) {
+            if (!gate.check(token, "pairConfirm", now())) return;
+            if (sync == null) return;
+            sync.pairConfirm(ok);
+        }
     }
 
     /**

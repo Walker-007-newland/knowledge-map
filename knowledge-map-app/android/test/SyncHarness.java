@@ -31,6 +31,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class SyncHarness {
     static String python = "python";
+    /** --phase1：只跑第一期（经节点）的场景 */
+    static boolean only1;
     static File root;          // 仓库根（工作区）
     static File tmp;
     static final List<Object[]> RESULTS = new ArrayList<>();
@@ -133,10 +135,45 @@ public class SyncHarness {
             restart();
         }
 
+        /** 局域网（第二期）：连着哪个「Wi-Fi」（null = 没连，不开局域网） */
+        String wifi;
+        FakeEnv env;
+
         void restart() {
+            if (m != null) m.lan.stop();               // 模拟进程被杀：旧实例的局域网服务也没了
             m = new SyncManager(new SyncStore(dir, kw), clock);
             m.setEvents((t, j) -> { synchronized (events) { events.add(new String[]{t, j}); } });
             m.setDevice(id, name);
+            if (wifi != null) startLan();
+        }
+
+        void startLan() {
+            env = new FakeEnv(this);
+            m.setLan(env, null);
+            m.lan.noThrottle = true;
+            m.lanStart();
+        }
+
+        /** 连上某个 Wi-Fi、打开 App（局域网服务、广播、发现） */
+        void lanOn(String w) { wifi = w; startLan(); }
+
+        /** 断开 Wi-Fi / 关掉 App */
+        void lanOff() { m.lanStop(); wifi = null; }
+
+        int port() { return m.lan.port(); }
+
+        /** 把同一个 Wi-Fi 里别的设备的 NSD 广播交给本机（真机上是 NSD 回调） */
+        void pump() {
+            if (wifi == null || env == null || !env.discovering) return;
+            List<Object[]> ads = new ArrayList<>();
+            synchronized (ADS) {
+                Map<String, Object[]> w = ADS.get(wifi);
+                if (w != null) for (Map.Entry<String, Object[]> e : w.entrySet()) ads.add(new Object[]{e.getKey(), e.getValue()[0], e.getValue()[1], e.getValue()[2]});
+            }
+            for (Object[] a : ads) {
+                @SuppressWarnings("unchecked") Map<String, String> txt = (Map<String, String>) a[3];
+                m.lanFound((String) a[0], (String) a[1], (Integer) a[2], txt);
+            }
         }
 
         void put(String sec, String key, Object val) {
@@ -184,6 +221,7 @@ public class SyncHarness {
 
         /** 回到总入口：发布 → 同步 → 合并收件箱（合并后重新发布，再推一次） */
         String sync() {
+            pump();
             publish();
             m.syncNow();
             if (mergeInbox() > 0) m.syncNow();
@@ -198,6 +236,30 @@ public class SyncHarness {
             }
             return null;
         }
+    }
+
+    // ------------------------------------------------------------ 假的局域网环境：地址都是 127.0.0.1，NSD 广播按「Wi-Fi」分组记在 ADS 里
+
+    static final Map<String, Map<String, Object[]>> ADS = new TreeMap<>();     // Wi-Fi → 服务名 → {host, port, txt}
+
+    static final class FakeEnv implements Lan.Env {
+        final Dev d;
+        String svc;
+        volatile boolean discovering;
+        FakeEnv(Dev d) { this.d = d; }
+        public String address() { return d.wifi == null ? null : "127.0.0.1"; }
+        public void advertise(String service, int port, Map<String, String> txt) {
+            stopAdvertise();
+            synchronized (ADS) {
+                if (d.wifi == null) return;
+                svc = service;
+                ADS.computeIfAbsent(d.wifi, k -> new TreeMap<>()).put(service, new Object[]{"127.0.0.1", port, new TreeMap<>(txt)});
+            }
+        }
+        public void stopAdvertise() {
+            synchronized (ADS) { if (svc != null) for (Map<String, Object[]> w : ADS.values()) w.remove(svc); svc = null; }
+        }
+        public void discover(boolean on) { discovering = on; }
     }
 
     // ------------------------------------------------------------ 请求统计
@@ -215,6 +277,12 @@ public class SyncHarness {
             String act = path.replaceAll("^/v1/g/[0-9a-f]+/", "").replaceAll("^/v1/rdv/.*", "rdv");
             synchronized (PATHS) { PATHS.merge(act, 1, Integer::sum); }
             lastReq = new Object[]{host, port, method, path, headers == null ? null : new HashMap<>(headers), body};
+            String c = crashOn;
+            if (c != null && c.equals(act)) { crashOn = null; throw new Killed(); }
+        };
+        Lan.tap = (host, port, path) -> {
+            String act = "lan-" + path.replaceAll("^/k1/", "");
+            synchronized (PATHS) { PATHS.merge(act, 1, Integer::sum); }
             String c = crashOn;
             if (c != null && c.equals(act)) { crashOn = null; throw new Killed(); }
         };
@@ -720,10 +788,17 @@ public class SyncHarness {
         a.sync();
         b.sync();
         Map<String, Object> og = groupInfo(node, oldGid);
-        check(og != null && SyncJson.b(og, "live") && a.m.g.prev.isEmpty(),
+        check(og != null && SyncJson.b(og, "live") && tracking(a.m.g) == 0,
             "B 迁完后 A 不再跟踪旧组，但不 drop：旧组留给被移除的设备看名单（节点 60 天后自动删）", og);
         check(sameCids(a, b) && "换钥后 B 写的".equals(a.data.get("s1").get("after").get(1)), "A、B 在新组上照常同步", cidDiff(a, b));
         check(!a.m.cids().isEmpty() && c.m.cids().isEmpty(), "C 的同步文件已清掉（学习数据在网页那边，不受影响）");
+    }
+
+    /** 还在跟踪（节点上还有事要做）的旧组个数；做完的旧组只留钥匙给局域网认人 */
+    static int tracking(Group g) {
+        int n = 0;
+        for (Group.Prev p : g.prev) if (!p.done) n++;
+        return n;
     }
 
     static Map<String, Object> groupInfo(NodeCtl node, String gid) {
@@ -757,7 +832,7 @@ public class SyncHarness {
         a.m.remove(c.id);
         for (int i = 0; i < 3; i++) a.sync();
         track(a);
-        check(!a.m.g.gid().equals(oldGid) && a.m.g.prev.isEmpty(), "A 换钥到新组，旧组里没有别的组员要等，A 不再跟踪旧组", a.m.g.prev.size());
+        check(!a.m.g.gid().equals(oldGid) && tracking(a.m.g) == 0, "A 换钥到新组，旧组里没有别的组员要等，A 不再跟踪旧组", a.m.g.prev.size());
         Map<String, Object> og = groupInfo(node, oldGid);
         check(og != null && SyncJson.b(og, "live"), "A 没有 drop 旧组（留给 C 看名单）", og);
         for (int i = 0; i < 3; i++) c.sync();
@@ -838,7 +913,9 @@ public class SyncHarness {
         boolean secOk = true;
         for (Object o : SyncJson.l(node.cmd("cmd", "rows", "gid", a.m.g.gid()))) {
             String sec = SyncJson.s(SyncJson.m(o), "sec");
-            if (sec.contains("s1") || sec.contains("s2") || sec.contains("group") || sec.length() != 22) secOk = false;
+            // 编号是 22 位 base64url 的 HMAC；随机编号碰巧含「s1」这种两个字符的片段是正常的（第一期这条按子串查，约 1% 概率误报），
+            // 所以只查格式和较长的分区名
+            if (!sec.matches("[A-Za-z0-9_-]{22}") || sec.contains("group")) secOk = false;
         }
         check(secOk, "分区编号看不出分区名（22 位 HMAC 编号）");
         // 有人对看到过的明文 URL 发 GET 回访：一律 405，正文和组存不存在无关，拿不到任何组信息
@@ -926,6 +1003,477 @@ public class SyncHarness {
         a.clock.offset -= 61 * 86400000L;
     }
 
+    // ================================================================ 第二期：局域网直连
+
+    static int lanCount(String act) { return count("lan-" + act); }
+
+    static Map<String, Object> lastEv(Dev d, String type) { String j = d.lastEvent(type); return j == null ? SyncJson.map() : SyncJson.obj(j); }
+
+    static String nearbyKey(Dev d, String name) {
+        Map<String, Object> l = SyncJson.m(d.state().get("lan"));
+        if (l != null) for (Object o : SyncJson.l(l.get("nearby"))) if (name.equals(SyncJson.s(SyncJson.m(o), "name"))) return SyncJson.s(SyncJson.m(o), "key");
+        return null;
+    }
+
+    /** 两台之间（只这两台）同步到稳定：x 连 y 一轮、两边合并收件箱，重复 3 次 */
+    static void lanPair(Dev x, Dev y) {
+        for (int i = 0; i < 3; i++) {
+            x.publish();
+            y.publish();
+            x.m.lanWith("127.0.0.1", y.port());
+            y.m.lanProcess();
+            x.mergeInbox();
+            y.mergeInbox();
+        }
+    }
+
+    /** 两台都在可被发现状态、互相看得到；from 点 to，两边核对确认码，都点确认。返回两边确认码是否相同 */
+    static boolean lanPairUp(Dev from, Dev to, boolean fromFirst) {
+        to.m.pairOpen();
+        from.m.pairOpen();
+        from.pump();
+        to.pump();
+        String key = nearbyKey(from, to.name);
+        if (key == null) { check(false, from.name + " 的附近列表里有「" + to.name + "」", from.m.state()); return false; }
+        Map<String, Object> r = SyncJson.obj(from.m.pairWith(key));
+        if (!SyncJson.b(r, "ok")) { check(false, "开始配对", r); return false; }
+        Map<String, Object> rq = lastEv(to, "pair-request");
+        boolean same = SyncJson.s(r, "code") != null && SyncJson.s(r, "code").equals(SyncJson.s(rq, "code")) && from.name.equals(SyncJson.s(rq, "name"));
+        if (fromFirst) {
+            Map<String, Object> c1 = SyncJson.obj(from.m.pairConfirm(true));
+            if (!SyncJson.b(c1, "poll")) { check(false, "先点确认的一方等对方", c1); return false; }
+            to.m.pairConfirm(true);
+            from.m.pairPoll();
+        } else {
+            to.m.pairConfirm(true);
+            from.m.pairConfirm(true);
+            to.m.lanProcess();
+        }
+        return same;
+    }
+
+    static Dev[] scenarioLanPair() throws IOException {
+        section("L1. 局域网配对：两边都打开「添加设备」互相看得到，4 位确认码相同；中间人；先承诺后公开");
+        Dev a = new Dev("lanA", "客厅的平板"), b = new Dev("lanB", "书房的平板");
+        a.put("s1", "a1", "来自 A"); a.put("s2", "x", 1);
+        b.put("s1", "b1", "来自 B"); b.put("s3", "y", 2);
+        resetCounts();
+        a.lanOn("home");
+        b.lanOn("home");
+        check(!a.m.lan.running() && !b.m.lan.running() && lanCount("hello") == 0 && ADS.getOrDefault("home", new TreeMap<>()).isEmpty(),
+            "没加入同步组、也没点「添加设备」：不开局域网服务、不广播、不发任何局域网请求");
+        Map<String, Object> po = SyncJson.obj(b.m.pairOpen());
+        check(SyncJson.b(po, "ok") && SyncJson.s(po, "addr").startsWith("127.0.0.1:") && b.m.lan.running(), "B 点「添加设备」：开服务、可被发现 3 分钟，显示本机地址 " + SyncJson.s(po, "addr"), po);
+        boolean same = lanPairUp(a, b, true);
+        check(same, "A 点附近列表里的 B：两边显示的 4 位确认码相同，B 的弹窗里是 A 的名字");
+        check(a.m.inGroup() && b.m.inGroup() && a.m.g.gid().equals(b.m.g.gid()) && a.m.g.members.size() == 2 && b.m.g.members.size() == 2,
+            "两边都确认后配对成功：同一个组、名单里两台（两台原来都没组，A 新建）", a.m.state());
+        check(SyncJson.b(lastEv(a, "pair-result"), "first") && SyncJson.b(lastEv(b, "pair-result"), "first"), "两边的配对结果都标了「第一次」（页面据此先备份再合并）");
+        check(!b.m.lan.discoverable() && a.m.g.node == null, "配对成功后不再被发现；局域网配对建的组没有同步节点");
+        rounds(2, a, b);
+        check(sameCids(a, b) && eq(a, b) && a.data.get("s1").size() == 2, "第一次同步：两边各分区 cid 相同、数据合成一份", cidDiff(a, b));
+        resetCounts();
+        rounds(5, a, b);
+        check(lanCount("get") == 0 && lanCount("put") == 0 && lanCount("manifest") > 0, "再同步 5 轮：只问清单，没有任何分区传输（增量）", PATHS);
+        Map<String, Object> as = a.state();
+        boolean via = false;
+        for (Object o : SyncJson.l(as.get("members"))) { Map<String, Object> mm = SyncJson.m(o); if (!SyncJson.b(mm, "me")) via = "局域网".equals(SyncJson.s(mm, "via")) && SyncJson.b(mm, "near"); }
+        check("ok".equals(SyncJson.s(as, "status")) && via, "状态「已同步」，B 那一行显示「局域网」「在附近」", a.m.state());
+        {
+            Group g = a.m.g;
+            List<String> needles = Arrays.asList(SyncCrypto.b64e(g.gk), SyncCrypto.hex(g.gk), SyncCrypto.b64e(Group.lanKeyOf(g.gk)), SyncCrypto.b64e(g.encKey()));
+            boolean clean = new File(a.dir, "lan.json").exists();
+            for (File f : listAll(a.dir)) {
+                String txt = new String(Files.readAllBytes(f.toPath()), StandardCharsets.ISO_8859_1);
+                for (String nd : needles) if (txt.contains(nd)) clean = false;
+                if (txt.contains("来自 A") || txt.contains("来自 B")) clean = false;
+            }
+            check(clean, "A 的同步目录（含局域网的 lan.json）里没有明文组密钥、局域网签名钥和明文学习数据");
+        }
+
+        // 中间人：替换公钥。两边的随机数都是先承诺后公开，中间人凑不出相同的数字
+        int hit = 0;
+        String pkA = SyncCrypto.b64e(SyncCrypto.newKeyPair().getPublic().getEncoded()), pkB = SyncCrypto.b64e(SyncCrypto.newKeyPair().getPublic().getEncoded());
+        String pkM = SyncCrypto.b64e(SyncCrypto.newKeyPair().getPublic().getEncoded());
+        for (int i = 0; i < 1000; i++) {
+            byte[] nA = SyncCrypto.rand(16), nB = SyncCrypto.rand(16), nM1 = SyncCrypto.rand(16), nM2 = SyncCrypto.rand(16);
+            // A 以为在和 B 配对，其实对面是中间人 M（M 冒充 B）；B 以为对面是 A，其实是 M（M 冒充 A）
+            String codeA = Pairing.code(pkA, pkM, nA, nM1), codeB = Pairing.code(pkM, pkB, nM2, nB);
+            if (codeA.equals(codeB)) hit++;
+        }
+        check(hit < 10, "中间人替换公钥 1000 次，两边确认码相同 " + hit + " 次（< 1%）");
+        byte[] nB = SyncCrypto.rand(16);
+        byte[] cm = Pairing.commitment(pkB, pkA, nB);
+        check(SyncCrypto.same(cm, Pairing.commitment(pkB, pkA, nB)) && !SyncCrypto.same(cm, Pairing.commitment(pkB, pkA, SyncCrypto.rand(16))),
+            "承诺值锁定了 B 的随机数：看到 A 的随机数后再换，承诺对不上（A 会拒绝）");
+
+        section("L1b. 确认码不一样、错 3 次自动停止被发现；先确认的是被点的一方也能配对");
+        Dev c = new Dev("lanC", "妈妈的手机"), d = new Dev("lanD", "陌生人的手机");
+        c.lanOn("home");
+        d.lanOn("home");
+        c.m.pairOpen();
+        String caddr = "127.0.0.1:" + c.port();
+        for (int i = 0; i < 3; i++) {
+            Map<String, Object> s = SyncJson.obj(d.m.pairAddr(caddr));
+            if (!SyncJson.b(s, "ok")) { check(false, "第 " + (i + 1) + " 次试配对", s); break; }
+            d.m.pairConfirm(false);            // 数字对不上，点「不一样」
+        }
+        Map<String, Object> s4 = SyncJson.obj(d.m.pairAddr(caddr));
+        check(!c.m.lan.discoverable() && !SyncJson.b(s4, "ok") && SyncJson.s(s4, "msg").contains("没有打开「添加设备」"),
+            "确认码不一样 3 次后 C 自动停止被发现，再来配对 → 403，提示「对方没有打开添加设备」", s4);
+        check(SyncJson.s(lastEv(c, "pair-close"), "msg").contains("3 次"), "C 的页面收到「对不上 3 次，已停止被发现」", c.lastEvent("pair-close"));
+        check(!c.m.inGroup() && !d.m.inGroup(), "两台都没有配对上");
+        // 伪造确认 MAC：403，也算一次失败
+        c.m.pairOpen();
+        Map<String, Object> s5 = SyncJson.obj(d.m.pairAddr(caddr));
+        Pairing pd = d.m.lan.clientPair;
+        Lan.R fr = d.m.lan.pairSend(pd, SyncJson.of("mac", SyncCrypto.b64e(SyncCrypto.rand(32))));
+        check(SyncJson.b(s5, "ok") && fr.status == 403 && c.m.lan.fails.get() == 1, "冒充者发错的确认 MAC：403，记一次失败", fr.status + " " + fr.j);
+        c.m.pairClose();
+        // 被点的一方先确认、发起方后确认
+        boolean same2 = lanPairUp(c, d, false);
+        check(same2 && c.m.inGroup() && d.m.inGroup() && c.m.g.gid().equals(d.m.g.gid()), "被点的一方先点确认、发起方后点：照样配对成功");
+        c.m.leave();
+        d.m.leave();
+        c.lanOff();
+        d.lanOff();
+        return new Dev[]{a, b};
+    }
+
+    static void scenarioLanAuth(Dev a, Dev b) throws IOException {
+        section("L2. 局域网接口：没签名、签名错、重放 → 403；不在可被发现时配对 → 403；GET → 405");
+        String host = "127.0.0.1";
+        int port = a.port();
+        byte[] body = SyncCrypto.utf8("{\"port\":0}");
+        MiniHttp.Resp h = MiniHttp.request(host, port, "POST", "/k1/hello", null, SyncCrypto.utf8("{}"));
+        String n = SyncJson.s(SyncJson.obj(h.text()), "n");
+        MiniHttp.Resp r1 = MiniHttp.request(host, port, "POST", "/k1/manifest", null, body);
+        Map<String, String> bad = new HashMap<>();
+        bad.put("X-KM-Lan", b.id + "." + n + "." + b.m.g.fp() + "." + SyncCrypto.b64e(SyncCrypto.rand(32)));
+        MiniHttp.Resp r2 = MiniHttp.request(host, port, "POST", "/k1/manifest", bad, body);
+        String n2 = SyncJson.s(SyncJson.obj(MiniHttp.request(host, port, "POST", "/k1/hello", null, SyncCrypto.utf8("{}")).text()), "n");
+        Map<String, String> good = new HashMap<>();
+        good.put("X-KM-Lan", Lan.authHeader(b.id, n2, b.m.g.gk, "/k1/manifest", body));
+        MiniHttp.Resp r3 = MiniHttp.request(host, port, "POST", "/k1/manifest", good, body);
+        MiniHttp.Resp r4 = MiniHttp.request(host, port, "POST", "/k1/manifest", good, body);
+        Map<String, String> stranger = new HashMap<>();
+        String n3 = SyncJson.s(SyncJson.obj(MiniHttp.request(host, port, "POST", "/k1/hello", null, SyncCrypto.utf8("{}")).text()), "n");
+        stranger.put("X-KM-Lan", Lan.authHeader("devStranger", n3, SyncCrypto.rand(32), "/k1/manifest", body));
+        MiniHttp.Resp r5 = MiniHttp.request(host, port, "POST", "/k1/manifest", stranger, body);
+        check(r1.status == 403 && r2.status == 403 && r5.status == 403, "没签名 / 签名错 / 不是本组的钥匙 → 403", r1.status + " " + r2.status + " " + r5.status + " " + r5.text());
+        check(r3.status == 200 && r4.status == 403, "签名对 → 200；同一个请求原样重放（随机数只能用一次）→ 403", r3.status + " " + r4.status);
+        MiniHttp.Resp r6 = MiniHttp.request(host, port, "POST", "/k1/pair/1", null,
+            SyncCrypto.utf8(SyncJson.stringify(SyncJson.of("v", 1L, "dev", "devX", "name", "x", "pk", SyncCrypto.b64e(SyncCrypto.newKeyPair().getPublic().getEncoded()), "grp", ""))));
+        check(r6.status == 403 && r6.text().contains("closed"), "不在可被发现状态时，配对接口 → 403", r6.status + " " + r6.text());
+        MiniHttp.Resp r7 = MiniHttp.request(host, port, "GET", "/k1/manifest", null, null);
+        check(r7.status == 405, "GET 一律 405", r7.status);
+        // 不同组的设备互相认不出组标记；已在组里的设备再来配对：提示已在别的组 / 已在同一个组
+        Dev z = new Dev("lanZ", "别人家的平板"), y = new Dev("lanY", "别人家的手机");
+        z.lanOn("home");
+        y.lanOn("home");
+        lanPairUp(z, y, true);
+        z.pump();
+        a.pump();
+        boolean zSees = false, aSees = false;
+        for (String hp : z.m.lan.cands.values()) if (hp.endsWith(":" + a.port()) || hp.endsWith(":" + b.port())) zSees = true;
+        for (String hp : a.m.lan.cands.values()) if (hp.endsWith(":" + z.port()) || hp.endsWith(":" + y.port())) aSees = true;
+        check(z.m.inGroup() && !zSees && !aSees && a.m.lan.cands.values().contains("127.0.0.1:" + b.port()),
+            "同一个 Wi-Fi 里另一个组：互相认不出组标记（不当成组员、不去同步），A 只认出本组的 B", a.m.lan.cands + " / " + z.m.lan.cands);
+        b.m.pairOpen();
+        Map<String, Object> sz = SyncJson.obj(z.m.pairAddr("127.0.0.1:" + b.port()));
+        Map<String, Object> sa = SyncJson.obj(a.m.pairAddr("127.0.0.1:" + b.port()));
+        check(!SyncJson.b(sz, "ok") && SyncJson.s(sz, "msg").contains("另一个同步组") && !SyncJson.b(sa, "ok") && SyncJson.s(sa, "msg").contains("同一个同步组"),
+            "两台各自有组：拒绝并提示先退出；同组的再来配对：提示「已经在同一个同步组里」", sz + " / " + sa);
+        b.m.pairClose();
+        z.m.leave();
+        y.m.leave();
+        z.lanOff();
+        y.lanOff();
+    }
+
+    static Dev scenarioLanRelay(Dev a, Dev b) throws IOException {
+        section("L3. 传递：A↔B，再 B↔C（A 不在），C 拿到 A 的数据；三台按 6 种顺序两两同步，cid 相同");
+        Dev c = new Dev("lanC2", "奶奶家的平板");
+        c.put("s4", "c1", "来自 C");
+        c.lanOn("home");
+        lanPairUp(c, b, true);                     // C 和 B 配对加入（B 有组）
+        check(c.m.inGroup() && c.m.g.gid().equals(a.m.g.gid()) && SyncJson.l(c.state().get("members")).size() == 3,
+            "C 和 B 配对后加入同一个组，名单里 3 台（含没见过面的 A）", c.m.state());
+        a.lanOff();
+        a.put("s1", "onlyA", "A 离开前写的");
+        a.lanOn("home");
+        lanPair(a, b);                             // A↔B
+        a.lanOff();                                // A 走了
+        lanPair(b, c);                             // B↔C
+        check("A 离开前写的".equals(c.data.get("s1").get("onlyA").get(1)), "C 没见过 A，经 B 拿到了 A 的数据");
+        a.lanOn("home");
+        Dev[] ds = {a, b, c};
+        boolean all = true;
+        for (int k = 0; k < ORDERS.length; k++) {
+            for (Dev d : ds) d.put("s" + (5 + k % 2), d.id + "-" + k, k);
+            a.put("s1", "shared", "A 第 " + k + " 次");
+            c.put("s1", "shared", "C 第 " + k + " 次");
+            int[] o = ORDERS[k];
+            for (int r = 0; r < 2; r++) { lanPair(ds[o[0]], ds[o[1]]); lanPair(ds[o[1]], ds[o[2]]); lanPair(ds[o[2]], ds[o[0]]); }
+            boolean ok = sameCids(a, b, c) && eq(a, b) && eq(b, c);
+            all &= ok;
+            if (!ok) check(false, "顺序 " + Arrays.toString(o), cidDiff(a, b, c));
+        }
+        check(all, "6 种先后顺序两两同步，最终三台 cid 都相同、数据一致");
+        return c;
+    }
+
+    static void scenarioLanRobust(Dev a, Dev b, Dev c) throws IOException {
+        section("L4. 重复收 3 次结果不变；同步到一半被杀，重启后数据完好、下一轮补齐");
+        lanPair(a, b);
+        String before = SyncJson.canon(b.data);
+        Map<String, String> cb = b.m.cids();
+        int inboxMax = 0;
+        for (int i = 0; i < 3; i++) {
+            // A 把自己的全部分区原样再推给 B（每次都是新的随机数、同样的内容）
+            Group g = a.m.g;
+            List<Object> items = new ArrayList<>();
+            for (Lan.Mine x : a.m.lan.mine(g).values()) {
+                String content = a.m.outContent(a.m.st.json(x.rel));
+                items.add(SyncJson.of("sec", x.sec, "rev", x.rev, "cid", x.cid, "data", SyncCrypto.b64e(a.m.envelope(g, g.gid(), x.name, content, x.rev, x.t))));
+            }
+            String n = SyncJson.s(SyncJson.obj(MiniHttp.request("127.0.0.1", b.port(), "POST", "/k1/hello", null, SyncCrypto.utf8("{}")).text()), "n");
+            Lan.R r = a.m.lan.signed("127.0.0.1", b.port(), "/k1/put", g.gk, n, SyncJson.of("items", items));
+            if (r.status != 200) check(false, "重推", r.j);
+            b.m.lanProcess();
+            inboxMax = Math.max(inboxMax, SyncJson.l(SyncJson.parse(b.m.take())).size());
+            b.mergeInbox();
+        }
+        lanPair(a, b);
+        check(inboxMax > 0 && SyncJson.canon(b.data).equals(before) && b.m.cids().equals(cb) && sameCids(a, b), "同一份分区原样进 B 的收件箱 3 次（每次 " + inboxMax + " 个），合并结果不变", b.data);
+        c.put("s2", "crash", "被杀前写的");
+        c.publish();
+        crashOn = "lan-put";
+        boolean killed = false;
+        try { c.m.lanWith("127.0.0.1", a.port()); } catch (Killed k) { killed = true; }
+        c.restart();
+        check(killed && c.m.inGroup() && c.m.lan.running(), "推送那一刻进程被杀：重启后组还在、局域网服务重新开起来");
+        lanPair(c, a);
+        lanPair(a, b);
+        check(sameCids(a, b, c) && "被杀前写的".equals(b.data.get("s2").get("crash").get(1)), "下一轮补齐，三台一致", cidDiff(a, b, c));
+    }
+
+    static void scenarioLanRemove(Dev a, Dev b, Dev c) throws IOException {
+        section("L5. A 移除 C（没有同步节点的组）：换钥；B 不在时的移除，B 下次碰到 A 时拿到新钥；C 收到「已被移出」");
+        String oldFp = a.m.g.fp();
+        byte[] oldGk = a.m.g.gk;
+        String cData = SyncJson.canon(c.data);
+        b.lanOff();                                    // B 不在
+        c.lanOff();                                    // C 这会儿也不在（让它待会儿自己拿旧钥匙来）
+        Map<String, Object> r = SyncJson.obj(a.m.remove(c.id));
+        a.sync();
+        check(SyncJson.b(r, "ok") && a.m.g.epoch == 2 && !a.m.g.fp().equals(oldFp), "A 移除 C：本机换钥，epoch 2，组密钥变了", a.m.g.epoch);
+        // C 回来、拿旧钥匙主动连 A：403 removed，C 显示已被移出
+        c.lanOn("home");
+        c.m.lanWith("127.0.0.1", a.port());
+        Map<String, Object> cs = c.state();
+        check(!c.m.inGroup() && SyncJson.s(cs, "notice").contains("已被移出"), "C 拿旧钥匙来：被拒（403）并收到「已被移出」", c.m.state());
+        check(SyncJson.canon(c.data).equals(cData), "C 本机数据还在");
+        MiniHttp.Resp h = MiniHttp.request("127.0.0.1", a.port(), "POST", "/k1/hello", null, SyncCrypto.utf8("{}"));
+        String n = SyncJson.s(SyncJson.obj(h.text()), "n");
+        byte[] body = SyncCrypto.utf8("{}");
+        Map<String, String> hd = new HashMap<>();
+        hd.put("X-KM-Lan", Lan.authHeader(c.id, n, oldGk, "/k1/manifest", body));
+        MiniHttp.Resp rc = MiniHttp.request("127.0.0.1", a.port(), "POST", "/k1/manifest", hd, body);
+        check(rc.status == 403 && rc.text().contains("removed") && !rc.text().contains("\"items\""), "已移除设备的请求 → 403 removed，拿不到任何分区", rc.status + " " + rc.text().length());
+        // B 回来：A 碰到 B 时把新钥匙交给它
+        b.put("s1", "afterB", "B 回来后写的");
+        b.lanOn("home");
+        lanPair(a, b);
+        check(b.m.g.epoch == 2 && b.m.g.fp().equals(a.m.g.fp()), "B 不在时 A 做的移除：B 回来碰到 A，拿到新钥匙（epoch 2）", b.m.g.epoch);
+        check(sameCids(a, b) && "B 回来后写的".equals(a.data.get("s1").get("afterB").get(1)), "A、B 用新钥匙照常同步", cidDiff(a, b));
+        // 反过来：B 主动连 A（B 拿旧钥匙）也能拿到新钥匙
+        Dev e = new Dev("lanE", "爸爸的手机");
+        e.lanOn("home");
+        lanPairUp(e, a, true);
+        lanPair(e, a);
+        String eid = e.id;
+        a.m.remove(b.id);                              // 再移除一次 B：A 换到 epoch 3，E 不在场时……
+        e.lanOff();
+        a.sync();
+        e.lanOn("home");
+        e.m.lanWith("127.0.0.1", a.port());            // E 拿 epoch 2 的钥匙主动连 A → 409 + 钥匙包
+        lanPair(e, a);
+        check(e.m.g.epoch == 3 && e.m.g.fp().equals(a.m.g.fp()) && sameCids(a, e), "落后的 E 主动连 A：收到 409 和钥匙包，换上 epoch 3 照常同步", e.m.g.epoch);
+        b.m.lanWith("127.0.0.1", a.port());
+        check(!b.m.inGroup() && SyncJson.s(b.state(), "notice").contains("已被移出"), "B（epoch 2）被移出后再连 A：收到「已被移出」", b.m.state());
+        e.m.leave();
+        e.lanOff();
+        a.lanOff();
+        b.lanOff();
+        c.lanOff();
+    }
+
+    static void scenarioLanMixed(NodeCtl node) throws IOException {
+        section("L6. 混合：经节点同组的设备在局域网里自动直连（不用配对）；A↔B 局域网、B↔节点、C 只连节点");
+        Dev a = new Dev("mixA", "客厅的平板"), b = new Dev("mixB", "书房的平板"), c = new Dev("mixC", "学校的平板");
+        a.put("s1", "a", "来自 A");
+        b.put("s2", "b", "来自 B");
+        c.put("s3", "c", "来自 C");
+        String inv = fixPort(invite(node), node);
+        a.m.nodeJoin(inv);
+        a.sync();
+        track(a);
+        join(a, b);
+        join(a, c);
+        rounds(2, a, b, c);
+        track(a, b, c);
+        a.lanOn("home");
+        b.lanOn("home");                               // C 没连这个 Wi-Fi，只走节点
+        a.m.skipNode = true;
+        a.put("s1", "lanOnly", "A 只经局域网");
+        a.sync();
+        b.sync();
+        Map<String, Object> bs = b.state();
+        String viaA = "";
+        for (Object o : SyncJson.l(bs.get("members"))) { Map<String, Object> mm = SyncJson.m(o); if (a.id.equals(SyncJson.s(mm, "dev"))) viaA = SyncJson.s(mm, "via"); }
+        check("A 只经局域网".equals(b.data.get("s1").get("lanOnly").get(1)) && "局域网".equals(viaA),
+            "经节点同组的 A、B 没配对过：靠组标记认出对方、用组签名直连，A 的改动经局域网到了 B", b.m.state());
+        Dev[] ds = {a, b, c};
+        boolean all = true;
+        for (int k = 0; k < ORDERS.length; k++) {
+            for (Dev d : ds) d.put("s" + (4 + k % 2), d.id + "-" + k, k);
+            a.put("s1", "shared", "A 第 " + k + " 次");
+            c.put("s1", "shared", "C 第 " + k + " 次");
+            for (int r = 0; r < 3; r++) for (int i : ORDERS[k]) ds[i].sync();
+            boolean ok = sameCids(a, b, c) && eq(a, b) && eq(b, c);
+            all &= ok;
+            if (!ok) check(false, "顺序 " + Arrays.toString(ORDERS[k]), cidDiff(a, b, c));
+        }
+        check(all, "A 只走局域网、C 只走节点、B 两条都走：6 种顺序最终三台 cid 相同");
+        // 同一份数据从局域网和节点各到一次
+        a.m.skipNode = false;
+        a.put("s2", "twice", "两条路都到");
+        a.sync();                                      // A 推到节点，也推给 B
+        String keep = SyncJson.canon(b.data);
+        b.m.skipNode = true;
+        b.sync();                                      // B 先只经局域网收
+        String afterLan = SyncJson.canon(b.data);
+        b.m.skipNode = false;
+        Map<String, Object> ns = b.m.nodeState();
+        SyncJson.m(SyncJson.m(ns.get("g")).get(b.m.g.gid())).put("since", 0L);   // 让节点把 A 的分区再给 B 一次
+        b.m.st.putJson("node.json", ns);
+        b.m.syncNow();
+        int again = SyncJson.l(SyncJson.parse(b.m.take())).size();
+        b.mergeInbox();
+        check(!keep.equals(afterLan) && afterLan.equals(SyncJson.canon(b.data)) && again > 0, "同一份数据经局域网到一次、再经节点到一次（" + again + " 个分区），结果不变");
+        // 节点停掉：局域网照常（真实节点不能停，只在本地节点测）
+        if (node.remote) { a.lanOff(); b.lanOff(); return; }
+        node.cmd("cmd", "stop");
+        a.put("s3", "nodeDown", "节点停了");
+        for (int i = 0; i < 2; i++) { a.sync(); b.sync(); }
+        Map<String, Object> as = a.state();
+        check("节点停了".equals(b.data.get("s3").get("nodeDown").get(1)), "节点停掉时 A、B 经局域网照常同步");
+        check("ok".equals(SyncJson.s(as, "status")) && SyncJson.s(as, "error").contains("局域网同步照常"), "状态「已同步」，并说明「同步节点连不上，局域网同步照常」", a.m.state());
+        node.cmd("cmd", "start");
+        rounds(2, a, b, c);
+        check(sameCids(a, b, c), "节点恢复后 C 也补齐", cidDiff(a, b, c));
+        a.lanOff();
+        b.lanOff();
+    }
+
+    /** #1 第二期真机验收退回的第 2 条：经局域网加入节点组后，局域网带来的变化让节点上「待推」，却没有人安排节点那一轮 */
+    static void scenarioLanNodeDue(NodeCtl node) throws Exception {
+        section("L7. 返工：局域网带来的组名单变化让节点上有待推的分区时，自动补一轮节点同步，状态不再一直「待同步」");
+        Dev a = new Dev("dueA", "客厅的平板"), b = new Dev("dueB", "书房的平板");
+        a.put("s1", "a", "来自 A");
+        b.put("s1", "b", "来自 B");
+        a.m.nodeJoin(fixPort(invite(node), node));
+        a.sync();
+        track(a);
+        a.lanOn("w7");
+        b.lanOn("w7");
+        boolean same = lanPairUp(b, a, true);
+        track(a, b);
+        check(same && b.m.inGroup() && b.m.g.node != null && a.m.g.gid().equals(b.m.g.gid()), "B 经局域网配对加入 A 的节点组，同步节点设置随组包带过去");
+        rounds(2, a, b);
+        check("ok".equals(SyncJson.s(a.state(), "status")) && !a.m.nodeDue(), "两边同步过后 A「已同步」、节点上没有待推的", a.m.state());
+        // B 给 A 改名，只经局域网送到 A：A 的组名单变了 → 节点上待推一个分区；以前要等 15 分钟定时或下次学习才推
+        b.m.rename(a.id, "改过名的客厅平板");
+        b.publish();
+        b.m.lanWith("127.0.0.1", a.port());
+        a.m.lanProcess();
+        Map<String, Object> as = a.state();
+        check("改过名的客厅平板".equals(a.m.g.member(a.id).name) && "pending".equals(SyncJson.s(as, "status")) && a.m.nodeDue(),
+            "复现：局域网带来的组名单变化让 A 节点上待推（状态「待同步」），nodeDue() 报告该补一轮节点同步", a.m.state());
+        a.m.syncNow();
+        check("ok".equals(SyncJson.s(a.state(), "status")) && !a.m.nodeDue(), "补一轮节点同步后「已同步」，没有待推的", a.m.state());
+        a.lanOff();
+        b.lanOff();
+
+        // 同步外壳（SyncService）：局域网那条路的任务做完后发现节点上有待推的，自己安排一轮节点同步
+        long base = SyncService.nodeRetryBase;
+        SyncService.nodeRetryBase = 60000;                  // 先不让补推掺进来：单看「立即同步」有没有被推迟
+        File d = new File(tmp, "svc-due");
+        Rec r = new Rec();
+        SyncService s = new SyncService(d, new TestWrap(new File(tmp, "keystore/svc-due.key")), System::currentTimeMillis, r, r);
+        try {
+            s.setDevice("devDue", "补推的平板");
+            s.nodeJoin(fixPort(invite(node), node));
+            s.drain();
+            track2(s);
+            resetCounts();
+            s.publish("{\"device\":{\"id\":\"devDue\",\"name\":\"补推的平板\"},\"sections\":[{\"name\":\"s1\",\"content\":\"{\\\"a\\\":1}\"}]}");
+            s.syncNow();
+            s.drain();
+            Thread.sleep(800);
+            s.drain();
+            check("ok".equals(SyncJson.s(SyncJson.obj(s.state()), "status")) && count("push") > 0,
+                "外壳：先发布再「立即同步」（网页「立即同步」、刚进组时都是这个顺序），这一轮马上做、没被发布的 10 秒防抖推迟，「已同步」", s.state());
+            resetCounts();
+            SyncService.nodeRetryBase = 300;
+            s.manager().putOut("s2", "{\"b\":2}");        // 模拟局域网收到的变化让本机分区变了（不经网页发布，不会触发同步）
+            s.manager().refreshState();
+            check("pending".equals(SyncJson.s(SyncJson.obj(s.state()), "status")), "本机有分区没推上节点：「待同步」");
+            s.lanSoon(0);                                   // 局域网那一轮（这台没连 Wi-Fi，什么也不做）之后检查节点
+            long t0 = System.currentTimeMillis();
+            while (System.currentTimeMillis() - t0 < 5000 && !"ok".equals(SyncJson.s(SyncJson.obj(s.state()), "status"))) Thread.sleep(100);
+            s.drain();
+            Map<String, Object> ss = SyncJson.obj(s.state());
+            check("ok".equals(SyncJson.s(ss, "status")) && SyncJson.n(ss, "pending", -1) == 0 && count("push") > 0,
+                "局域网任务做完后自动补了一轮节点同步（push " + count("push") + " 次），状态回到「已同步」", s.state());
+            resetCounts();
+            Thread.sleep(1500);
+            check(count("push") == 0 && count("pull") == 0, "没有待推的就不再补，不会一直连节点", PATHS);
+        } finally {
+            SyncService.nodeRetryBase = base;
+            s.leave();
+            s.drain();
+        }
+    }
+
+    static void scenarioJoinFull(NodeCtl node, Dev a) throws IOException {
+        section("3b. 第一期遗留：转交点「差一条就满」时给出友好提示（第二期顺手修）");
+        NodeClient raw = new NodeClient(node.host, node.port, (gg, at) -> at);
+        // 正好 6 条垃圾 + 真设备的 ②（第 7 条，加上 ① 共 8 条）：A 认出真设备，但组包放不进去 → 不弹确认，直接说这张码失效了
+        Dev q = new Dev("devQ6", "第七条的手机");
+        Map<String, Object> o = SyncJson.obj(a.m.joinOpen());
+        String rid = a.m.join.rid;
+        for (int i = 0; i < 6; i++) { try { raw.rdvPut(rid, "b", SyncCrypto.rand(200)); } catch (NodeClient.NodeError e) { break; } }
+        Map<String, Object> sq = SyncJson.obj(q.m.joinScan(SyncJson.s(o, "text")));
+        a.m.joinPoll();
+        Map<String, Object> hs = SyncJson.obj(a.m.joinState());
+        check(SyncJson.b(sq, "ok") && "full".equals(SyncJson.s(hs, "phase")) && SyncJson.s(hs, "msg").contains("已失效") && SyncJson.s(hs, "msg").contains("重新生成"),
+            "6 条垃圾 + 真设备第 7 条：A 不弹确认，提示「这张加入码已失效……请重新生成」", hs);
+        a.m.joinClose();
+        // 条数没满、字节快满：确认时组包放不进去（413）→ 同样的友好提示，不再是「同步节点出错（413 size）」
+        Dev q2 = new Dev("devQ7", "大消息后的手机");
+        o = SyncJson.obj(a.m.joinOpen());
+        rid = a.m.join.rid;
+        for (int i = 0; i < 5; i++) { try { raw.rdvPut(rid, "b", SyncCrypto.rand(3000)); } catch (NodeClient.NodeError e) { break; } }
+        SyncJson.obj(q2.m.joinScan(SyncJson.s(o, "text")));
+        a.m.joinPoll();
+        Map<String, Object> cf = SyncJson.obj(a.m.joinConfirm(true));
+        check(!SyncJson.b(cf, "ok") && SyncJson.s(cf, "msg").contains("已失效") && !SyncJson.s(cf, "msg").contains("413"),
+            "确认时节点回 413：提示「这张加入码已失效……请点添加设备重新生成」", cf);
+        a.m.joinClose();
+    }
+
     // ================================================================ 清理（真实节点：不留测试组）
 
     static void cleanup(NodeCtl node) {
@@ -973,6 +1521,7 @@ public class SyncHarness {
             else if (args[i].equals("--serve")) serve = Integer.parseInt(args[++i]);
             else if (args[i].equals("--python")) python = args[++i];
             else if (args[i].equals("--root")) root = new File(args[++i]);
+            else if (args[i].equals("--phase1")) only1 = true;
         }
         if (root == null) root = new File(".").getAbsoluteFile();
         tmp = Files.createTempDirectory("km-sync-harness-").toFile();
@@ -986,6 +1535,7 @@ public class SyncHarness {
                 scenarioNoGroup();
                 Dev[] d = scenarioCreateJoin(node, "dev");
                 scenarioJoinSecurity(node, d[0], d[1]);
+                scenarioJoinFull(node, d[0]);
                 scenarioOrders(d[0], d[1], d[2]);
                 scenarioRobust(node, d[0], d[1], d[2]);
                 scenarioSecrets(node, d[0]);
@@ -993,6 +1543,16 @@ public class SyncHarness {
                 scenarioRemoveTwo(node, "dev");
                 scenarioOffline(node, d[0], d[1]);
                 scenarioNodeAdmin(node, d[0], d[1]);
+                if (!only1) {
+                    // 第二期：局域网直连
+                    Dev[] l = scenarioLanPair();
+                    scenarioLanAuth(l[0], l[1]);
+                    Dev lc = scenarioLanRelay(l[0], l[1]);
+                    scenarioLanRobust(l[0], l[1], lc);
+                    scenarioLanRemove(l[0], l[1], lc);
+                    scenarioLanMixed(node);
+                    scenarioLanNodeDue(node);
+                }
             } else {
                 System.out.println("真实节点 " + remote + "（临时测试邀请码，结束时删组、作废邀请码）");
                 String tag = "t" + Long.toString(System.currentTimeMillis() % 100000, 36);
@@ -1000,6 +1560,7 @@ public class SyncHarness {
                 scenarioOrders(d[0], d[1], d[2]);
                 scenarioRemove(node, d[0], d[1], d[2]);
                 scenarioRemoveTwo(node, tag);
+                if (!only1) scenarioLanMixed(node);
             }
         } catch (Throwable e) {
             e.printStackTrace(System.out);

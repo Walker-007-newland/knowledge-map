@@ -79,10 +79,14 @@
 <script src="pet/pet-core.js"></script>
 <script>
   // 小狗卡片：名字、等级、饱食度、待领骨头
+  // 只显示、不写回：饱食度按 tick 折算到现在只用来画卡片（宠物页、发骨头时各自会折算），小部件自己按 tick 算。
+  // 以前这里 tick + save 写回本机，而合并了别的设备的改动（km-sync-merged）也会调到这里：每合并一次就多一个新的 tick、
+  // 新的修改时间 → 发布新版本 → 对方合并后同样写回 → 两台都开着总入口时无限互推（#1 第二期真机第 4 轮）
   function renderPet() {
-    var P = window.KMPet, st = P && P.load();
-    if (!st) return;
-    P.tick(st); P.save(st);
+    var P = window.KMPet, saved = P && P.load();
+    if (!saved) return;
+    var st = P.tick(JSON.parse(JSON.stringify(saved)));
+    P.syncWidget(saved);
     var L = P.level(st.xp), f = Math.round(st.fullness), n = P.pending(st).length;
     var color = f < P.HUNGRY ? '#d4553f' : '#e8893b';
     var card = document.getElementById('petCard');
