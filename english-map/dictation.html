@@ -12,7 +12,7 @@
   <button class="btn" id="btnBack">← 返回</button>
   <div class="brand">
     <h1 id="title">单词听写</h1>
-    <span class="sub" id="subtitle">拍下课本单词表，自动识别后随机听写</span>
+    <span class="sub" id="subtitle">输入要听写的单词，随机听写、批改、记错词</span>
   </div>
 </header>
 
@@ -20,28 +20,17 @@
   <!-- 词单列表 -->
   <section class="view" id="vList">
     <div class="row-actions">
-      <button class="btn primary big" id="btnNewPhoto">📷 拍照新建词单</button>
-      <button class="btn big" id="btnNewManual">✍️ 手动输入</button>
+      <button class="btn primary big" id="btnNewManual">✍️ 新建词单</button>
     </div>
     <div id="lists"></div>
-    <p class="empty" id="listsEmpty">还没有词单。拍一张课本单词表的照片开始吧。</p>
+    <p class="empty" id="listsEmpty">还没有词单。点「新建词单」，把要听写的单词输进去吧。</p>
   </section>
 
-  <!-- 识别和确认 -->
+  <!-- 编辑词单 -->
   <section class="view" id="vEdit" hidden>
     <div class="card">
       <label class="field">词单名称<input id="listName" placeholder="比如：七上 Unit 3" maxlength="40"></label>
-      <div class="row-actions">
-        <button class="btn" id="btnTakePhoto">📷 拍照添加</button>
-        <button class="btn" id="btnPickPhoto">🖼️ 从相册选</button>
-        <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
-        <input type="file" id="filePick" accept="image/*" multiple hidden>
-      </div>
-      <div class="ocr-status" id="ocrStatus" hidden>
-        <div class="ocr-text" id="ocrText">正在识别…</div>
-        <div class="bar"><i id="ocrBar"></i></div>
-      </div>
-      <p class="hint">检查一遍识别结果：<b>黄色</b>的是没把握的，请核对；去掉勾选或点 ✕ 删除不要的词；中文释义可以不填。</p>
+      <p class="hint">每行一个单词或短语；中文释义可以不填。去掉勾选或点 ✕ 删除不要的词。</p>
     </div>
     <div class="card">
       <div class="word-head"><span id="wordCount">0 个词</span>
@@ -61,7 +50,6 @@
   <div id="dictRun"></div>
 </main>
 
-<script src="vendor/tesseract/tesseract.min.js"></script>
 <script src="js/dict-run.js"></script>
 <script>DictRun.mount(document.getElementById('dictRun'));</script>
 <script src="js/dictation.js"></script>

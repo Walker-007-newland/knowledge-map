@@ -51,8 +51,8 @@ import java.util.Map;
  * 全屏 WebView 外壳。网页打包在 assets/www 里，直接从 file:///android_asset/ 读取，完全离线。
  * 下载备份、朗读这些 WebView 不支持的功能由 km-shim.js 转给这里的 KMBridge；联网只用于检查更新（见 Updater）。
  * KMBridge 对页面里所有 frame（包括 B 站播放器 iframe）都可见，敏感方法第一个参数是每页令牌，先过 BridgeGate（需求 #5）。
- * 例外：英语单词听写页要用 Web Worker 和 fetch 加载离线识别引擎，file:// 下不行，
- * 所以同一批文件也通过虚拟地址 https://appassets.androidplatform.net/ 提供（不联网，见 serveAsset）。
+ * 例外：英语单词听写页一直走虚拟地址 https://appassets.androidplatform.net/（不联网，见 serveAsset），
+ * 词单存在这个地址的 localStorage 里（当初为离线识别引擎改的，识别已去掉，但地址不能再改，否则已有词单会丢）。
  */
 public class MainActivity extends Activity {
     static final String HOME = "file:///android_asset/www/index.html";
