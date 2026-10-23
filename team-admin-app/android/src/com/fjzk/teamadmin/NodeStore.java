@@ -35,8 +35,13 @@ final class NodeStore {
     }
 
     static void clear(Context c) {
-        // 健康提醒的计数和日期（CheckJob）一起清掉；不删 Keystore 里的包装钥（下次扫码复用）
-        prefs(c).edit().clear().apply();
+        // 健康提醒的计数和日期（CheckJob）一起清掉；不删 Keystore 里的包装钥（下次扫码复用）。
+        // #12 账号恢复密钥单独留着（它和节点无关，丢了就不能帮学生重设密码），要删在「账号」页里删
+        SharedPreferences p = prefs(c);
+        String rw = p.getString("recovery_wrapped", ""), ri = p.getString("recovery_iv", ""), rk = p.getString("recovery_kid", "");
+        SharedPreferences.Editor e = p.edit().clear();
+        if (!rw.isEmpty()) e.putString("recovery_wrapped", rw).putString("recovery_iv", ri).putString("recovery_kid", rk);
+        e.apply();
     }
 
     /** 取出设置（含解开的管理密钥），没配置返回 null。 */
@@ -111,6 +116,30 @@ final class NodeStore {
                 if (old != null && Node.ok(Node.call(old, ctr(c), "status", "{}"))) clearPending(c);
             }
         } catch (Exception ignored) { }
+    }
+
+    // ---------- #12 账号恢复密钥（私钥用同一把 Keystore 钥包起来，网页拿不到）、节点地址（服务器搬家后改）
+
+    /** 导入恢复密钥（kmrecov:1?…），返回编号 kid；格式不对抛中文说明。 */
+    static String saveRecovery(Context c, String text) throws Exception {
+        Object[] r = AcctCrypto.parseRecovery(text);
+        byte[] priv = (byte[]) r[0];
+        SharedPreferences.Editor e = prefs(c).edit();
+        wrap(e, "recovery_", priv);
+        java.util.Arrays.fill(priv, (byte) 0);
+        e.putString("recovery_kid", (String) r[1]).commit();
+        return (String) r[1];
+    }
+
+    static String recoveryKid(Context c) { return prefs(c).getString("recovery_wrapped", "").isEmpty() ? "" : prefs(c).getString("recovery_kid", ""); }
+
+    static byte[] loadRecovery(Context c) throws Exception { return unwrap(prefs(c), "recovery_"); }
+
+    static void clearRecovery(Context c) { prefs(c).edit().remove("recovery_wrapped").remove("recovery_iv").remove("recovery_kid").commit(); }
+
+    /** 改节点地址（管理密钥不变）：服务器从腾讯云搬到家里电脑后用。 */
+    static void setHost(Context c, String host, int port) {
+        prefs(c).edit().putString("host", host).putInt("port", port).commit();
     }
 
     /** 健康提醒的状态（CheckJob 用）：连续失败次数、每类上次提醒的日期，存在同一个 prefs 里。 */

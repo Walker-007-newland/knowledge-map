@@ -56,6 +56,9 @@ import java.util.Map;
  */
 public class MainActivity extends Activity {
     static final String HOME = "file:///android_asset/www/index.html";
+    /** #12：没登录时只能打开登录页（门禁见 gated()） */
+    static final String LOGIN = "file:///android_asset/www/login.html";
+    static final long GRACE_MS = 7 * 86400000L;
     static final String EXTRA_OPEN = "open";   // 桌面小部件点进来时要打开的页面（相对 www 的路径）
     static final int REQ_FILE = 1;
     static final String ASSET_HOST = "appassets.androidplatform.net";
@@ -78,10 +81,65 @@ public class MainActivity extends Activity {
     String pendingOpen;    // 总入口加载完后要接着打开的页面
     final BridgeGate gate = new BridgeGate();
     SyncService sync;      // 设备同步（需求 #1），事件只送主页面；建不出来时为 null，各接口返回空（不影响学习）
+    /** #12 账号状态（files/kmsync/account.json 的 state，启动时读文件，之后跟着 account 事件更新）："in" = 已登录 */
+    volatile String acctState = "";
+    /** 这次打开 App 选了「先离线学习」（升级的老设备、7 天内） */
+    volatile boolean graceSession;
+
+    /** 启动时直接读 account.json（不等同步内核、不碰 Keystore）：离线也能马上判断进不进 App */
+    void readAcctState() {
+        try {
+            File f = new File(new File(getFilesDir(), "kmsync"), "account.json");
+            if (!f.isFile()) f = new File(f.getPath() + ".tmp");
+            if (!f.isFile()) { acctState = ""; return; }
+            JSONObject o = new JSONObject(new String(readAll(f), StandardCharsets.UTF_8));
+            acctState = o.optString("user", "").isEmpty() ? "" : o.optString("state", "");
+        } catch (Throwable e) { Log.w(SyncAndroid.TAG, "读账号状态", e); acctState = ""; }
+    }
+
+    boolean loggedIn() { return "in".equals(acctState) || graceSession; }
+
+    /** 没登录时，本 App 的页面（登录页、真机自检页除外）一律改去登录页；外部网页（B 站播放器 iframe）不管 */
+    boolean gated(String url) {
+        if (url == null || loggedIn()) return false;
+        if (url.startsWith(LOGIN) || url.startsWith("file:///android_asset/www/selftest/")) return false;
+        if (url.startsWith("file:///android_asset/")) return true;
+        try { return ASSET_HOST.equals(Uri.parse(url).getHost()); } catch (Throwable e) { return false; }
+    }
+
+    /** 宽限期（升级的老设备连不上服务器时先离线学习，最多 7 天）：第一次显示登录页时开始计时，记在 files/kmsync/grace.json */
+    long graceLeft() {
+        File f = new File(new File(getFilesDir(), "kmsync"), "grace.json");
+        long start = 0;
+        try { if (f.isFile()) start = new JSONObject(new String(readAll(f), StandardCharsets.UTF_8)).optLong("start", 0); }
+        catch (Throwable e) { start = 0; }
+        if (start <= 0) {
+            start = now();
+            try {
+                f.getParentFile().mkdirs();
+                FileOutputStream o = new FileOutputStream(f);
+                try { o.write(("{\"start\":" + start + "}").getBytes(StandardCharsets.UTF_8)); } finally { o.close(); }
+            } catch (IOException e) { Log.w(SyncAndroid.TAG, "宽限期", e); }
+        }
+        return Math.max(0, start + GRACE_MS - now());
+    }
+
+    /** 账号状态变了（登录成功、重设密码 / 停用 / 移除设备后要重新登录、退出登录） */
+    void onAccount(String json) {
+        String st = "";
+        try { st = new JSONObject(json).optString("state", ""); } catch (Throwable ignored) { }
+        acctState = st;
+        if (!"in".equals(st)) {
+            graceSession = false;
+            String cur = web.getUrl();
+            if (cur == null || !cur.startsWith(LOGIN)) web.loadUrl(LOGIN);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        readAcctState();
         web = new WebView(this);
         root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -109,12 +167,13 @@ public class MainActivity extends Activity {
                 public void event(final String type, final String json) {
                     runOnUiThread(new Runnable() {
                         public void run() {
+                            if ("account".equals(type)) onAccount(json);
                             try { web.evaluateJavascript("window.__kmSyncEvent&&__kmSyncEvent(" + SyncJson.quote(type) + "," + SyncJson.quote(json) + ")", null); }
                             catch (Throwable e) { Log.w(SyncAndroid.TAG, "sync event", e); }
                         }
                     });
                 }
-            });
+            }, appVer());
         } catch (Throwable e) {
             sync = null;
             Log.w(SyncAndroid.TAG, "设备同步不可用", e);
@@ -127,7 +186,8 @@ public class MainActivity extends Activity {
         web.setWebChromeClient(new Chrome());
 
         if (state != null) web.restoreState(state);
-        if (!openFromIntent(getIntent()) && web.getUrl() == null) web.loadUrl(HOME);
+        if (!loggedIn()) { getIntent().removeExtra(EXTRA_OPEN); if (web.getUrl() == null || gated(web.getUrl())) web.loadUrl(LOGIN); }
+        else if (!openFromIntent(getIntent()) && web.getUrl() == null) web.loadUrl(HOME);
 
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             public void onInit(int status) { ttsReady = status == TextToSpeech.SUCCESS; }
@@ -150,6 +210,7 @@ public class MainActivity extends Activity {
         String page = i == null ? null : i.getStringExtra(EXTRA_OPEN);
         if (page == null || !page.matches("[a-z0-9\\-/]+\\.html")) return false;
         i.removeExtra(EXTRA_OPEN);
+        if (!loggedIn()) { if (web.getUrl() == null || !web.getUrl().startsWith(LOGIN)) web.loadUrl(LOGIN); return true; }   // #12 门禁
         String url = "file:///android_asset/www/" + page;
         if (url.equals(web.getUrl())) return true;
         if (web.getUrl() == null) { pendingOpen = url; web.loadUrl(HOME); }   // 先开总入口，加载完再进去（见 onPageFinished）
@@ -259,6 +320,15 @@ public class MainActivity extends Activity {
     }
 
     class Client extends WebViewClient {
+        /** #12 门禁：没登录时任何本 App 页面（历史记录后退、loadUrl、恢复的页面）都改去登录页 */
+        @Override
+        public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+            if (gated(url)) {
+                view.stopLoading();
+                view.loadUrl(LOGIN);
+            }
+        }
+
         @Override
         public void onPageFinished(WebView view, String url) {
             if (pendingOpen == null) return;
@@ -275,6 +345,7 @@ public class MainActivity extends Activity {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
             Uri u = req.getUrl();
+            if (req.isForMainFrame() && gated(u.toString())) { view.loadUrl(LOGIN); return true; }   // #12 门禁
             if ("file".equals(u.getScheme()) || ASSET_HOST.equals(u.getHost())) return false;
             // 网页里内嵌的视频播放器（iframe）在 App 里加载，不跳出去
             if (!req.isForMainFrame()) return false;
@@ -358,6 +429,10 @@ public class MainActivity extends Activity {
     }
 
     static long now() { return System.currentTimeMillis(); }
+
+    String appVer() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return ""; }
+    }
 
     boolean hasAsset(String path) {
         try { getAssets().open(path).close(); return true; } catch (IOException e) { return false; }
@@ -625,6 +700,69 @@ public class MainActivity extends Activity {
             if (!gate.check(token, "syncLeave", now())) return;
             if (sync == null) return;
             sync.leave();
+        }
+
+        // ---------------- 账号（#12）：注册、登录、先离线学习只在登录页；退出登录只在「账号与同步」页（规则见 BridgeGate）
+
+        /** 登录页的状态 JSON；没登录时多带宽限期还剩多少（graceLeft 毫秒）、这次是否已选了先离线学习 */
+        @JavascriptInterface
+        public String acctState(String token) {
+            if (!gate.check(token, "acctState", now())) return "";
+            String s = sync == null ? "{\"state\":\"broken\",\"msg\":\"账号功能暂时不可用，可以重启 App 再试\"}" : sync.acctState();
+            try {
+                JSONObject o = new JSONObject(s == null || s.isEmpty() ? "{}" : s);
+                if (!"in".equals(acctState)) o.put("graceLeft", graceLeft());
+                o.put("graceSession", graceSession);
+                return o.toString();
+            } catch (Throwable e) { return s; }
+        }
+
+        @JavascriptInterface
+        public void acctRegister(String token, String json) {
+            if (!gate.check(token, "acctRegister", now()) || json == null || sync == null) return;
+            sync.acctRegister(json);
+        }
+
+        @JavascriptInterface
+        public void acctLogin(String token, String json) {
+            if (!gate.check(token, "acctLogin", now()) || json == null || sync == null) return;
+            sync.acctLogin(json);
+        }
+
+        @JavascriptInterface
+        public void acctLogout(String token) {
+            if (!gate.check(token, "acctLogout", now()) || sync == null) return;
+            sync.acctLogout();
+        }
+
+        @JavascriptInterface
+        public void acctServer(String token, String text) {
+            if (!gate.check(token, "acctServer", now()) || text == null || sync == null) return;
+            sync.acctServer(text);
+        }
+
+        @JavascriptInterface
+        public void acctDiscover(String token) {
+            if (!gate.check(token, "acctDiscover", now()) || sync == null) return;
+            sync.acctDiscover(SyncAndroid.broadcasts(MainActivity.this));
+        }
+
+        /** 先离线学习（升级的老设备，宽限期 7 天内）：这次打开 App 不再拦到登录页。返回是否允许 */
+        @JavascriptInterface
+        public boolean acctOffline(String token) {
+            if (!gate.check(token, "acctOffline", now())) return false;
+            if ("in".equals(acctState)) return true;
+            if (graceLeft() <= 0) return false;
+            graceSession = true;
+            return true;
+        }
+
+        /** 带结果的备份（登录前备份、账号页备份）：保存到「下载/知识图谱」，返回保存位置；失败返回空字符串（登录页据此不往下走） */
+        @JavascriptInterface
+        public String saveBackup(String token, String name, String text) {
+            if (!gate.check(token, "saveBackup", now()) || name == null || text == null) return "";
+            if (!name.matches("[^/\\\\:*?\"<>|]{1,120}\\.json")) return "";
+            try { return save(name, text.getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { Log.w(SyncAndroid.TAG, "备份", e); return ""; }
         }
 
         // ---------------- 局域网配对（#1 第二期）：可被发现 3 分钟、点附近的设备或手输地址、核对 4 位确认码

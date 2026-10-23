@@ -43,13 +43,16 @@
     'syncNow', 'syncPublish', 'syncAck', 'nodeJoin', 'nodeRemove', 'joinOpen', 'joinClose', 'joinScan', 'joinConfirm',
     'syncRename', 'syncRemove', 'syncLeave',
     // #1 第二期：局域网配对
-    'pairOpen', 'pairClose', 'pairWith', 'pairAddr', 'pairConfirm'].forEach(function (m) {
+    'pairOpen', 'pairClose', 'pairWith', 'pairAddr', 'pairConfirm',
+    // #12 账号：结果经事件 action-result（op = acctLogin 等）、acct-progress、acct-found 回来
+    'acctRegister', 'acctLogin', 'acctLogout', 'acctServer', 'acctDiscover'].forEach(function (m) {
     if (B[m]) A[m] = function () {
       var args = Array.prototype.slice.call(arguments);
       if (token) call(m, args); else queue.push([m, args]);
     };
   });
-  var empty = { pinWidget: false, deviceName: '', sharedGet: '', syncState: '', syncTake: '', joinState: '' };
+  var empty = { pinWidget: false, deviceName: '', sharedGet: '', syncState: '', syncTake: '', joinState: '',
+    acctState: '', acctOffline: false, saveBackup: '' };     // #12
   Object.keys(empty).forEach(function (m) {
     if (B[m]) A[m] = function () { return token ? call(m, Array.prototype.slice.call(arguments)) : empty[m]; };
   });

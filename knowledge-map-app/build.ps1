@@ -51,6 +51,24 @@ Copy-Item "$here\hub\km-reward.js" "$work\assets\www\km-reward.js"
 # #1 设备同步：km-sync.js（发布分区、安全页面合并）、设备同步页、扫码和生成二维码（jsQR Apache-2.0、qrcode-generator MIT，单文件，file:// 可用）
 Copy-Item "$here\hub\km-sync.js" "$work\assets\www\km-sync.js"
 Copy-Item "$here\hub\sync.html" "$work\assets\www\sync.html"
+# #12 账号：登录 / 注册页；默认服务器地址和账号恢复公钥写进 assets/km-config.json（Java 读）。
+# 恢复公钥来自 signing/km-recovery.json（sync-node/make_recovery_key.py 生成，私钥只在 signing 和审批 App）；读不到就不打包：
+# 没有它学生注册不了，打出来的包也就没法上线
+Copy-Item "$here\hub\login.html" "$work\assets\www\login.html"
+$signDir = if ($env:KM_SIGNING_DIR) { $env:KM_SIGNING_DIR } else { "$here\signing" }
+$recPath = Join-Path $signDir 'km-recovery.json'
+if (-not (Test-Path $recPath)) { throw "缺少账号恢复密钥 $recPath：先运行 python sync-node\make_recovery_key.py（只运行一次，私钥丢了就不能帮学生重设密码）" }
+$rec = [IO.File]::ReadAllText($recPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+if (-not ($rec.pub -match '^[A-Za-z0-9_-]{100,}$') -or -not ($rec.kid -match '^[0-9a-f]{8}$')) { throw "$recPath 格式不对（没有 pub / kid）" }
+$nodeHost = '43.142.41.27'; $nodePort = 8787
+$nodeInfo = Join-Path $signDir 'sync-node.json'
+if (Test-Path $nodeInfo) {
+  $ni = [IO.File]::ReadAllText($nodeInfo, [Text.Encoding]::UTF8) | ConvertFrom-Json
+  if ($ni.host) { $nodeHost = [string]$ni.host }
+  if ($ni.port) { $nodePort = [int]$ni.port }
+}
+$cfgJson = '{"v":1,"server":{"h":' + (ConvertTo-Json $nodeHost) + ',"p":' + $nodePort + '},"recovery":{"pub":"' + $rec.pub + '","kid":"' + $rec.kid + '"}}'
+[IO.File]::WriteAllText("$work\assets\km-config.json", $cfgJson, (New-Object Text.UTF8Encoding $false))
 New-Item -ItemType Directory -Force "$work\assets\www\vendor" | Out-Null
 Copy-Item "$here\hub\vendor\jsQR.js" "$work\assets\www\vendor\jsQR.js"
 Copy-Item "$here\hub\vendor\qrcode.js" "$work\assets\www\vendor\qrcode.js"
@@ -123,7 +141,6 @@ if ($LASTEXITCODE) { throw 'zipalign 失败' }
 
 # 签名密钥只放本机（已在 .gitignore 里），丢了以后就不能覆盖升级，记得备份
 # AI 团队在隔离工作区里发布时，用 KM_SIGNING_DIR 指向主目录的 signing，不能另生成一把新密钥
-$signDir = if ($env:KM_SIGNING_DIR) { $env:KM_SIGNING_DIR } else { "$here\signing" }
 $ks = "$signDir\release.jks"
 $pwFile = "$signDir\password.txt"
 if (-not (Test-Path $ks)) {
@@ -148,7 +165,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/vendor/jsQR.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   # 自检页只在 -SelfTest 包里（正式包里没有 selftest/，也就不会注入 KMSelfTest）
@@ -156,6 +173,11 @@ try {
   if ($SelfTest) {
     foreach ($must in 'assets/www/selftest/bridge.html', 'assets/www/selftest/frame.html') { if ($names -notcontains $must) { throw "测试包里缺少 $must" } }
   } elseif ($st.Count) { throw "正式包里不能有 selftest/：$($st[0])" }
+  # #12：APK 里的恢复公钥和 signing/km-recovery.json 一致
+  $sr = New-Object IO.StreamReader($zip.GetEntry('assets/km-config.json').Open(), [Text.Encoding]::UTF8)
+  try { $inApk = $sr.ReadToEnd() | ConvertFrom-Json } finally { $sr.Dispose() }
+  if ($inApk.recovery.pub -ne $rec.pub -or $inApk.recovery.kid -ne $rec.kid) { throw 'APK 里的账号恢复公钥和 signing\km-recovery.json 不一致' }
+  if (-not $inApk.server.h -or -not $inApk.server.p) { throw 'APK 里没有默认服务器地址' }
   $arsc = $zip.GetEntry('resources.arsc')
   if ($arsc.CompressedLength -ne $arsc.Length) { throw 'resources.arsc 被压缩了，Android 11+ 会拒绝安装' }
 } finally { $zip.Dispose() }

@@ -14,6 +14,8 @@
 | `deploy.ps1` | 部署 / `-Check` 体检 / `-Rollback` / `-NewAdminKey` / `-ResetAdminAccess` / `-SetupTls` / `-TlsCheck` / `-ResetWebLogin` |
 | `remote.sh` | deploy.ps1 传到服务器上用 sudo 执行的安装脚本 |
 | `make_codes.py` | 生成管理码、邀请码二维码图片（deploy.ps1 调用） |
+| `make_recovery_key.py` | 1.4.0：生成「账号恢复密钥」`signing/km-recovery.json` + `km-recovery.png`（已有就拒绝覆盖） |
+| `Dockerfile`、`docker-compose.yml`、`docker-entrypoint.py`、`DOCKER.md` | 1.4.0：Docker 版节点，数据全在一个卷里，可以搬到家里电脑 / NAS（见 DOCKER.md） |
 | `test_node.py` | 本地测试、Java 互通测试、经 SSH 隧道测真实服务器 |
 
 build.ps1 只复制图谱目录和 hub 文件，这个目录不会被打进知识图谱 App。
@@ -45,6 +47,16 @@ powershell -ExecutionPolicy Bypass -File knowledge-map-app\sync-node\deploy.ps1 
 - 1.3.0 起审批 App「设置 → 同步节点 → 换管理密钥」可以在手机上换钥：新密钥只在手机里，电脑上的 `sync-node.json` / `sync-node-admin.png`
   随之失效。之后再部署照常（会黄字提示本机管理码已失效，并在 `sync-node.json` 里记 `stale_note`）；远程测试要用管理密钥，
   需要时 `deploy.ps1 -NewAdminKey`（手机要重新扫码）。
+
+### 账号（1.4.0，#12 第一期）
+
+- App 改成注册 / 登录：一个账号绑定一个同步组。协议见 PROTOCOL.md 第 7 节；节点只存口令派生的验证钥和两份解不开的账号包。
+- 注册码：审批 App / 网页后台「账号」页生成（`XXXX-XXXX-XXXX`，默认 30 天 1 次），学生凭它注册。
+- 账号恢复密钥：`python make_recovery_key.py`（写进 signing，打包时把公钥打进 APK；读不到 build.ps1 就失败）。
+  审批 App「节点 → 账号 → 导入恢复密钥」扫 `km-recovery.png` 后才能重设学生密码；**另存一份到安全的地方**，丢了就不能帮学生重设密码。
+- 升级：`deploy.ps1` 照常部署；admin.db 表结构 4 → 5 自动升级，升级前备份 `admin.db.v4.bak`；默认组数上限 30 → 300。
+  回滚到 1.3.0（`-Rollback`）不影响已有组，账号组按普通组同步（新版 App 会提示服务器版本太旧）。
+- 搬家：`--backup DIR` 在线备份两个库；Docker 版见 DOCKER.md。
 
 ### 第三期（1.3.0）
 

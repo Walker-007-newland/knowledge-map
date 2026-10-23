@@ -98,3 +98,9 @@ body.dict main { display: block; flex: none; width: min(860px, 100%); margin: 0 
   .run-ctrl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .run-no { font-size: 64px; }
 }
+
+/* 没有语音引擎的提示（dict-run.js 读不出声时插到 main 最上面） */
+.tts-warn { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; padding: 12px 14px; border-radius: 12px;
+  background: var(--warn-bg); border: 1px solid var(--st-learning); color: var(--text); font-size: 14px; line-height: 1.5; }
+.tts-warn > div { flex: 1; min-width: 0; }
+.tts-warn .btn { flex: none; min-height: 44px; }

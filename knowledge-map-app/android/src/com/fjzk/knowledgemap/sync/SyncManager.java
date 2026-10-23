@@ -35,7 +35,8 @@ public final class SyncManager {
     /** 节点说这个组号已经换钥（403 replaced）：多半是这台设备被移出了，或者换钥时它没拿到新钥匙。不重建、不重试 */
     static final String REPLACED_MSG = "这台设备不在同步组里了：同步组已经换了钥匙，这台设备没有拿到新钥匙（可能已被移出）。"
         + "如果是你自己的设备，请点下面的「退出同步组」，再扫另一台设备上的加入码重新加入（本机学习数据都在，不会丢）";
-    static final String EXPIRED_MSG = "同步组已过期，请重新加入：这台设备超过 60 天没同步，你的其它设备可能已经换了同步钥匙。"
+    static final String ACCT_ONLY = "这台设备已经用账号同步：换设备只要在新设备上登录同一个账号，这个功能在账号模式下不用";
+    static final String EXPIRED_MSG ="同步组已过期，请重新加入：这台设备超过 60 天没同步，你的其它设备可能已经换了同步钥匙。"
         + "请点下面的「退出同步组」，再扫另一台设备上的加入码（本机学习数据都在，不会丢）";
 
     final SyncStore st;
@@ -62,10 +63,22 @@ public final class SyncManager {
     final Map<String, Long> seen = new TreeMap<>();      // 组员 → 最近一次收到它的分区的发布时间
     volatile String stateCache = "{}";
 
+    // 账号（#12）
+    /** 本机账号；null = 从没注册 / 登录过（升级前的老设备、新装的设备） */
+    volatile Account acct;
+    /** 本机通行证（从 account.json 解开后放内存） */
+    volatile byte[] tokCache;
+    /** 当前组绑定的账号用户名（节点 pull / push 响应里的 acct）：同组还没登录的设备在登录页填好用户名 */
+    volatile String groupAcct = "";
+    /** 打包时写进 APK 的默认服务器和恢复公钥（assets/km-config.json；电脑测试里直接设） */
+    volatile String cfgHost = "", recPub = "", recKid = "";
+    volatile int cfgPort;
+
     public SyncManager(SyncStore st, Clock clock) {
         this.st = st;
         this.clock = clock;
         loadDevice();
+        acct = Account.load(st);
         g = Group.load(st);
         if (g == null && (new java.io.File(st.dir, "group.json").exists() || new java.io.File(st.dir, "group.json.tmp").exists())) {
             // Keystore 钥匙读不出来（个别机型刷机、换锁屏后会这样，也可能只是暂时的）：当作没加入组，先不删文件，
@@ -78,7 +91,20 @@ public final class SyncManager {
             Map<String, Object> s = SyncJson.m(ns.get("seen"));
             if (s != null) for (Map.Entry<String, Object> e : s.entrySet()) if (e.getValue() instanceof Number) seen.put(e.getKey(), ((Number) e.getValue()).longValue());
             lastOk = SyncJson.n(ns, "lastOk", 0);
+            if (g != null) {
+                String ga = SyncJson.s(ns(ns, g.gid()), "acct");
+                if (ga != null) groupAcct = ga;
+            }
         }
+        refreshState();
+    }
+
+    /** 默认服务器（打包时写进 APK）和账号恢复公钥 */
+    public void setConfig(String host, int port, String pub, String kid) {
+        cfgHost = host == null ? "" : host;
+        cfgPort = port;
+        recPub = pub == null ? "" : pub;
+        recKid = kid == null ? "" : kid;
         refreshState();
     }
 
@@ -298,15 +324,51 @@ public final class SyncManager {
         if (g == null || g.node == null || SyncJson.b(g.node, "off")) return null;
         String h = SyncJson.s(g.node, "h");
         long p = SyncJson.n(g.node, "p", 0);
-        return h == null || p <= 0 ? null : new NodeClient(h, (int) p, ctr);
+        if (h == null || p <= 0) return null;
+        NodeClient nc = new NodeClient(h, (int) p, ctr);
+        Account a = acct;
+        if (a != null && a.in() && a.gid.equals(g.gid())) {
+            if (tokCache == null) tokCache = a.devToken(st);
+            nc.tokGid = a.gid;
+            nc.tok = tokCache;
+        }
+        return nc;
     }
 
     NodeClient.Invite invite() {
-        return g == null || g.node == null ? null : NodeClient.parseInvite(SyncJson.s(g.node, "inv"));
+        if (g == null || g.node == null) return null;
+        String text = SyncJson.s(g.node, "inv");
+        // 账号组（#12）：组是用注册码建的，节点数据丢了时凭注册码重建（PROTOCOL.md 7.2）
+        String code = text != null && text.startsWith("kmreg:") ? Account.normCode(text) : null;
+        if (code != null) {
+            String h = SyncJson.s(g.node, "h");
+            long p = SyncJson.n(g.node, "p", 0);
+            return h == null || p <= 0 ? null : new NodeClient.Invite(h, (int) p, code.substring(0, 4), utf8(code.substring(4)), text);
+        }
+        return NodeClient.parseInvite(text);
+    }
+
+    /** 账号模式：本机登录了账号，当前组就是账号的组（不换钥、不配对、不用加入码） */
+    boolean acctMode() {
+        Account a = acct;
+        return hasAcct() && g != null && a.gid.equals(g.gid());
+    }
+
+    /** 本机有账号（登录过，可能已退出 / 要重新登录）；只记了服务器地址的不算 */
+    boolean hasAcct() {
+        Account a = acct;
+        return a != null && !a.user.isEmpty();
+    }
+
+    /** 能不能同步：没有账号的老设备照旧（#1）；有账号就要已登录（重新登录、停用、退出登录后都停） */
+    boolean syncAllowed() {
+        Account a = acct;
+        return !hasAcct() || a.in();
     }
 
     /** 一轮同步：先处理局域网收到的；节点（旧组信箱 → 拉取 → 信箱 → 换钥 → 推送）；再和局域网里的组员各同步一轮。返回状态 JSON。 */
     public synchronized String syncNow() {
+        if (!syncAllowed()) { refreshState(); return stateCache; }
         lanProcess();
         if (g == null) { refreshState(); return stateCache; }
         NodeClient nc = client();
@@ -365,6 +427,8 @@ public final class SyncManager {
 
     void fail(NodeClient.NodeError e) {
         String c = e.err;
+        if (e.status == 403 && ("relogin".equals(c) || "disabled".equals(c))) { acctLost(c); return; }
+        if (e.status == 403 && "acct".equals(c)) { errCode = "acct"; errMsg = "这个同步组已经升级成账号，请用新版 App 登录账号"; return; }
         if (e.status == 403 && "blocked".equals(c)) { errCode = "blocked"; errMsg = "同步节点拒绝了这个同步组"; }
         else if (e.status == 403 && "invite".equals(c)) { errCode = "invite"; errMsg = "邀请码已失效，请向管理员要新的"; }
         else if (e.status == 403 && "replaced".equals(c)) { errCode = "replaced"; errMsg = REPLACED_MSG; }
@@ -413,7 +477,7 @@ public final class SyncManager {
             if (g == null) return got;
             if (!g.gid().equals(gid)) continue;        // 拿到新钥匙，迁过去了
             if (g.isRemoved(dev)) { becomeRemoved(); return got; }
-            if (g.needsRekey()) { rekey(nc); continue; }
+            if (g.needsRekey() && !acctMode()) { rekey(nc); continue; }     // 账号组不换钥（移除设备走通行证，#12）
             pushAll(nc);
             break;
         }
@@ -438,6 +502,11 @@ public final class SyncManager {
                 continue;
             }
             mailOut[0] = (int) SyncJson.n(r, "mail", 0);
+            String ga = SyncJson.s(r, "acct");
+            if (current && ga != null && !ga.equals(groupAcct)) {
+                groupAcct = ga;
+                synchronized (st) { Map<String, Object> all = nodeState(); ns(all, gid).put("acct", ga); saveNodeState(all); }
+            }
             List<Object> items = SyncJson.l(r.get("items"));
             Set<String> devs = new HashSet<>();
             if (items != null) for (Object o : items) {
@@ -603,7 +672,7 @@ public final class SyncManager {
      * 节点连不上（offline）、出错时不在这里重试，交给前台定时和下次发布
      */
     public synchronized boolean nodeDue() {
-        if (g == null || busy || skipNode || !errCode.isEmpty() || now() < backoffUntil || client() == null) return false;
+        if (g == null || busy || skipNode || !syncAllowed() || !errCode.isEmpty() || now() < backoffUntil || client() == null) return false;
         return pendingCount() > 0;
     }
 
@@ -871,6 +940,7 @@ public final class SyncManager {
 
     /** 回到前台：在组里（或正可被发现）而且连着 Wi-Fi 时开局域网服务、广播、发现，再和已知组员同步一轮 */
     public synchronized void lanStart() {
+        if (!syncAllowed()) { lan.active = false; lan.stop(); refreshState(); return; }     // 退出登录 / 要重新登录：局域网也停
         lan.active = true;
         lanProcess();
         lanSync(false);
@@ -887,9 +957,10 @@ public final class SyncManager {
 
     /** 只和局域网里的组员同步一轮（回到前台、本机发布后、发现组员、前台每 2 分钟） */
     public synchronized void lanSync(boolean force) {
+        if (!syncAllowed()) { lan.active = false; lan.stop(); return; }
         lanProcess();
         if (g == null) { lan.ensure(); return; }
-        if (g.needsRekey() && client() == null) rekeyLocal();      // 没有同步节点的组：本机直接换钥，局域网里交钥匙
+        if (g.needsRekey() && client() == null && !acctMode()) rekeyLocal();      // 没有同步节点的组：本机直接换钥，局域网里交钥匙
         if (!lan.ensure()) { refreshState(); return; }
         boolean got = lan.syncAll(force);
         lanProcess();                                               // 收到的名单里本机可能已被移出
@@ -973,6 +1044,7 @@ public final class SyncManager {
 
     /** 进入「可被发现」3 分钟：开局域网服务、广播设备名，列出附近同样在「添加设备」的设备。返回 {ok, addr, exp, list} */
     public synchronized String pairOpen() {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
         if (lan.env == null) return res(false, "这台设备用不了局域网配对，请用「扫加入码」");
         String a;
@@ -1012,6 +1084,7 @@ public final class SyncManager {
 
     /** 点「附近的设备」里的一台 */
     public synchronized String pairWith(String key) {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         Map<String, Object> e = key == null ? null : lan.nearby.get(key);
         if (e == null) return res(false, "这台设备已经不在附近了，请刷新后再试，或手动输入它的地址");
         return pairAddr(SyncJson.s(e, "h") + ":" + SyncJson.n(e, "p", 0));
@@ -1019,6 +1092,7 @@ public final class SyncManager {
 
     /** 手动输入对方地址（如 192.168.1.23:47811，不写端口就用 47811）：pair/1、pair/2，两边显示确认码 */
     public synchronized String pairAddr(String text) {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
         if (lan.env == null) return res(false, "这台设备用不了局域网配对，请用「扫加入码」");
         java.util.regex.Matcher mt = java.util.regex.Pattern.compile("^\\s*([0-9]{1,3}(?:\\.[0-9]{1,3}){3}|[A-Za-z0-9.-]{1,253})(?:\\s*[:：]\\s*(\\d{1,5}))?\\s*$")
@@ -1231,6 +1305,7 @@ public final class SyncManager {
 
     /** 扫邀请码：没加入组 → 建组（第一台设备）；已在组里 → 换成新的邀请码/地址（「重新扫邀请码」）。返回 {ok, msg} */
     public synchronized String nodeJoin(String text) {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         NodeClient.Invite inv = NodeClient.parseInvite(text);
         if (inv == null) return res(false, "这不是同步节点的邀请码（应以 kmnode:1? 开头）");
         if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
@@ -1269,6 +1344,7 @@ public final class SyncManager {
 
     /** 不再使用同步节点（第一期只有节点这一条路，相当于暂停同步；再扫邀请码恢复） */
     public synchronized String nodeRemove() {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (g == null) return res(false, "还没加入同步组");
         Map<String, Object> n = g.node == null ? SyncJson.map() : new LinkedHashMap<>(g.node);
         n.put("off", true);
@@ -1301,6 +1377,7 @@ public final class SyncManager {
 
     /** 移除设备：标上移除时间，下一轮同步换钥（syncNow 由调用方紧接着触发） */
     public synchronized String remove(String who) {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (g == null) return res(false, "还没加入同步组");
         if (who.equals(dev)) return res(false, "要让本机退出，请用「退出同步组」");
         Group.Member m = g.member(who);
@@ -1315,6 +1392,7 @@ public final class SyncManager {
 
     /** 本机退出同步组：告诉组员（推一份名单）、删掉自己的槽，本机学习数据保留 */
     public synchronized String leave() {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (g == null) return res(false, "还没加入同步组");
         Group.Member m = g.member(dev);
         if (m != null) { m.removed = Math.max(now(), g.gkT + 1); m.by = dev; }
@@ -1346,6 +1424,7 @@ public final class SyncManager {
 
     /** A：生成加入码，往转交点 a 边放 ① */
     public synchronized String joinOpen() {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (g == null) return res(false, "还没加入同步组");
         ensureKey();
         NodeClient nc = client();
@@ -1377,6 +1456,7 @@ public final class SyncManager {
 
     /** C：扫加入码（或手输地址和 26 位码），取 ①、放 ② */
     public synchronized String joinScan(String text) {
+        if (hasAcct()) return res(false, ACCT_ONLY);
         if (g != null) return res(false, "这台设备已经在一个同步组里，请先「退出同步组」（本机数据保留）再加入");
         if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
         Join j = Join.parseGuest(text, now());
@@ -1542,6 +1622,326 @@ public final class SyncManager {
     /** 本机写文件 / Keystore 出过错：一直显示到下一次本机写成功（网络同步成功也不清掉，否则改动没存下来却显示「已同步」） */
     volatile String localErr = "";
 
+    // ================================================================ 账号（#12 第一期）
+
+    /** 登录 / 注册用的服务器：本机设过的 → 当前组的同步节点 → 打包时的默认地址。返回 {host, port}，都没有返回 null */
+    String[] loginServer() {
+        Account a = acct;
+        if (a != null && !a.h.isEmpty() && a.p > 0) return new String[]{a.h, String.valueOf(a.p)};
+        Group gg = g;
+        if (gg != null && gg.node != null && !SyncJson.b(gg.node, "off") && SyncJson.s(gg.node, "h") != null)
+            return new String[]{SyncJson.s(gg.node, "h"), String.valueOf(SyncJson.n(gg.node, "p", 0))};
+        if (!cfgHost.isEmpty() && cfgPort > 0) return new String[]{cfgHost, String.valueOf(cfgPort)};
+        return null;
+    }
+
+    /** 登录页用的状态（只读 volatile 字段，不等同步线程的锁） */
+    public String acctState() {
+        Account a = acct;
+        Group gg = g;
+        String[] sv = loginServer();
+        String state = a == null || a.user.isEmpty() ? "none" : a.state;
+        String prefill = a != null && !a.user.isEmpty() && !a.in() ? a.user : groupAcct;
+        return SyncJson.stringify(SyncJson.of("state", state, "user", a == null ? "" : a.user, "last", a == null ? "" : a.last,
+            "prefill", prefill == null ? "" : prefill, "inGroup", gg != null, "groupAcct", groupAcct,
+            "groupNode", gg != null && gg.node != null && !SyncJson.b(gg.node, "off"),
+            "server", sv == null ? null : SyncJson.of("h", sv[0], "p", Long.parseLong(sv[1])),
+            "defServer", cfgHost.isEmpty() ? null : SyncJson.of("h", cfgHost, "p", (long) cfgPort),
+            "dev", !dev.isEmpty(), "recovery", !recPub.isEmpty(), "inbox", (long) inboxCount()));
+    }
+
+    void progress(String step, String text) { emit("acct-progress", SyncJson.of("step", step, "text", text)); }
+
+    static String serverMsg(NodeClient.NodeError e) {
+        if (e.status == 429 && "paused".equals(e.err)) return "密码错太多次，这个账号暂停登录 15 分钟，请稍后再试";
+        if (e.status == 429) return "操作太频繁，请过 10 分钟再试";
+        if (e.status == 403 && "login".equals(e.err)) return "用户名或密码不对";
+        if (e.status == 403 && "disabled".equals(e.err)) return "这个账号已被管理员停用，请联系管理员。本机的学习记录还在。";
+        if (e.status == 403 && "code".equals(e.err)) return "注册码不对或已失效（过期、用过、作废），请向管理员要新的";
+        if (e.status == 409 && "user".equals(e.err)) return "这个用户名已经有人用了，换一个";
+        if (e.status == 403 && "blocked".equals(e.err)) return "服务器拒绝了这个同步组，请联系管理员";
+        if (e.status == 413) return "服务器已满，请联系管理员";
+        if (e.status == 503) return "服务器还不支持账号，请联系管理员升级服务器";
+        if (e.status == 404 && "path".equals(e.err)) return "服务器版本太旧，不支持账号，请联系管理员升级到 km-sync 1.4.0";
+        return "服务器出错（" + e.status + " " + e.err + "），请稍后再试";
+    }
+
+    static String offlineMsg(String[] sv) { return "连不上服务器（" + sv[0] + ":" + sv[1] + "）"; }
+
+    static Map<String, Object> fail(String code, String msg) { return SyncJson.of("ok", false, "code", code, "msg", msg); }
+
+    /** 登录 / 注册成功：保存账号、装好组，通知网页（发布本机全部分区、同步一轮）和外壳（离开登录页） */
+    void acctDone(String user, String gid, long pwVer, String h, long p, byte[] devToken) {
+        Account a = new Account();
+        Account old = acct;
+        a.user = user;
+        a.gid = gid;
+        a.state = "in";
+        a.since = now();
+        a.pwVer = pwVer;
+        a.h = h;
+        a.p = p;
+        a.last = user;
+        a.grace = old == null ? 0 : old.grace;
+        a.setDevToken(st, devToken);
+        a.save(st);
+        acct = a;
+        tokCache = devToken;
+        groupAcct = user;
+        errCode = "";
+        errMsg = "";
+        backoffUntil = 0;
+        notice = "";
+        saveDevice();
+        publishGroup();
+        lan.keyChanged();
+        lan.ensure();
+        refreshState();
+        emit("state", SyncJson.of("joined", true));
+        emit("account", SyncJson.of("state", "in", "user", user));
+    }
+
+    /** 本机离开当前组（换到账号的组）：只删本机的组记录，不换钥、不通知组员；收件箱留着，登录后照常合并进来 */
+    void leaveLocal() {
+        g = null;
+        join = null;
+        for (String rel : st.list("out")) st.delete(rel);
+        st.delete("group.json");
+        st.delete("node.json");
+        st.delete("lan.json");
+        seen.clear();
+        via.clear();
+        groupAcct = "";
+        lan.keyChanged();
+    }
+
+    /**
+     * 注册：{user, pw, code, device?}。三种情况（方案第四节）：
+     *   没有组 → 新建组 + 账号（本机数据成为账号的初始数据）；
+     *   在 #1 同步组里、组的节点就是这台服务器 → 把这个组升级成账号（不新建组、不搬数据，组里其它设备记为老设备）；
+     *   在只有局域网的组里（或组的节点是别的服务器）→ 用这个组的钥匙在服务器上建组 + 账号。
+     * 失败时本机任何文件都不动（account.json 只在成功后写）。返回 {ok, msg, code?}
+     */
+    public synchronized String acctRegister(String json) {
+        Map<String, Object> q;
+        try { q = SyncJson.obj(json); } catch (RuntimeException e) { return SyncJson.stringify(fail("bad", "参数不对")); }
+        Map<String, Object> d = SyncJson.m(q.get("device"));
+        if (d != null) setDevice(SyncJson.s(d, "id"), SyncJson.s(d, "name"));
+        String user = Account.nz(SyncJson.s(q, "user")).trim().toLowerCase(java.util.Locale.ROOT);
+        String pw = Account.nz(SyncJson.s(q, "pw"));
+        String codeText = Account.nz(SyncJson.s(q, "code"));
+        Account cur0 = acct;
+        if (cur0 != null && cur0.in()) return SyncJson.stringify(fail("in", "这台设备已经登录了账号「" + cur0.user + "」"));
+        String bad = Account.userProblem(user);
+        if (bad == null) bad = Account.pwProblem(user, pw);
+        if (bad != null) return SyncJson.stringify(fail("rule", bad));
+        String code = Account.normCode(codeText);
+        if (code == null) return SyncJson.stringify(fail("code", "注册码格式不对：应该是 12 位字母数字，像 ABCD-EFGH-JKMN"));
+        if (dev.isEmpty()) return SyncJson.stringify(fail("dev", "本机还没有设备编号，请稍等几秒再试"));
+        if (recPub.isEmpty()) return SyncJson.stringify(fail("cfg", "这个安装包缺少账号恢复公钥，不能注册，请联系管理员"));
+        String[] sv = Account.codeServer(codeText);
+        if (sv == null) sv = loginServer();
+        if (sv == null) return SyncJson.stringify(fail("server", "还没设置服务器地址"));
+        String h = sv[0];
+        int p = Integer.parseInt(sv[1]);
+        ensureKey();
+        Group cur = g;
+        boolean bind = cur != null && cur.node != null && !SyncJson.b(cur.node, "off")
+            && h.equals(SyncJson.s(cur.node, "h")) && p == SyncJson.n(cur.node, "p", 0);
+        String regText = "kmreg:1?c=" + Account.fmtCode(code) + "&h=" + h + "&p=" + p;
+        Group ng;
+        if (bind) ng = cur.copy();
+        else {
+            ng = cur != null ? cur.copy() : Group.create(now());
+            if (cur == null) ng.addMember(dev, devName, pk, now());
+            ng.node = SyncJson.of("h", h, "p", (long) p, "inv", regText, "t", Math.max(now(), cur == null || cur.node == null ? 0 : SyncJson.n(cur.node, "t", 0) + 1));
+        }
+        String gid = ng.gid();
+        progress("auth", "正在注册账号…");
+        byte[] salt = rand(16);
+        byte[][] k = Account.keys(pw, salt, Account.ITERS);
+        byte[] authKey = k[0], wrapKey = k[1];
+        try {
+            String bundle = Account.bundle(user, ng);
+            byte[] ik = Account.codeIk(code);
+            Map<String, Object> body = SyncJson.of("user", user, "code", Account.fmtCode(code), "gid", gid, "salt", b64e(salt), "iters", (long) Account.ITERS,
+                "abox", b64e(Account.abox(ik, user, gid, authKey)), "wrap_pw", b64e(Account.wrapPw(wrapKey, user, bundle)),
+                "wrap_admin", b64e(Account.wrapAdmin(recPub, recKid, user, bundle)), "dev", dev, "devName", devName, "appVer", appVer);
+            if (!bind) body.putAll(NodeClient.wrap(ik, gid, ng.nodeKey()));
+            NodeClient nc = new NodeClient(h, p, ctr);
+            Map<String, Object> r;
+            try {
+                r = nc.acctRegister(body, bind ? gid : null, ng.nodeKey(), dev);
+            } catch (NodeClient.NodeError e) {
+                if (!(bind && e.status == 404 && "nogroup".equals(e.err))) throw e;
+                rebuild(nc);                                   // 节点上这个组没了（节点数据丢过）：先用组的邀请码重建
+                r = nc.acctRegister(body, gid, ng.nodeKey(), dev);
+            }
+            byte[] tok = Account.openTok(authKey, user, dev, SyncJson.s(r, "tok"));
+            if (tok == null) return SyncJson.stringify(fail("server", "服务器返回的通行证解不开，请重试"));
+            if (!bind) {
+                g = ng;
+                g.save(st);
+                resetGid(gid, SyncJson.s(r, "gen"));
+            }
+            acctDone(user, gid, SyncJson.n(r, "pw_ver", 1), h, p, tok);
+            long legacy = SyncJson.n(r, "legacy", 0);
+            return SyncJson.stringify(SyncJson.of("ok", true, "user", user, "mode", bind ? "bind" : cur == null ? "new" : "lan", "legacy", legacy,
+                "msg", bind ? "已注册账号「" + user + "」：这台设备所在的同步组升级成了账号" + (legacy > 0 ? "，同组另外 " + legacy + " 台设备升级后输入密码就能登录" : "")
+                    : "已注册账号「" + user + "」，本机的学习记录成为账号的数据"));
+        } catch (IOException e) {
+            return SyncJson.stringify(fail("offline", offlineMsg(sv)));
+        } catch (NodeClient.NodeError e) {
+            if (e.status == 409 && "bound".equals(e.err)) {
+                String u = SyncJson.s(e.body, "user");
+                if (u != null) groupAcct = u;
+                return SyncJson.stringify(SyncJson.of("ok", false, "code", "bound", "user", u,
+                    "msg", "这台设备所在的同步组已经注册过账号「" + u + "」，请直接登录这个账号"));
+            }
+            return SyncJson.stringify(fail(e.err, serverMsg(e)));
+        } finally {
+            Account.wipe(authKey, wrapKey);
+        }
+    }
+
+    /**
+     * 登录：{user, pw, device?}。挑战应答，密码不上网。成功后：
+     *   本机已在这个账号的组里（同组的另一台设备升级后登录）→ 只拿通行证，数据不动；
+     *   否则（新设备、没有组、在别的组里）→ 本机离开原来的组（只删本机记录），装上账号的组，从头拉取全部，网页合并（不覆盖）。
+     * 失败时本机任何文件都不动。返回 {ok, msg, code?, same?}
+     */
+    public synchronized String acctLogin(String json) {
+        Map<String, Object> q;
+        try { q = SyncJson.obj(json); } catch (RuntimeException e) { return SyncJson.stringify(fail("bad", "参数不对")); }
+        Map<String, Object> d = SyncJson.m(q.get("device"));
+        if (d != null) setDevice(SyncJson.s(d, "id"), SyncJson.s(d, "name"));
+        String user = Account.nz(SyncJson.s(q, "user")).trim().toLowerCase(java.util.Locale.ROOT);
+        String pw = Account.nz(SyncJson.s(q, "pw"));
+        if (Account.userProblem(user) != null || pw.isEmpty()) return SyncJson.stringify(fail("login", "用户名或密码不对"));
+        if (dev.isEmpty()) return SyncJson.stringify(fail("dev", "本机还没有设备编号，请稍等几秒再试"));
+        String[] sv = loginServer();
+        if (sv == null) return SyncJson.stringify(fail("server", "还没设置服务器地址"));
+        String h = sv[0];
+        int p = Integer.parseInt(sv[1]);
+        NodeClient nc = new NodeClient(h, p, ctr);
+        progress("auth", "正在验证密码…");
+        byte[] authKey = null, wrapKey = null;
+        try {
+            Map<String, Object> pre = nc.acctPre(user);
+            byte[] salt = b64d(SyncJson.s(pre, "salt"));
+            int iters = (int) SyncJson.n(pre, "iters", Account.ITERS);
+            if (iters < 100000 || iters > 2000000 || salt.length != 16) return SyncJson.stringify(fail("server", "服务器返回的参数不对"));
+            byte[][] k = Account.keys(pw, salt, iters);
+            authKey = k[0];
+            wrapKey = k[1];
+            String nonce = SyncJson.s(pre, "nonce");
+            Map<String, Object> r = nc.acctLogin(SyncJson.of("user", user, "nonce", nonce, "dev", dev, "devName", devName, "appVer", appVer,
+                "proof", Account.proof(authKey, user, nonce, dev)));
+            Map<String, Object> b = Account.openPw(wrapKey, user, b64d(SyncJson.s(r, "wrap_pw")));
+            byte[] tok = Account.openTok(authKey, user, dev, SyncJson.s(r, "tok"));
+            if (b == null || tok == null) return SyncJson.stringify(fail("server", "账号数据解不开，请联系管理员"));
+            byte[] gk = b64d(SyncJson.s(b, "gk"));
+            String gid = Group.gidOf(gk);
+            if (!gid.equals(SyncJson.s(r, "gid"))) return SyncJson.stringify(fail("server", "账号数据和服务器上的组对不上，请联系管理员"));
+            boolean same = g != null && g.gid().equals(gid);
+            if (same) {
+                if (g.node == null || SyncJson.b(g.node, "off") || !h.equals(SyncJson.s(g.node, "h")) || p != SyncJson.n(g.node, "p", 0)) {
+                    Map<String, Object> n = SyncJson.of("h", h, "p", (long) p, "inv", g.node == null ? SyncJson.s(b, "invite") : SyncJson.s(g.node, "inv"),
+                        "t", Math.max(now(), g.node == null ? 0 : SyncJson.n(g.node, "t", 0) + 1));
+                    g.node = n;
+                    g.save(st);
+                }
+            } else {
+                progress("download", "正在下载账号数据…");
+                ensureKey();
+                if (g != null) leaveLocal();
+                Group ng = new Group();
+                ng.gk = gk;
+                ng.epoch = SyncJson.n(b, "epoch", 1);
+                ng.gkT = SyncJson.n(b, "gkT", 0);
+                ng.addMember(dev, devName, pk, now());
+                ng.node = SyncJson.of("h", h, "p", (long) p, "inv", Account.nz(SyncJson.s(b, "invite")), "t", now());
+                g = ng;
+                g.save(st);
+                resetGid(gid, null);
+            }
+            acctDone(user, gid, SyncJson.n(r, "pw_ver", 1), h, p, tok);
+            return SyncJson.stringify(SyncJson.of("ok", true, "user", user, "same", same,
+                "msg", same ? "已登录「" + user + "」：这台设备的数据和账号是同一份" : "已登录「" + user + "」，正在下载账号数据"));
+        } catch (IOException e) {
+            return SyncJson.stringify(fail("offline", offlineMsg(sv)));
+        } catch (NodeClient.NodeError e) {
+            return SyncJson.stringify(fail(e.err, serverMsg(e)));
+        } catch (RuntimeException e) {
+            return SyncJson.stringify(fail("server", "服务器返回的数据不对（" + e.getMessage() + "）"));
+        } finally {
+            Account.wipe(authKey, wrapKey);
+        }
+    }
+
+    /** 退出登录（只在「账号与同步」页）：本机学习数据和组都保留，停止同步，回到登录页；再输密码登录后照常 */
+    public synchronized String acctLogout() {
+        Account a = acct;
+        if (a == null || !a.in()) return res(false, "还没登录");
+        a.state = "out";
+        a.save(st);
+        tokCache = null;
+        lan.active = false;
+        lan.stop();
+        refreshState();
+        emit("account", SyncJson.of("state", "out", "user", a.user));
+        return res(true, "已退出登录，本机学习记录还在");
+    }
+
+    /** 节点说这台设备要重新登录（管理员重设密码、移除设备）或账号停用：停止同步，回登录页；不删任何学习数据，也不删组密钥 */
+    void acctLost(String why) {
+        Account a = acct;
+        errCode = why;
+        errMsg = "disabled".equals(why) ? "这个账号已被管理员停用，请联系管理员。本机的学习记录还在。"
+            : "需要重新登录：管理员重设了密码或移除了这台设备。本机的学习记录还在。";
+        if (a != null && a.in() && g != null && a.gid.equals(g.gid())) {
+            a.state = why;
+            a.save(st);
+            tokCache = null;
+            emit("account", SyncJson.of("state", why, "user", a.user));
+        }
+    }
+
+    /**
+     * 改服务器地址（「主机:端口」）：登录页改登录用的服务器；已登录时同时改当前组的同步节点（服务器搬家后），
+     * 组名单里的节点设置会随同步传给同组其它设备（按时间取新的）。
+     */
+    public synchronized String acctServer(String text) {
+        String t = text == null ? "" : text.trim().replace('：', ':');
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(?:https?://)?([A-Za-z0-9.-]{1,253})(?::(\\d{1,5}))?/?$").matcher(t);
+        if (!m.matches()) return res(false, "地址格式不对，应该像 192.168.1.20:8787");
+        String h = m.group(1);
+        int p = m.group(2) == null ? 8787 : Integer.parseInt(m.group(2));
+        if (p < 1 || p > 65535) return res(false, "端口要在 1–65535 之间");
+        Account a = acct;
+        if (a == null) a = new Account();          // 还没登录过：只记下服务器地址（用户名为空 = 没有账号）
+        a.h = h;
+        a.p = p;
+        a.save(st);
+        acct = a;
+        if (a.in() && g != null) {
+            g.node = SyncJson.of("h", h, "p", (long) p, "inv", g.node == null ? "" : Account.nz(SyncJson.s(g.node, "inv")),
+                "t", Math.max(now(), g.node == null ? 0 : SyncJson.n(g.node, "t", 0) + 1));
+            g.save(st);
+            publishGroup();
+            errCode = "";
+            errMsg = "";
+            backoffUntil = 0;
+        }
+        refreshState();
+        return SyncJson.stringify(SyncJson.of("ok", true, "msg", "服务器地址改为 " + h + ":" + p, "h", h, "p", (long) p));
+    }
+
+    /** App 版本（外壳设置，注册 / 登录时告诉服务器，管理员在账号列表里看到） */
+    volatile String appVer = "";
+
+    public void setAppVersion(String v) { appVer = v == null ? "" : v; }
+
     // ================================================================ 状态
 
     public String state() { return stateCache; }
@@ -1550,6 +1950,8 @@ public final class SyncManager {
         Map<String, Object> s = SyncJson.map();
         s.put("inGroup", g != null);
         s.put("notice", notice);
+        Account ac = acct;
+        s.put("acct", hasAcct() ? SyncJson.of("user", ac.user, "state", ac.state, "mode", acctMode()) : null);     // #12
         s.put("me", SyncJson.of("dev", dev, "name", devName));
         List<Object> ms = new ArrayList<>();
         int inbox = 0, pending = 0, lanPending = 0;
