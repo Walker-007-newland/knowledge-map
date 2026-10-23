@@ -434,8 +434,8 @@ views.settings = {
         <div class="mute small">单词掌握情况、生词本、句子复习进度。换平板或重装前先导出。</div>
         <div class="btns"><button class="btn" data-act="export">导出学习记录</button><button class="btn" data-act="importp">导入学习记录</button></div>
         <h2>其它</h2>
-        <div class="btns"><button class="btn" data-act="demo">添加示例短片</button></div>
-        <div class="card small mute">版本 ${esc(ver)}<br>离线词典数据来自 ECDICT（MIT 许可，skywind3000/ECDICT），口语短语释义为自编。<br>App 不联网，不带任何电影内容；视频和字幕都是你自己导入的文件。</div>
+        <div class="btns"><button class="btn" data-act="update">检查更新</button><button class="btn" data-act="demo">添加示例短片</button></div>
+        <div class="card small mute">版本 ${esc(ver)}<br>离线词典数据来自 ECDICT（MIT 许可，skywind3000/ECDICT），口语短语释义为自编。<br>App 不带任何电影内容；视频和字幕都是你自己导入的文件或自己粘贴的链接。联网只用来下载你粘贴的链接和检查更新。</div>
       </div>`;
   },
   async act(a, t) {
@@ -443,6 +443,7 @@ views.settings = {
     else if (a === 'font') { Settings.font = +t.dataset.v; saveSettings(); show(); }
     else if (a === 'qc') { Settings.quizCount = +t.dataset.v; saveSettings(); show(); }
     else if (a === 'demo') { stack.pop(); addDemo(); }
+    else if (a === 'update') { if (N && N.checkUpdate) N.checkUpdate(); else toast('只有在平板 App 里才能检查更新'); }
     else if (a === 'export') {
       const prog = {};
       for (const m of Movies.list()) prog[m.id] = { title: m.title, sub: m.sub, lines: Movies.prog(m.id).lines };

@@ -50,7 +50,7 @@ import java.util.Locale;
 /**
  * 看剧学英文：界面是 assets/www 里的网页（WebView，背景透明），视频用系统 MediaPlayer 画在网页下面的 TextureView 上，
  * 网页把视频框的位置告诉 vRect，原生画面就对准那块透明区域；字幕、按钮都是网页画的，盖在视频上面。
- * 网页通过 WENative 调这里：存取数据（files/store/*.json）、选视频（拿长期读取权限）、链接下载、播放控制、朗读、全屏、保存文件。
+ * 网页通过 WENative 调这里：存取数据（files/store/*.json）、选视频（拿长期读取权限）、链接下载、播放控制、朗读、全屏、保存文件、检查更新（见 Updater）。
  */
 public class MainActivity extends Activity {
     static final String TAG = "WatchEnglish";
@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
     ValueCallback<Uri[]> fileCallback;
     String saveText;
     boolean debug;
+    Updater updater;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -142,6 +143,9 @@ public class MainActivity extends Activity {
         web.loadUrl("file:///android_asset/www/index.html");
 
         if (Downloads.get(this).hasPending()) DownloadService.kick(this);   // 上次没下完的接着下
+        // 启动时静默检查一次更新，有新版本才弹窗
+        updater = new Updater(this);
+        if (state == null) web.postDelayed(() -> updater.check(false), 2500);
 
         tts = new TextToSpeech(this, st -> {
             ttsReady = st == TextToSpeech.SUCCESS;
@@ -158,6 +162,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (updater != null) updater.destroy();
         releasePlayer();
         if (tts != null) tts.shutdown();
         web.destroy();
@@ -371,6 +376,9 @@ public class MainActivity extends Activity {
         public String version() {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return ""; }
         }
+
+        @JavascriptInterface
+        public void checkUpdate() { runOnUiThread(() -> updater.check(true)); }
 
         // ---------- 数据：一个 key 一个文件
         @JavascriptInterface
