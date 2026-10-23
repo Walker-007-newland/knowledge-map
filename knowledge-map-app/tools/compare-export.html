@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>导出对照</title>
+<style>
+  :root { --bg: #f6f4ef; --surface: #fff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb; --good: #2f8a4c; --bad: #c23f2e; --accent: #2f6fde;
+    --font: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d; --good: #5cbf7a; --bad: #ef7a68; --accent: #6b9bf0; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 40px; background: var(--bg); color: var(--text); font-family: var(--font); }
+  main { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font-size: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .card p { color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; }
+  button { font: 600 16px var(--font); padding: 10px 18px; border-radius: 10px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; margin-top: 12px; }
+  button.plain { background: transparent; color: var(--accent); }
+  #verdict { font-size: 18px; font-weight: 700; }
+  #verdict.ok { color: var(--good); } #verdict.bad { color: var(--bad); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  td.ok { color: var(--good); } td.bad { color: var(--bad); } td.warn { color: #b8641a; }
+  pre { white-space: pre-wrap; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>升级前后「我的数据」导出对照</h1>
+  <div class="card">
+    <p>#12 验收 A1：升级前在「我的数据」导出一份（前），升级、注册 / 登录后再导出一份（后），在这里对照。用的是 App 自己的合并规则（hub/km-data.js），检查只增不减、逐条没有丢、小狗骨头等于公式值。文件只在这个页面里读，不上传。</p>
+    <label for="fb">前（升级前导出的 .json）</label><input type="file" id="fb" accept=".json,application/json">
+    <label for="fa">后（注册 / 登录后导出的 .json）</label><input type="file" id="fa" accept=".json,application/json">
+    <div><button id="go">对照</button> <button class="plain" id="demo">用示例数据自检</button></div>
+  </div>
+  <div class="card" id="out" hidden>
+    <div id="verdict"></div>
+    <ul id="checks"></ul>
+    <table><thead><tr><th>数据</th><th>前</th><th>后</th><th>结果</th></tr></thead><tbody id="rows"></tbody></table>
+    <pre id="raw"></pre>
+  </div>
+</main>
+<script src="../hub/km-study.js"></script>
+<script src="../hub/pet/pet-core.js"></script>
+<script src="../hub/km-data.js"></script>
+<script src="compare-export.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const read = f => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => bad(r.error); r.readAsText(f, 'utf-8'); });
+  function show(r) {
+    $('out').hidden = false;
+    $('verdict').textContent = r.ok ? '✓ 全部通过：只增不减、逐条没有丢、骨头等于公式值' : '✗ 没通过：见下面标红的行';
+    $('verdict').className = r.ok ? 'ok' : 'bad';
+    const li = [];
+    (r.notes || []).forEach(n => li.push('<li class="bad">' + esc(n) + '</li>'));
+    if (r.merge) li.push('<li>' + (r.merge.same ? '✓' : '✗') + ' merge(前, 后) == 后' + (r.merge.same ? '' : '：不一样的键 ' + esc(r.merge.diffKeys.join('、'))) + '</li>');
+    (r.pets || []).forEach(p => { if (p.has) li.push('<li>' + (p.ok ? '✓' : '✗') + ' 小狗（' + p.label + '）「' + esc(p.name) + '」骨头 ' + p.bones + '，公式值 ' + p.formula + '</li>'); });
+    $('checks').innerHTML = li.join('');
+    $('rows').innerHTML = (r.rows || []).map(x => '<tr><td>' + esc(x.name) + '<br><span style="color:var(--muted);font-size:12px">' + esc(x.key) + '</span></td><td>' + x.before + '</td><td>' + x.after + '</td>' +
+      (x.status === 'ok' ? '<td class="ok">✓</td>' : x.status === 'deleted' ? '<td class="warn">⚠ 有删除记录：' + esc(x.deleted.join(', ')) + '</td>' : '<td class="bad">✗ 少了：' + esc(x.lost.slice(0, 30).join(', ')) + '</td>') + '</tr>').join('');
+    $('raw').textContent = KMCompare.text(r);
+  }
+  $('go').onclick = async () => {
+    const fb = $('fb').files[0], fa = $('fa').files[0];
+    if (!fb || !fa) { alert('请先选「前」「后」两个文件'); return; }
+    show(KMCompare.compare(KMData, await read(fb), await read(fa)));
+  };
+  // 自检：造一份「前」，「后」= 前 + 另一台设备的记录（应该通过）；再造一份丢了记录的（应该不通过）
+  $('demo').onclick = () => {
+    const t = 1792700000000;
+    const pet = { name: '旺财', breed: 'shiba', born: t, xp: 50, fullness: 80, tick: t, claimed: { 'fjzk-zh-progress-v1': ['a', 'b'] }, spent: { d1: 2 }, legacy: {}, owned: [], bones: 4 };
+    const before = { app: 'km-all', schema: 1, device: { id: 'd1', name: 'X800' },
+      keys: { 'fjzk-zh-progress-v1': { a: { last: 90, updated: t }, b: { last: 85, updated: t } }, 'km-pet-v1': pet, 'km-narrate-rate': '1.2' },
+      meta: { 'fjzk-zh-progress-v1': { a: { t, by: 'd1' }, b: { t, by: 'd1' } } } };
+    const after = JSON.parse(JSON.stringify(before));
+    after.keys['fjzk-zh-progress-v1'].c = { last: 95, updated: t + 1 };
+    after.meta['fjzk-zh-progress-v1'].c = { t: t + 1, by: 'd2' };
+    after.keys['mathmap-wrong-v1'] = { q1: { n: 1, at: t } };
+    const good = KMCompare.compare(KMData, JSON.stringify(before), JSON.stringify(after));
+    const lostOne = JSON.parse(JSON.stringify(after));
+    delete lostOne.keys['fjzk-zh-progress-v1'].b;
+    lostOne.keys['km-pet-v1'].bones = 9;
+    const bad = KMCompare.compare(KMData, JSON.stringify(before), JSON.stringify(lostOne));
+    show(good);
+    $('raw').textContent = '自检：正常的「后」→ ' + (good.ok ? '通过 ✓' : '不通过 ✗（自检失败）') + '；丢了一条、骨头被改的「后」→ ' + (bad.ok ? '通过 ✗（自检失败）' : '不通过 ✓') +
+      '\n\n' + KMCompare.text(bad);
+    window.__selfTest = { good: good.ok, bad: bad.ok };
+  };
+})();
+</script>
+</body>
+</html>

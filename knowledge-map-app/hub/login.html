@@ -462,6 +462,8 @@
       : await call('acctLogin', () => A.acctLogin(JSON.stringify({ user, pw, device: deviceInfo() })));
     $('lPw').value = '';
     if (!r.ok) {
+      // 服务器还没升级到支持账号（404 path / 503 crypto）：和连不上一样，升级的老设备可以先离线学习，不把学生关在门外
+      if (r.code === 'path' || r.code === 'crypto') { offlineFail = true; load(); }
       if (r.code === 'offline') {
         offlineFail = true;
         load();

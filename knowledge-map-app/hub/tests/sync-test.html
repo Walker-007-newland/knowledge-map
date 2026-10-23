@@ -417,7 +417,7 @@
       await new Promise(r => { fr.onload = r; });
       const tag = fr.contentDocument.getElementById('syncTag');
       ok(tag && tag.hidden && fr.contentWindow.getComputedStyle(tag).display === 'none', '状态标签默认隐藏（浏览器里、没加入同步组时都不显示）');
-      ok(/设备同步/.test(fr.contentDocument.querySelector('footer').textContent), '底部有「设备同步」按钮');
+      ok(/账号与同步/.test(fr.contentDocument.querySelector('footer').textContent), '底部有「账号与同步」按钮（#12 改名）');
       // 合并提示框（km-sync.js 的 toast）盖在底部按钮上时、淡出后，按钮都点得到
       const fw = fr.contentWindow, fd = fr.contentDocument;
       await new Promise((res, rej) => { const sc = fd.createElement('script'); sc.src = 'km-sync.js'; sc.onload = res; sc.onerror = rej; fd.head.appendChild(sc); });
@@ -432,6 +432,150 @@
       ok(hit(), '提示框显示时，底部「我的数据」「设备同步」的中心点 elementFromPoint 命中的是按钮本身' + (covers ? '（提示框正好盖在按钮上）' : ''));
       await wait(1000);
       ok(!fd.getElementById('km-sync-toast') && hit(), '提示框消失后从页面移除，底部按钮可点击');
+    });
+
+    // ---------------- #12 账号 ----------------
+    await test('#12 总入口标签：账号名 · 已同步 / 待同步 / 离线', () => {
+      const a = { user: 'xiaoming', state: 'in', mode: true };
+      eq(S.tagText({ inGroup: true, status: 'ok', acct: a }), '👤 xiaoming · 已同步', '已同步');
+      eq(S.tagText({ inGroup: true, status: 'pending', acct: a }), '👤 xiaoming · 待同步', '待同步');
+      eq(S.tagText({ inGroup: true, status: 'offline', acct: a }), '👤 xiaoming · 离线', '连不上：离线');
+      eq(S.tagText({ inGroup: true, status: 'syncing', acct: a }), '👤 xiaoming · 同步中', '同步中');
+      eq(S.tagText({ inGroup: true, status: 'ok', acct: { user: 'xiaoming', state: 'relogin' } }), '✓ 已同步', '没登录的账号不显示账号名');
+    });
+
+    // 账号接口的模拟桥：结果经 action-result 回来
+    const acctMock = {
+      acctState: () => JSON.stringify(acctState),
+      acctRegister: j => { calls.push(['acctRegister', j]); },
+      acctLogin: j => { calls.push(['acctLogin', j]); },
+      acctLogout: () => calls.push(['acctLogout']),
+      acctServer: t => calls.push(['acctServer', t]),
+      acctDiscover: () => calls.push(['acctDiscover']),
+      acctOffline: () => { calls.push(['acctOffline']); return acctState.graceLeft > 0; },
+      saveBackup: (n, t) => { calls.push(['saveBackup', n, t.length]); return backupFails ? '' : '下载/知识图谱/' + n; }
+    };
+    let acctState = { state: 'none', user: '', last: '', prefill: '', inGroup: false, groupAcct: '', server: { h: '43.142.41.27', p: 8787 }, graceLeft: 0 };
+    let backupFails = false;
+
+    await test('#12 登录页（iframe + 模拟桥）：登录前不写学习数据；先备份、备份失败不往下走；成功后合并', async () => {
+      calls.length = 0;
+      Object.assign(mock, acctMock);
+      localStorage.clear();
+      localStorage.setItem('fjzk-zh-progress-v1', JSON.stringify({ n1: { viewed: 100, best: 90, last: 60, attempts: 3, updated: 2000 } }));
+      D._flush();
+      mockState = { inGroup: true, notice: '', me: { dev: 'devA', name: '家里的平板' }, members: [], inbox: 1, pending: 0, status: 'pending', error: '', lastOk: 0 };
+      inbox = [sec('devB', '学校的平板', 'fjzk-en-progress-v1', { e1: { viewed: 1, best: 100, last: 100, attempts: 1, updated: 5 } })];
+      acctState = { state: 'none', user: '', last: '', prefill: '', inGroup: true, groupAcct: 'xiaoming', groupNode: true, server: { h: '43.142.41.27', p: 8787 }, graceLeft: 5 * 86400000 };
+      const fr = document.getElementById('fr');
+      fr.src = '../login.html?t=' + Date.now();
+      await new Promise(r => { fr.onload = r; });
+      const w = fr.contentWindow, d = fr.contentDocument;
+      target = w;
+      const $ = id => d.getElementById(id);
+      const vis = el => !!el && w.getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+      await until(() => vis($('formCard')));
+      const snap = () => JSON.stringify(Object.assign({}, localStorage, { 'km-meta-v1': '' }));
+      const s0 = snap();
+      ok(vis($('formCard')) && vis($('fLogin')) && !vis($('fReg')), '打开就是登录表单');
+      ok($('lUser').value === 'xiaoming' && $('lUser').disabled && /已升级为账号「xiaoming」/.test($('sameGroup').textContent), '同组已绑定账号：用户名填好、不能改');
+      ok(/43\.142\.41\.27:8787/.test($('serverText').textContent), '显示服务器地址');
+      emit('inbox', { n: 1 });
+      await wait(60);
+      ok(snap() === s0 && inbox.length === 1 && !called('syncAck').length, '登录前收到 inbox 事件：不合并、不写学习数据（登录页不在自动合并的安全页面里）');
+      // 注册页：家长说明、规则
+      $('tabReg').click();
+      ok(vis($('fReg')) && /致家长/.test($('parentNote').textContent) && /恢复密钥/.test($('parentNote').textContent) && /不收手机号、真实姓名/.test($('parentNote').textContent), '注册页显示家长说明全文');
+      $('rCode').value = 'ABCD-EFGH-JKMN'; $('rUser').value = 'xiaoqiang'; $('rPw').value = 'huaxue2026q'; $('rPw2').value = 'huaxue2026q';
+      $('btnReg').click();
+      ok(/家长已阅读/.test($('formMsg').textContent) && !called('acctRegister').length && !called('saveBackup').length, '不勾「家长已阅读」不能注册（也不备份、不发请求）');
+      $('rParent').checked = true; $('rPw').value = '12345678'; $('rPw2').value = '12345678';
+      $('btnReg').click();
+      ok(/字母和数字/.test($('formMsg').textContent) && !called('acctRegister').length, '密码不合规则：中文提示');
+      $('rUser').value = 'X'; $('rPw').value = 'huaxue2026q'; $('rPw2').value = 'huaxue2026q';
+      $('btnReg').click();
+      ok(/3–20 位/.test($('formMsg').textContent), '用户名不合规则：中文提示');
+      // 登录：备份失败就不往下走
+      $('tabLogin').click();
+      backupFails = true;
+      $('lPw').value = 'shuxue2026a';
+      $('btnLogin').click();
+      await until(() => vis($('failRow')));
+      ok(called('saveBackup').length === 1 && !called('acctLogin').length && /没能备份/.test($('progMsg').textContent), '备份失败：不调 acctLogin，提示原因');
+      $('btnBack').click();
+      backupFails = false;
+      // 登录：密码错 → 本机不变
+      $('lPw').value = 'wrongpass1';
+      $('btnLogin').click();
+      await until(() => called('acctLogin').length === 1);
+      const lj = JSON.parse(called('acctLogin')[0][1]);
+      ok(called('saveBackup').length === 2 && lj.user === 'xiaoming' && lj.pw === 'wrongpass1' && lj.device && lj.device.id, '先备份再登录：acctLogin({user, pw, device})');
+      emit('action-result', { op: 'acctLogin', ok: false, code: 'login', msg: '用户名或密码不对' });
+      await until(() => vis($('failRow')));
+      ok(/用户名或密码不对/.test($('progMsg').textContent) && snap() === s0 && inbox.length === 1, '密码错：提示，本机学习数据一点没变');
+      ok($('lPw').value === '', '密码框清空（不留在页面里）');
+      $('btnBack').click();
+      // 断网：老设备（有记录）出现「先离线学习」
+      $('lPw').value = 'shuxue2026a';
+      $('btnLogin').click();
+      await until(() => called('acctLogin').length === 2);
+      emit('action-result', { op: 'acctLogin', ok: false, code: 'offline', msg: '连不上服务器（43.142.41.27:8787）' });
+      await until(() => vis($('failRow')));
+      $('btnBack').click();
+      ok(vis($('offlineBox')) && /还剩 5 天/.test($('offlineHint').textContent), '连不上服务器、本机有记录：出现「先离线学习」，还剩 5 天');
+      ok(snap() === s0, '断网失败：本机不变');
+      // 登录成功：下载 → 合并 → 报告
+      $('lPw').value = 'shuxue2026a';
+      $('btnLogin').click();
+      await until(() => called('acctLogin').length === 3);
+      const t0 = Date.now();
+      emit('action-result', { op: 'acctLogin', ok: true, same: false, msg: '已登录「xiaoming」，正在下载账号数据' });
+      await wait(100);
+      mockState = Object.assign({}, mockState, { status: 'pending', lastOk: t0 + 50, inbox: 1, acct: { user: 'xiaoming', state: 'in', mode: true } });
+      emit('state', mockState);
+      await until(() => vis($('btnStart')), 4000);
+      ok(vis($('btnStart')) && /登录成功/.test($('progTitle').textContent), '登录成功：显示「开始学习」');
+      ok(JSON.parse(localStorage.getItem('fjzk-en-progress-v1') || '{}').e1 && called('syncAck').length === 1 && !inbox.length, '登录成功后才合并收件箱（英语进度写进本机）');
+      ok(JSON.parse(localStorage.getItem('fjzk-zh-progress-v1')).n1.best === 90, '本机原来的语文记录还在（只增不减）');
+      ok(/从「学校的平板」同步/.test($('report').textContent), '合并报告：' + $('report').textContent.split('\n')[0]);
+      const errs = w.__errs || [];
+      ok(!errs.length, '登录页没有脚本错误');
+      target = null;
+    });
+
+    await test('#12 账号与同步页：账号模式只显示账号、服务器、退出登录、我的设备', async () => {
+      calls.length = 0;
+      mockState = { inGroup: true, notice: '', me: { dev: 'devA', name: '家里的平板' }, status: 'ok', error: '', lastOk: Date.now(), inbox: 0, pending: 0,
+        acct: { user: 'xiaoming', state: 'in', mode: true },
+        members: [{ dev: 'devA', name: '家里的平板', me: true, last: 0, via: '节点' }, { dev: 'devB', name: '学校的平板', me: false, last: Date.now() - 1000, via: '节点' }],
+        node: { h: '43.142.41.27', p: 8787, off: false, last: Date.now(), error: '', msg: '' } };
+      const fr = document.getElementById('fr');
+      fr.src = '../sync.html?t=' + Date.now();
+      await new Promise(r => { fr.onload = r; });
+      const w = fr.contentWindow, d = fr.contentDocument;
+      target = w;
+      const $ = id => d.getElementById(id);
+      const vis = el => !!el && w.getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+      await until(() => vis($('acctCard')));
+      ok(vis($('acctCard')) && $('acctName').textContent === 'xiaoming' && /43\.142\.41\.27:8787/.test($('acctServer').textContent), '顶部显示账号名和服务器');
+      ok(!vis($('start')) && !vis($('more')) && !vis($('btnAdd')) && !vis($('btnRejoin')), '扫邀请码、加入码、添加设备、退出同步组都隐藏');
+      ok(vis($('group')) && !d.querySelector('[data-remove]') && d.querySelector('[data-rename]'), '「我的设备」还在，没有「移除」按钮（第二期再做）');
+      ok(d.title === '账号与同步' && /账号与同步/.test(d.querySelector('h1').textContent), '页面改名「账号与同步」');
+      w.confirm = () => true;
+      $('btnLogout').click();
+      ok(called('acctLogout').length === 1, '退出登录（确认后）→ acctLogout');
+      emit('action-result', { op: 'acctLogout', ok: true, msg: '已退出登录，本机学习记录还在' });
+      ok(/本机学习记录还在/.test($('acctMsg').textContent), '退出登录的结果显示在账号卡片里');
+      $('btnFind').click();
+      emit('acct-found', { list: [{ host: '192.168.1.20', port: 8787, ver: '1.4.0' }] });
+      const fb = d.querySelector('[data-addr="192.168.1.20:8787"]');
+      ok(called('acctDiscover').length === 1 && fb, '「在家里 Wi-Fi 里找」→ acctDiscover，找到的服务器列出来');
+      fb.click();
+      ok(called('acctServer').length === 1 && called('acctServer')[0][1] === '192.168.1.20:8787', '点它 → acctServer 改地址');
+      const errs = w.__errs || [];
+      ok(!errs.length, '账号与同步页没有脚本错误');
+      Object.keys(acctMock).forEach(k => delete mock[k]);
+      target = null;
     });
   } catch (e) { log(false, '运行出错 ' + e); }
   finally {
