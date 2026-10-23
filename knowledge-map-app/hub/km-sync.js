@@ -88,8 +88,12 @@
     }).join('\n');
   }
 
-  /** 状态 → 总入口右上角标签文字（没加入组时为空，不显示） */
+  /** 状态 → 总入口右上角标签文字（没加入组时为空，不显示）。#12 账号模式：「账号名 · 已同步 / 待同步 / 离线」 */
   function tagText(st) {
+    if (st && st.acct && st.acct.user && st.acct.state === 'in') {
+      const s = st.status === 'syncing' ? '同步中' : st.status === 'offline' ? '离线' : st.status === 'error' ? '同步出错' : st.status === 'ok' ? '已同步' : '待同步';
+      return '👤 ' + st.acct.user + ' · ' + s;
+    }
     if (!st || !st.inGroup) return '';
     if (st.status === 'syncing') return '⟳ 同步中';
     if (st.status === 'error' || st.status === 'offline') return '⚠ 同步出错';

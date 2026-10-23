@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --good: #2f8a4c; --warn: #b8641a; --bad: #c23f2e; --soft: #f1ede4;
+    --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --good: #5cbf7a; --warn: #e3a05a; --bad: #ef7a68; --soft: #2a2b30;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+    --accent: #6b9bf0; --good: #5cbf7a; --warn: #e3a05a; --bad: #ef7a68; --soft: #2a2b30;
+    --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100vh; padding: 28px 16px 40px; }
+  main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .brand { text-align: center; }
+  .brand .logo { font-size: 44px; }
+  .brand h1 { margin: 6px 0 2px; font-size: 26px; letter-spacing: 2px; }
+  .brand p { margin: 0; color: var(--muted); font-size: 15px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 10px; font-size: 19px; }
+  .card p { margin: 0 0 10px; line-height: 1.6; color: var(--muted); font-size: 15px; }
+  .tabs { display: flex; gap: 6px; background: var(--soft); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .tabs button { flex: 1; border: none; background: transparent; padding: 10px; border-radius: 9px; font: 600 17px var(--font); color: var(--muted); cursor: pointer; }
+  .tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  label.f { display: block; margin: 12px 0 4px; font-size: 15px; font-weight: 600; }
+  input[type=text], input[type=password] { width: 100%; font: 18px var(--font); padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  input:disabled { opacity: .75; }
+  input.code { font: 600 22px ui-monospace, Consolas, monospace; letter-spacing: 2px; text-transform: uppercase; }
+  .pwrow { position: relative; }
+  .pwrow input { padding-right: 76px; }
+  .pwrow button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: none; background: var(--soft); color: var(--text); border-radius: 8px; padding: 6px 10px; font: 14px var(--font); cursor: pointer; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .hint.bad { color: var(--bad); }
+  .btn { display: block; width: 100%; padding: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--soft);
+    color: var(--text); font: 600 18px var(--font); text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; margin-top: 14px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .5; }
+  .row { display: flex; gap: 10px; }
+  .row .btn { flex: 1; }
+  .link { background: none; border: none; color: var(--accent); font: 15px var(--font); padding: 4px 0; cursor: pointer; }
+  .msg { margin-top: 12px; font-size: 15px; line-height: 1.6; white-space: pre-line; }
+  .msg.bad { color: var(--bad); } .msg.good { color: var(--good); }
+  .banner { border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.6; background: var(--soft); }
+  .banner.bad { color: var(--bad); } .banner.info { color: var(--text); }
+  .parent { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--soft); font-size: 14px; line-height: 1.7; color: var(--text); }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; font-size: 15px; line-height: 1.5; }
+  .check input { width: 22px; height: 22px; margin: 0; flex: none; }
+  .server { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .server b { color: var(--text); font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+  .mini { font: 14px var(--font); padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--text); cursor: pointer; }
+  .steps { list-style: none; margin: 4px 0 0; padding: 0; }
+  .steps li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; font-size: 16px; line-height: 1.5; color: var(--muted); }
+  .steps li .ico { width: 24px; flex: none; text-align: center; }
+  .steps li.doing { color: var(--text); font-weight: 600; }
+  .steps li.done { color: var(--good); }
+  .steps li.fail { color: var(--bad); }
+  .report { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--soft); font-size: 15px; line-height: 1.7; white-space: pre-line; }
+  .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  .modal-in { background: var(--surface); color: var(--text); border-radius: 18px; padding: 22px 20px; width: 100%; max-width: 460px; box-shadow: var(--shadow); }
+  .modal-in h2 { margin: 0 0 10px; font-size: 20px; }
+  .modal-in p { color: var(--muted); line-height: 1.6; margin: 0 0 10px; }
+  #found .btn { text-align: left; font-weight: 400; font-size: 16px; padding: 12px 14px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><div class="logo">📚</div><h1>知识图谱</h1><p>福建中考 · 登录后换平板也能接着学</p></div>
+
+  <section class="card" id="noApp" hidden>
+    <h2>要在平板 App 里用</h2>
+    <p>账号登录要在知识图谱平板 App 里用。电脑浏览器请直接打开各科图谱，用「我的数据」导出、导入文件。</p>
+    <a class="btn" href="index.html">回总入口</a>
+  </section>
+
+  <div class="banner bad" id="reason" hidden></div>
+
+  <section class="card" id="formCard" hidden>
+    <div class="tabs" role="tablist">
+      <button type="button" id="tabLogin" class="on" role="tab">登录</button>
+      <button type="button" id="tabReg" role="tab">注册</button>
+    </div>
+
+    <!-- 登录 -->
+    <form id="fLogin" autocomplete="on" onsubmit="return false">
+      <div class="banner info" id="sameGroup" hidden></div>
+      <label class="f" for="lUser">用户名</label>
+      <input type="text" id="lUser" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="注册时起的用户名">
+      <label class="f" for="lPw">密码</label>
+      <div class="pwrow"><input type="password" id="lPw" autocomplete="current-password" maxlength="64"><button type="button" data-eye="lPw">显示</button></div>
+      <button type="submit" class="btn primary" id="btnLogin">登录</button>
+      <div class="hint" style="margin-top:10px">忘记密码？请联系管理员重设（本机的学习记录不会丢）。</div>
+    </form>
+
+    <!-- 注册 -->
+    <form id="fReg" hidden autocomplete="off" onsubmit="return false">
+      <label class="f" for="rCode">注册码（管理员给的）</label>
+      <div class="row" style="gap:8px">
+        <input type="text" id="rCode" class="code" maxlength="14" placeholder="XXXX-XXXX-XXXX" autocapitalize="characters" spellcheck="false" style="flex:1">
+        <label class="mini" style="display:flex;align-items:center;white-space:nowrap">📷 扫码<input type="file" accept="image/*" capture="environment" hidden id="scanCode"></label>
+      </div>
+      <div class="hint" id="codeHint"></div>
+      <label class="f" for="rUser">用户名</label>
+      <input type="text" id="rUser" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="3–20 位小写字母、数字或下划线">
+      <div class="hint" id="userHint">建议不要用真实姓名，比如 xiaoming2026。</div>
+      <label class="f" for="rPw">密码</label>
+      <div class="pwrow"><input type="password" id="rPw" autocomplete="new-password" maxlength="64"><button type="button" data-eye="rPw">显示</button></div>
+      <div class="hint" id="pwHint">8 位以上，要有字母和数字，不要用生日、123456 这类常见密码。</div>
+      <label class="f" for="rPw2">再输一遍密码</label>
+      <div class="pwrow"><input type="password" id="rPw2" autocomplete="new-password" maxlength="64"><button type="button" data-eye="rPw2">显示</button></div>
+      <div class="hint" id="pw2Hint"></div>
+      <div class="parent" id="parentNote"><b>致家长：</b>注册账号后，孩子在不同平板上的学习记录会自动同步。我们只收用户名和密码，不收手机号、真实姓名，用户名请不要用孩子的真实姓名。学习记录在平板上加密后才上传，服务器看不懂内容。为了孩子忘记密码时能找回记录，管理员保留一把「恢复密钥」，必要时可以解开本账号的学习记录，只用于重设密码、找回数据。勾选下方即表示您已知悉。</div>
+      <label class="check"><input type="checkbox" id="rParent"> <span>家长已阅读上面的说明</span></label>
+      <div class="banner info" id="regGroup" hidden style="margin-top:12px"></div>
+      <button type="submit" class="btn primary" id="btnReg">注册并登录</button>
+    </form>
+
+    <div class="msg" id="formMsg" hidden></div>
+    <div id="offlineBox" hidden>
+      <button type="button" class="btn" id="btnOffline">先离线学习，联网后再登录</button>
+      <div class="hint" id="offlineHint"></div>
+    </div>
+  </section>
+
+  <section class="card" id="progCard" hidden>
+    <h2 id="progTitle">正在登录…</h2>
+    <ul class="steps" id="steps"></ul>
+    <div class="msg" id="progMsg" hidden></div>
+    <div class="report" id="report" hidden></div>
+    <button type="button" class="btn primary" id="btnStart" hidden>开始学习</button>
+    <div class="row" id="failRow" hidden><button type="button" class="btn" id="btnBack">返回</button><button type="button" class="btn primary" id="btnRetry">重试</button></div>
+  </section>
+
+  <section class="card" id="serverCard" hidden>
+    <div class="server">服务器：<b id="serverText">—</b>
+      <button type="button" class="mini" id="btnServer">修改</button>
+      <button type="button" class="mini" id="btnFind">在家里 Wi-Fi 里找</button>
+    </div>
+    <div id="found"></div>
+    <div class="msg" id="serverMsg" hidden></div>
+  </section>
+</main>
+<script src="km-data.js"></script>
+<script src="km-study.js"></script>
+<script src="pet/pet-core.js"></script>
+<script src="km-sync.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // 测试页（tests/sync-test.html）把本页放进 iframe，用 __kmMockApp 模拟原生桥；浏览器里 ?mock 用页面自带的演示桥（只用于预览界面）
+  let A = window.KMApp && window.KMApp.acctState ? window.KMApp : null;
+  if (!A) { try { if (window.parent !== window && window.parent.__kmMockApp && window.parent.__kmMockApp.acctState) { A = window.parent.__kmMockApp; KMSync._init(A); } } catch (e) { /* 跨域 */ } }
+  if (!A && /[?&]mock\b/.test(location.search)) { A = demoBridge(); KMSync._init(A); }
+  if (!A) { $('noApp').hidden = false; return; }
+
+  let st = {}, tab = 'login', busy = false, lastKind = '', offlineFail = false;
+  const WEAK = ['password', 'passw0rd', 'iloveyou', 'qwerty', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'admin', 'administrator', 'welcome',
+    'letmein', 'dragon', 'monkey', 'football', 'baseball', 'sunshine', 'princess', 'superman', 'master', 'shadow', 'woaini',
+    'aini', 'woaiwojia', 'abc', 'abcd', 'abcdef', 'abcdefg', 'qazwsx', 'qweasd', 'qweasdzxc', 'changeme', 'secret', 'test',
+    'guest', 'login', 'zhongkao', 'fujian', 'hello', 'helloworld', 'mima', 'wodemima', 'nihao', 'baobao', 'china', 'xuexi',
+    'shuxue', 'yuwen', 'yingyu', 'kmsync', 'zhishi', 'tupu'];
+  const SEQ = ['0123456789012345678901234567890', '9876543210987654321098765432109', 'abcdefghijklmnopqrstuvwxyz',
+    'qwertyuiopasdfghjklzxcvbnm', '1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p', '1q2w3e4r5t6y7u8i9o0p'];
+
+  /* ---------------- 规则（和 Java 的 Account.userProblem / pwProblem 一样） ---------------- */
+  function userProblem(u) { return /^[a-z0-9_]{3,20}$/.test(u) ? '' : '用户名要 3–20 位小写字母、数字或下划线'; }
+  function pwProblem(user, pw) {
+    if (pw.length < 8) return '密码至少 8 位';
+    if (pw.length > 64) return '密码最多 64 位';
+    if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return '密码要同时有字母和数字';
+    const low = pw.toLowerCase();
+    if (user && low.indexOf(user) >= 0) return '密码里不能有用户名';
+    const core = low.replace(/^[\d\W_]+|[\d\W_]+$/g, '');
+    if (WEAK.indexOf(core) >= 0 || SEQ.some(s => s.indexOf(low) >= 0)) return '这个密码太常见了，换一个（可以用两个不相关的词加数字）';
+    if (new Set(low).size <= 3) return '这个密码太简单了，换一个';
+    for (let n = 1; n <= 4; n++) if (low.length % n === 0 && low === low.slice(0, n).repeat(low.length / n)) return '这个密码太简单了，换一个';
+    return '';
+  }
+  const CROCK = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  function normCode(t) {
+    t = String(t || '').trim();
+    const m = /^kmreg:1\?(.*)$/i.exec(t);
+    if (m) { const q = new URLSearchParams(m[1]); t = q.get('c') || ''; }
+    t = t.replace(/[\s-]/g, '').toUpperCase().replace(/[IL]/g, '1').replace(/O/g, '0');
+    return t.length === 12 && Array.prototype.every.call(t, c => CROCK.indexOf(c) >= 0) ? t : '';
+  }
+  const fmtCode = c => c.slice(0, 4) + '-' + c.slice(4, 8) + '-' + c.slice(8);
+
+  /* ---------------- 状态 ---------------- */
+  function load() {
+    try { st = JSON.parse(A.acctState() || '{}') || {}; } catch (e) { st = {}; }
+    return st;
+  }
+  function render() {
+    load();
+    if (st.state === 'in' || st.graceSession) { location.replace('index.html'); return; }
+    $('formCard').hidden = busy;
+    $('serverCard').hidden = busy;
+    if (st.state === 'loading') { setTimeout(render, 400); }
+    // 为什么在登录页
+    let why = '';
+    if (st.state === 'relogin') why = '管理员已重设你的密码（或移除了这台设备），请用新密码登录。本机的学习记录还在。';
+    else if (st.state === 'disabled') why = '这个账号已被管理员停用，请联系管理员。本机的学习记录还在。';
+    else if (st.state === 'out') why = '你已退出登录。本机的学习记录还在，输入密码就能回来。';
+    else if (st.state === 'broken') why = st.msg || '账号功能暂时不可用，可以重启 App 再试';
+    $('reason').hidden = !why;
+    $('reason').textContent = why;
+    // 同组的设备已经升级成账号：用户名填好、不能改
+    const pre = st.prefill || '';
+    if (pre && !$('lUser').value) $('lUser').value = pre;
+    const locked = !!(st.groupAcct && st.inGroup && st.state === 'none');
+    $('lUser').disabled = locked;
+    $('sameGroup').hidden = !locked;
+    if (locked) { $('lUser').value = st.groupAcct; $('sameGroup').textContent = '这台设备的同步组已升级为账号「' + st.groupAcct + '」，请输入密码。'; }
+    $('regGroup').hidden = !(st.inGroup && !st.groupAcct);
+    $('regGroup').textContent = st.groupNode ? '这台设备已在同步组里：注册后，同组的其它设备升级 App 后输入这个账号的密码就能登录，数据照旧一致。'
+      : '这台设备在只用 Wi-Fi 的同步组里：注册后，同组的其它设备升级 App 后输入这个账号的密码就能登录。';
+    const sv = st.server;
+    $('serverText').textContent = sv ? sv.h + ':' + sv.p : '还没设置';
+    renderOffline();
+  }
+
+  /** 本机有没有学习记录（决定能不能「先离线学习」：全新安装的不行，第一次必须联网） */
+  function hasRecords() {
+    try { const k = KMData.collect().keys || {}; return Object.keys(k).some(x => x !== 'km-narrate-rate'); } catch (e) { return false; }
+  }
+  function renderOffline() {
+    const left = +st.graceLeft || 0;
+    const show = offlineFail && st.state === 'none' && left > 0 && hasRecords();
+    $('offlineBox').hidden = !show;
+    if (show) {
+      const days = Math.max(1, Math.ceil(left / 86400000));
+      $('offlineHint').textContent = '升级后连不上服务器时，可以先照常学习（本机记录都在），还剩 ' + days + ' 天；联网后回到这里注册或登录，记录会全部进入账号。之后每次打开 App 都会先到这一页。';
+    }
+  }
+
+  function msg(el, text, cls) { el.hidden = !text; el.textContent = text || ''; el.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+  /* ---------------- 标签页、输入 ---------------- */
+  function setTab(t) {
+    tab = t;
+    $('tabLogin').classList.toggle('on', t === 'login');
+    $('tabReg').classList.toggle('on', t === 'reg');
+    $('fLogin').hidden = t !== 'login';
+    $('fReg').hidden = t !== 'reg';
+    msg($('formMsg'), '');
+  }
+  $('tabLogin').onclick = () => setTab('login');
+  $('tabReg').onclick = () => setTab('reg');
+  document.querySelectorAll('[data-eye]').forEach(b => b.onclick = () => {
+    const i = $(b.dataset.eye);
+    i.type = i.type === 'password' ? 'text' : 'password';
+    b.textContent = i.type === 'password' ? '显示' : '隐藏';
+  });
+  $('lUser').addEventListener('input', () => { $('lUser').value = $('lUser').value.toLowerCase().replace(/\s/g, ''); });
+  $('rUser').addEventListener('input', () => {
+    $('rUser').value = $('rUser').value.toLowerCase().replace(/\s/g, '');
+    const p = $('rUser').value ? userProblem($('rUser').value) : '';
+    $('userHint').textContent = p || '建议不要用真实姓名，比如 xiaoming2026。';
+    $('userHint').className = 'hint' + (p ? ' bad' : '');
+  });
+  $('rPw').addEventListener('input', () => {
+    const p = $('rPw').value ? pwProblem($('rUser').value, $('rPw').value) : '';
+    $('pwHint').textContent = p || '8 位以上，要有字母和数字，不要用生日、123456 这类常见密码。';
+    $('pwHint').className = 'hint' + (p ? ' bad' : '');
+  });
+  $('rPw2').addEventListener('input', () => {
+    const bad = $('rPw2').value && $('rPw2').value !== $('rPw').value;
+    $('pw2Hint').textContent = bad ? '两次输入的密码不一样' : '';
+    $('pw2Hint').className = 'hint' + (bad ? ' bad' : '');
+  });
+  // 注册码：自动大写、加连字符
+  $('rCode').addEventListener('input', () => {
+    const raw = $('rCode').value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 12);
+    $('rCode').value = raw.replace(/(.{4})(?=.)/g, '$1-');
+    $('codeHint').textContent = '';
+  });
+
+  /* ---------------- 扫注册码 ---------------- */
+  function loadScript(src) {
+    return new Promise((ok, bad) => {
+      if (window.jsQR) return ok();
+      const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('加载 ' + src + ' 失败'));
+      document.head.appendChild(s);
+    });
+  }
+  async function decodeQrFile(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('图片打不开')); i.src = url; });
+      for (const max of [1600, 1000, 640, 2400]) {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+        const r = jsQR(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+        if (r && r.data) return r.data;
+      }
+      return null;
+    } finally { URL.revokeObjectURL(url); }
+  }
+  $('scanCode').addEventListener('change', async () => {
+    const f = $('scanCode').files && $('scanCode').files[0];
+    $('scanCode').value = '';
+    if (!f) return;
+    $('codeHint').className = 'hint';
+    $('codeHint').textContent = '正在识别二维码…';
+    try {
+      await loadScript('vendor/jsQR.js');
+      const text = await decodeQrFile(f);
+      const c = text && normCode(text);
+      if (!c) { $('codeHint').className = 'hint bad'; $('codeHint').textContent = text ? '这不是注册码的二维码' : '没认出二维码，请再拍一次，或手动输入'; return; }
+      $('rCode').value = fmtCode(c);
+      $('codeHint').textContent = '已识别注册码';
+      // 二维码里带了服务器地址，和现在的不一样：改用二维码里的
+      const m = /^kmreg:1\?(.*)$/i.exec(text.trim());
+      const q = m ? new URLSearchParams(m[1]) : null;
+      if (q && q.get('h') && q.get('p') && !(st.server && st.server.h === q.get('h') && String(st.server.p) === q.get('p'))) {
+        A.acctServer(q.get('h') + ':' + q.get('p'));
+        $('codeHint').textContent = '已识别注册码，服务器改为 ' + q.get('h') + ':' + q.get('p');
+      }
+    } catch (e) { $('codeHint').className = 'hint bad'; $('codeHint').textContent = '识别失败：' + e.message; }
+  });
+
+  /* ---------------- 服务器 ---------------- */
+  $('btnServer').onclick = () => {
+    const cur = st.server ? st.server.h + ':' + st.server.p : '';
+    const ov = modal('<h2>服务器地址</h2><p>一般不用改。服务器搬家（比如搬到家里的电脑）后，按管理员说的填，例如 192.168.1.20:8787。</p>' +
+      '<input type="text" id="mText" maxlength="80" value="' + esc(cur) + '"><div class="row" style="margin-top:12px"><button class="btn" id="mNo">取消</button><button class="btn primary" id="mYes">保存</button></div>' +
+      (st.defServer ? '<button class="link" id="mDef">恢复默认（' + esc(st.defServer.h + ':' + st.defServer.p) + '）</button>' : ''));
+    ov.querySelector('#mNo').onclick = () => ov.remove();
+    ov.querySelector('#mYes').onclick = () => { const v = ov.querySelector('#mText').value.trim(); if (!v) return; ov.remove(); A.acctServer(v); };
+    const d = ov.querySelector('#mDef');
+    if (d) d.onclick = () => { ov.remove(); A.acctServer(st.defServer.h + ':' + st.defServer.p); };
+  };
+  $('btnFind').onclick = () => {
+    msg($('serverMsg'), '正在家里 Wi-Fi 里找服务器（几秒钟）…');
+    $('found').innerHTML = '';
+    A.acctDiscover();
+  };
+  $('found').addEventListener('click', e => {
+    const b = e.target.closest('button[data-addr]');
+    if (!b) return;
+    A.acctServer(b.dataset.addr);
+    $('found').innerHTML = '';
+  });
+
+  function modal(html) {
+    const ov = document.createElement('div');
+    ov.className = 'modal';
+    ov.innerHTML = '<div class="modal-in">' + html + '</div>';
+    document.body.appendChild(ov);
+    return ov;
+  }
+  function confirmBox(title, text, okText) {
+    return new Promise(ok => {
+      const ov = modal('<h2>' + esc(title) + '</h2><p>' + esc(text) + '</p><div class="row"><button class="btn" id="mNo">取消</button><button class="btn primary" id="mYes">' + esc(okText) + '</button></div>');
+      ov.querySelector('#mNo').onclick = () => { ov.remove(); ok(false); };
+      ov.querySelector('#mYes').onclick = () => { ov.remove(); ok(true); };
+    });
+  }
+
+  /* ---------------- 进度 ---------------- */
+  const STEPS = { backup: '正在备份本机记录', auth: '正在验证密码', reg: '正在注册账号', download: '正在下载账号数据', upload: '正在上传本机记录', merge: '正在合并', done: '完成' };
+  function startSteps(kind) {
+    const list = kind === 'reg' ? ['backup', 'reg', 'upload', 'merge', 'done'] : ['backup', 'auth', 'download', 'merge', 'done'];
+    $('steps').innerHTML = list.map(s => '<li data-s="' + s + '"><span class="ico">○</span><span class="t">' + STEPS[s] + '</span></li>').join('');
+    $('progTitle').textContent = kind === 'reg' ? '正在注册…' : '正在登录…';
+    $('progCard').hidden = false;
+    $('report').hidden = true;
+    $('btnStart').hidden = true;
+    $('failRow').hidden = true;
+    msg($('progMsg'), '');
+  }
+  function step(s, state, text) {
+    const all = Array.from($('steps').children);
+    const i = all.findIndex(li => li.dataset.s === s);
+    all.forEach((li, k) => {
+      if (k < i && !li.classList.contains('fail')) { li.className = 'done'; li.querySelector('.ico').textContent = '✓'; }
+    });
+    const li = all[i];
+    if (!li) return;
+    li.className = state;
+    li.querySelector('.ico').textContent = state === 'done' ? '✓' : state === 'fail' ? '✗' : '…';
+    if (text) li.querySelector('.t').textContent = text;
+  }
+  function failAt(s, text) {
+    step(s, 'fail');
+    msg($('progMsg'), text, 'bad');
+    $('failRow').hidden = false;
+    busy = false;
+  }
+
+  /* ---------------- 登录 / 注册 ---------------- */
+  let waitFor = null;          // 等 Java 的 action-result
+  function call(op, fn) {
+    return new Promise(ok => {
+      waitFor = { op, ok };
+      fn();
+      setTimeout(() => { if (waitFor && waitFor.op === op) { waitFor = null; ok({ ok: false, code: 'timeout', msg: '等了 90 秒还没有结果，请检查网络后重试' }); } }, 90000);
+    });
+  }
+  function stamp() {
+    const d = new Date(), p = n => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function deviceInfo() { try { const d = KMData.device(); return { id: d.id, name: d.name }; } catch (e) { return null; } }
+
+  async function go(kind) {
+    if (busy) return;
+    msg($('formMsg'), '');
+    let user, pw, code;
+    if (kind === 'login') {
+      user = $('lUser').value.trim().toLowerCase();
+      pw = $('lPw').value;
+      if (!user || !pw) { msg($('formMsg'), '请输入用户名和密码', 'bad'); return; }
+      // 换账号警告：本机上次登录的是别的账号，或本机在另一个同步组里
+      const other = (st.last && st.last !== user) || (st.inGroup && st.groupAcct !== user);
+      if (other && !await confirmBox('合并到账号「' + user + '」？',
+        '这台设备上有' + (st.last && st.last !== user ? '其他账号（' + st.last + '）' : '另一个同步组') + '的学习记录，登录后会合并到账号「' + user + '」。只在同一个学生自己的设备上这样做。', '继续合并')) return;
+    } else {
+      code = normCode($('rCode').value);
+      user = $('rUser').value.trim().toLowerCase();
+      pw = $('rPw').value;
+      const bad = !code ? '请输入正确的注册码（12 位，像 ABCD-EFGH-JKMN）' : userProblem(user) || pwProblem(user, pw) ||
+        ($('rPw2').value !== pw ? '两次输入的密码不一样' : '') || (!$('rParent').checked ? '请家长先阅读说明并勾选「家长已阅读」' : '');
+      if (bad) { msg($('formMsg'), bad, 'bad'); return; }
+    }
+    busy = true;
+    lastKind = kind;
+    offlineFail = false;
+    render();
+    startSteps(kind);
+    // 1. 备份（失败就不往下走）
+    step('backup', 'doing');
+    let where = '';
+    try { where = A.saveBackup('知识图谱-登录前备份-' + stamp() + '.json', JSON.stringify(KMData.collect(), null, 1)); } catch (e) { where = ''; }
+    if (!where) { failAt('backup', '本机记录没能备份到「下载/知识图谱」，为了安全没有继续。请检查存储空间后重试。'); return; }
+    step('backup', 'done', '已备份到 ' + where);
+    // 2. 验证密码 / 注册
+    const s2 = kind === 'reg' ? 'reg' : 'auth';
+    step(s2, 'doing');
+    const tStart = Date.now();
+    const r = kind === 'reg'
+      ? await call('acctRegister', () => A.acctRegister(JSON.stringify({ user, pw, code: fmtCode(code), device: deviceInfo() })))
+      : await call('acctLogin', () => A.acctLogin(JSON.stringify({ user, pw, device: deviceInfo() })));
+    $('lPw').value = '';
+    if (!r.ok) {
+      if (r.code === 'offline') {
+        offlineFail = true;
+        load();
+        const first = st.state === 'none' && !hasRecords();
+        r.msg = (navigator.onLine === false || first ? '第一次登录需要联网，请连上网络后再试' : '服务器连不上，请稍后再试') + '（' + r.msg + '）';
+      }
+      if (r.code === 'bound' && r.user) { $('lUser').value = r.user; }
+      failAt(s2, r.msg || '没有成功');
+      return;
+    }
+    step(s2, 'done', r.msg);
+    // 3. 下载 / 上传：等第一轮同步完成（最多 90 秒；断网了也算登录成功，进入后会自动补齐）
+    const s3 = kind === 'reg' ? 'upload' : 'download';
+    step(s3, 'doing');
+    const sync = await waitSync(tStart, s3);
+    step(s3, sync.ok ? 'done' : 'fail', sync.text);
+    // 4. 合并（只增不减，#2 / #8 的规则）
+    step('merge', 'doing');
+    let rep = { merged: false, text: '' };
+    try { rep = KMSync.mergeNow({ force: true }); } catch (e) { rep = { merged: false, text: '' }; }
+    step('merge', 'done', rep.merged ? '已合并' : '本机和账号的数据一致，不用合并');
+    step('done', 'done', kind === 'reg' ? '完成：已注册并登录「' + user + '」' : '完成：已登录「' + user + '」');
+    $('progTitle').textContent = kind === 'reg' ? '注册成功' : '登录成功';
+    $('report').hidden = false;
+    $('report').textContent = (rep.text || (kind === 'reg' ? '本机的学习记录已成为账号的数据。' : r.same ? '这台设备的数据和账号是同一份。' : '账号里的记录已经并进这台设备。')) +
+      (sync.ok ? '' : '\n' + sync.text + '：进入后会自动补齐。') + '\n登录前的备份在「下载/知识图谱」。以后打开 App 会自动登录。';
+    $('btnStart').hidden = false;
+    busy = false;
+  }
+
+  function waitSync(tStart, s3) {
+    return new Promise(ok => {
+      let done = false;
+      const check = () => {
+        if (done) return;
+        const s = KMSync.state() || {};
+        if ((s.lastOk || 0) >= tStart) { finish({ ok: true, text: s3 === 'upload' ? '本机记录已上传' : '账号数据已下载' + (s.inbox ? '（' + s.inbox + ' 个分区）' : '') }); return; }
+        if (s.status === 'offline' || (s.status === 'error' && s.error)) { finish({ ok: false, text: '数据还没' + (s3 === 'upload' ? '上传' : '下载') + '完（' + (s.error || '连不上服务器') + '）' }); return; }
+        if (s3 === 'download' && s.inbox) step(s3, 'doing', '正在下载账号数据（已收到 ' + s.inbox + ' 个分区）');
+      };
+      const finish = r => { done = true; clearInterval(t); clearTimeout(to); window.removeEventListener('km-sync', on); ok(r); };
+      const on = e => { if (e.detail && e.detail.type === 'state') check(); };
+      window.addEventListener('km-sync', on);
+      const t = setInterval(check, 1000);
+      const to = setTimeout(() => finish({ ok: false, text: '数据还没传完（超过 90 秒）' }), 90000);
+      check();
+    });
+  }
+
+  $('fLogin').addEventListener('submit', () => go('login'));
+  $('fReg').addEventListener('submit', () => go('reg'));
+  $('btnRetry').onclick = () => { $('progCard').hidden = true; busy = false; render(); go(lastKind); };
+  $('btnBack').onclick = () => { $('progCard').hidden = true; busy = false; render(); };
+  $('btnStart').onclick = () => location.replace('index.html');
+  $('btnOffline').onclick = () => {
+    if (A.acctOffline()) location.replace('index.html');
+    else { offlineFail = false; renderOffline(); msg($('formMsg'), '离线学习的 7 天已经用完，请联网后注册或登录', 'bad'); }
+  };
+
+  /* ---------------- 事件 ---------------- */
+  window.addEventListener('km-sync', e => {
+    const t = e.detail.type, d = e.detail.data || {};
+    if (t === 'action-result' && waitFor && d.op === waitFor.op) { const w = waitFor; waitFor = null; w.ok(d); return; }
+    if (t === 'action-result' && d.op === 'acctServer') { msg($('serverMsg'), d.msg, d.ok ? 'good' : 'bad'); render(); return; }
+    if (t === 'acct-progress' && busy && d.step) step(d.step === 'auth' && lastKind === 'reg' ? 'reg' : d.step, 'doing', d.text);
+    if (t === 'acct-found') {
+      const l = d.list || [];
+      msg($('serverMsg'), l.length ? '找到 ' + l.length + ' 台，点一下就用它：' : '没找到。要和服务器连同一个 Wi-Fi；也可以点「修改」手动填地址。', l.length ? '' : 'bad');
+      $('found').innerHTML = l.map(x => '<button class="btn" data-addr="' + esc(x.host + ':' + x.port) + '">🖥 ' + esc(x.host + ':' + x.port) + (x.ver ? '（km-sync ' + esc(x.ver) + '）' : '') + '</button>').join('');
+    }
+    if (t === 'account' && d.state === 'in' && !busy) location.replace('index.html');
+  });
+
+  const start = () => { render(); setTab(st.state === 'none' && !st.prefill && !st.inGroup ? 'login' : 'login'); };
+  if (A.ready) A.ready().then(start); else start();
+
+  /* ---------------- 浏览器预览用的演示桥（?mock，只用于看界面；App 里不会用到） ---------------- */
+  function demoBridge() {
+    const q = new URLSearchParams(location.search);
+    let state = q.get('state') || 'none', inbox = 0, lastOk = 0;
+    const emit = (type, data) => setTimeout(() => window.__kmSyncEvent && window.__kmSyncEvent(type, JSON.stringify(data)), 0);
+    const finish = (op, ok, extra) => setTimeout(() => {
+      if (ok) { state = 'in'; inbox = 3; emit('state', { joined: true }); setTimeout(() => { lastOk = Date.now(); emit('state', {}); }, 900); }
+      emit('action-result', Object.assign({ op, ok }, extra));
+    }, 1200);
+    return {
+      ready: () => Promise.resolve(),
+      acctState: () => JSON.stringify({ state: state === 'in' ? 'none' : state, user: '', last: q.get('last') || '', prefill: q.get('prefill') || '',
+        inGroup: q.has('group'), groupAcct: q.get('group') || '', groupNode: true, server: { h: '43.142.41.27', p: 8787 }, defServer: { h: '43.142.41.27', p: 8787 },
+        graceLeft: q.has('grace') ? 5 * 86400000 : 0 }),
+      syncState: () => JSON.stringify({ inGroup: state === 'in', status: lastOk ? 'pending' : 'syncing', lastOk, inbox }),
+      syncPublish: () => {}, syncNow: () => {},
+      syncTake: () => '[]', syncAck: () => {},
+      saveBackup: name => q.has('nobackup') ? '' : '下载/知识图谱/' + name,
+      acctRegister: j => { const o = JSON.parse(j); emit('acct-progress', { step: 'auth', text: '正在注册账号…' }); finish('acctRegister', o.user !== 'taken', o.user === 'taken' ? { code: 'user', msg: '这个用户名已经有人用了，换一个' } : { msg: '已注册账号「' + o.user + '」，本机的学习记录成为账号的数据' }); },
+      acctLogin: j => { const o = JSON.parse(j); emit('acct-progress', { step: 'auth', text: '正在验证密码…' });
+        if (q.has('offline')) return finish('acctLogin', false, { code: 'offline', msg: '连不上服务器（43.142.41.27:8787）' });
+        finish('acctLogin', o.pw === 'shuxue2026', o.pw === 'shuxue2026' ? { msg: '已登录「' + o.user + '」，正在下载账号数据' } : { code: 'login', msg: '用户名或密码不对' }); },
+      acctOffline: () => q.has('grace'),
+      acctServer: t => emit('action-result', { op: 'acctServer', ok: true, msg: '服务器地址改为 ' + t }),
+      acctDiscover: () => setTimeout(() => emit('acct-found', { list: [{ host: '192.168.1.20', port: 8787, ver: '1.4.0' }] }), 800)
+    };
+  }
+})();
+</script>
+</body>
+</html>

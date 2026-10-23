@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>设备同步</title>
+<title>账号与同步</title>
 <style>
   :root {
     --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
@@ -76,12 +76,23 @@
 </head>
 <body>
 <main>
-  <div class="top"><a class="back" href="index.html">← 总入口</a><h1>设备同步</h1></div>
+  <div class="top"><a class="back" href="index.html">← 总入口</a><h1>账号与同步</h1></div>
 
   <section class="card" id="noApp" hidden>
     <h2>要在平板 App 里用</h2>
     <p>设备同步要在知识图谱平板 App 里用；电脑浏览器请用「我的数据」导出、导入文件。</p>
     <a class="btn" href="data.html">💾 去「我的数据」</a>
+  </section>
+
+  <!-- #12 账号：已登录时顶部显示账号名、退出登录、服务器地址 -->
+  <section class="card" id="acctCard" hidden>
+    <h2>👤 <span id="acctName"></span></h2>
+    <p>换一台平板时，在新平板上登录这个账号，学习记录会自动过来。忘记密码请联系管理员重设。</p>
+    <div class="small">服务器：<b class="code-text" id="acctServer"></b>
+      <button class="mini" id="btnServer">修改</button> <button class="mini" id="btnFind">在家里 Wi-Fi 里找</button></div>
+    <div id="foundList"></div>
+    <div class="msg" id="acctMsg" hidden></div>
+    <button class="btn danger" id="btnLogout">退出登录</button>
   </section>
 
   <section class="card" id="statusCard" hidden>
@@ -220,6 +231,18 @@
     $('start').hidden = st.inGroup || joinRole === 'guest' || !!st.unavailable;   // 内核建不出来：只显示原因
     $('group').hidden = !st.inGroup;
     $('more').hidden = !st.inGroup;
+    // #12 账号模式：同一个账号的设备本来就在同一个组，扫邀请码、加入码、局域网配对、移除设备、退出同步组都不用（隐藏）
+    const am = !!(st.acct && st.acct.user);
+    $('acctCard').hidden = !am;
+    if (am) {
+      $('acctName').textContent = st.acct.user;
+      $('acctServer').textContent = st.node ? st.node.h + ':' + st.node.p : '—';
+      $('start').hidden = true;
+      $('more').hidden = true;
+      $('btnRejoin').hidden = true;
+      $('btnAdd').hidden = true;
+      $('addBox').hidden = true;
+    }
     renderLan();
     if (!st.inGroup) return;
     $('joinWait').hidden = true;
@@ -230,10 +253,10 @@
         : (m.last ? '上次收到它的改动：' + KMSync.fmtTime(m.last) + ' · ' + (m.via || '节点') : '还没收到它的改动');
       return '<div class="dev"><span class="ico">' + (m.me ? '📱' : '💻') + '</span><div class="info"><div class="name">' + esc(m.name || '未命名设备') +
         (m.me ? '<span class="tag">本机</span>' : '') + (m.near ? '<span class="near">在附近</span>' : '') + '</div><div class="sub">' + esc(when) + '</div></div><div class="acts">' +
-        '<button class="mini" data-rename="' + esc(m.dev) + '">改名</button>' + (m.me ? '' : '<button class="mini danger" data-remove="' + esc(m.dev) + '">移除</button>') + '</div></div>';
+        '<button class="mini" data-rename="' + esc(m.dev) + '">改名</button>' + (m.me || am ? '' : '<button class="mini danger" data-remove="' + esc(m.dev) + '">移除</button>') + '</div></div>';
     }).join('');
     const n = st.node;
-    if (n) html += '<div class="dev"><span class="ico">☁️</span><div class="info"><div class="name">同步节点 ' + esc(n.h + ':' + n.p) + '</div><div class="sub">' +
+    if (n) html += '<div class="dev"><span class="ico">☁️</span><div class="info"><div class="name">' + (am ? '服务器 ' : '同步节点 ') + esc(n.h + ':' + n.p) + '</div><div class="sub">' +
       esc(n.off ? '已停用' : n.msg ? n.msg : n.last ? '上次同步：' + KMSync.fmtTime(n.last) : '还没同步过') + '</div></div></div>';
     else html += '<div class="dev"><span class="ico">📶</span><div class="info"><div class="name">只在同一个 Wi-Fi 下同步</div><div class="sub">' +
       '没有同步节点：两台设备要连同一个 Wi-Fi、都打开 App 才会同步。要在不同网络之间同步，在下面「重新扫邀请码」加上同步节点</div></div></div>';
@@ -413,6 +436,7 @@
       firstEnd(false);
     }
     else if (t === 'action-result') {
+      if (d.op && d.op.indexOf('acct') === 0) { render(); return; }     // #12 账号的结果显示在账号卡片里
       if (d.op === 'pairOpen' || d.op === 'pairConfirm') {
         // 局域网配对：成功的不用再说（卡片、弹窗本身就是结果）；失败的（没连 Wi-Fi 等）显示在开始配对的地方
         if (!d.ok) show(!(st && st.inGroup) ? $('startMsg') : $('groupMsg'), d.msg, 'bad');
@@ -515,6 +539,34 @@
       '如果是丢了的设备，移除后它也拿不到以后的新数据。\n顺便看看列表里有没有不认识的设备。')) {
       A.syncRemove(dev);
       show($('groupMsg'), '正在移除「' + m.name + '」并更换同步钥匙…');
+    }
+  });
+
+  /* ---------------- #12 账号：退出登录、服务器地址 ---------------- */
+  $('btnLogout').onclick = () => {
+    if (!confirm('退出登录？\n退出后本机学习记录保留，需要重新输入密码才能进入。')) return;
+    A.acctLogout();
+  };
+  $('btnServer').onclick = () => askText('服务器地址（服务器搬家后按管理员说的填，如 192.168.1.20:8787）', st && st.node ? st.node.h + ':' + st.node.p : '', v => {
+    show($('acctMsg'), '正在保存…');
+    A.acctServer(v);
+  });
+  $('btnFind').onclick = () => { show($('acctMsg'), '正在家里 Wi-Fi 里找服务器（几秒钟）…'); $('foundList').innerHTML = ''; A.acctDiscover(); };
+  $('foundList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-addr]');
+    if (!b) return;
+    if (!confirm('把服务器改成 ' + b.dataset.addr + '？\n同一个账号的其它设备同步后也会跟着改。')) return;
+    A.acctServer(b.dataset.addr);
+    $('foundList').innerHTML = '';
+  });
+  window.addEventListener('km-sync', e => {
+    const t = e.detail.type, d = e.detail.data || {};
+    if (t === 'acct-found') {
+      const l = d.list || [];
+      show($('acctMsg'), l.length ? '找到 ' + l.length + ' 台服务器，点一下改用它：' : '没找到。要和服务器连同一个 Wi-Fi；也可以点「修改」手动填地址。', l.length ? '' : 'bad');
+      $('foundList').innerHTML = l.map(x => '<button class="btn" data-addr="' + esc(x.host + ':' + x.port) + '">🖥 ' + esc(x.host + ':' + x.port) + (x.ver ? '（km-sync ' + esc(x.ver) + '）' : '') + '</button>').join('');
+    } else if (t === 'action-result' && (d.op === 'acctServer' || d.op === 'acctLogout')) {
+      show($('acctMsg'), d.msg, d.ok ? 'good' : 'bad');
     }
   });
 

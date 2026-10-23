@@ -21,12 +21,46 @@ public final class SyncAndroid {
     public static final String TAG = "KMSync";
     static final String ALIAS = "kmsync-wrap";
 
-    public static SyncService create(Context ctx, SyncService.Sink sink) {
+    public static SyncService create(Context ctx, SyncService.Sink sink) { return create(ctx, sink, ""); }
+
+    public static SyncService create(Context ctx, SyncService.Sink sink, String appVer) {
         AndroidLan lan = new AndroidLan(ctx);
         SyncService s = new SyncService(new File(ctx.getFilesDir(), "kmsync"), new KeystoreWrap(), System::currentTimeMillis, sink,
             (msg, e) -> Log.w(TAG, msg, e), lan);
         lan.service = s;
+        // #12：打包时写进 APK 的默认服务器和账号恢复公钥（build.ps1 从 signing 读）
+        try {
+            java.util.Map<String, Object> c = SyncJson.obj(SyncCrypto.str(readAsset(ctx, "km-config.json")));
+            java.util.Map<String, Object> sv = SyncJson.m(c.get("server")), rc = SyncJson.m(c.get("recovery"));
+            s.config(sv == null ? "" : SyncJson.s(sv, "h"), sv == null ? 0 : (int) SyncJson.n(sv, "p", 0),
+                rc == null ? "" : SyncJson.s(rc, "pub"), rc == null ? "" : SyncJson.s(rc, "kid"), appVer);
+        } catch (Throwable e) { Log.w(TAG, "读 km-config.json", e); s.config("", 0, "", "", appVer); }
         return s;
+    }
+
+    static byte[] readAsset(Context ctx, String name) throws java.io.IOException {
+        try (java.io.InputStream in = ctx.getAssets().open(name)) {
+            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+            byte[] b = new byte[4096];
+            int n;
+            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+            return o.toByteArray();
+        }
+    }
+
+    /** Wi-Fi 网段的广播地址（局域网找服务器时也单独问一下，有的路由器不转发 255.255.255.255） */
+    public static java.util.List<String> broadcasts(Context ctx) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            for (java.net.NetworkInterface ni : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                for (java.net.InterfaceAddress ia : ni.getInterfaceAddresses()) {
+                    java.net.InetAddress b = ia.getBroadcast();
+                    if (b != null && !out.contains(b.getHostAddress())) out.add(b.getHostAddress());
+                }
+            }
+        } catch (Throwable e) { Log.w(TAG, "广播地址", e); }
+        return out;
     }
 
     private SyncAndroid() { }

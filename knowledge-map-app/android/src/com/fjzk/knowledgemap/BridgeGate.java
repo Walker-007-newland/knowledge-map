@@ -24,6 +24,9 @@ public class BridgeGate {
     /** #1 同步的安全页面：总入口、设备同步、我的数据、学习统计（这些页面不把学习数据放在内存里，合并写回不会被覆盖） */
     public static final String[] SAFE = { WWW + "index.html", WWW + "sync.html", WWW + "data.html", WWW + "pet/study.html" };
     public static final String[] SYNC_PAGE = { WWW + "sync.html" };
+    /** #12 登录页：没登录时只能打开它 */
+    public static final String[] LOGIN = { WWW + "login.html" };
+    public static final String[] LOGIN_SYNC = { WWW + "login.html", WWW + "sync.html" };
 
     static final long KEEP_PREV_MS = 5000;      // 换新令牌后，上一张再保留 5 秒（切换瞬间正在进行的调用不失败）
     static final long HELLO_WINDOW_MS = 10000;  // hello 限速：10 秒内最多 10 次
@@ -53,11 +56,24 @@ public class BridgeGate {
         allow(APP, "deviceName", "sharedGet", "sharedPut");          // #2 我的数据
         // #1 第一期：设备同步。全部要令牌（syncState 含设备名也一样）；听写页（https 虚拟地址）不在 APP_FILE 里，调不到
         allow(APP_FILE, "syncState", "syncNow", "syncPublish");
-        allow(SAFE, "syncTake", "syncAck");                         // 只在安全页面合并写回本机
+        // 只在安全页面合并写回本机；#12 登录页登录成功后在这里合并（登录前不写学习数据）
+        allow(cat(SAFE, LOGIN), "syncTake", "syncAck");
+        // #12 账号：注册、登录、先离线学习只有登录页能调；退出登录只有「账号与同步」页；改服务器、找服务器、带结果的备份两页都能调
+        allow(LOGIN, "acctRegister", "acctLogin", "acctOffline");
+        allow(SYNC_PAGE, "acctLogout");
+        allow(LOGIN_SYNC, "acctServer", "acctDiscover", "saveBackup");
+        allow(APP_FILE, "acctState");
         allow(SYNC_PAGE, "nodeJoin", "nodeRemove", "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm",
             "syncRename", "syncRemove", "syncLeave");
         // #1 第二期：局域网配对，只在设备同步页
         allow(SYNC_PAGE, "pairOpen", "pairClose", "pairWith", "pairAddr", "pairConfirm");
+    }
+
+    static String[] cat(String[] a, String[] b) {
+        String[] r = new String[a.length + b.length];
+        System.arraycopy(a, 0, r, 0, a.length);
+        System.arraycopy(b, 0, r, a.length, b.length);
+        return r;
     }
 
     /** 不需要令牌的方法 */
