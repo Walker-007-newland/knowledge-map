@@ -1,0 +1,427 @@
+# 影视口语常用表达（自编释义）。格式：表达|中文释义
+# 第三栏是难度（3 = 四级水平就认识，不列为难词）；不写默认 4。
+# 首词按词形还原匹配（figure out 也能匹配 figured out / figuring out）；
+# 单个词的条目是「口语义」，会补在词典释义前面。
+# 改完重新跑 tools/build_dict.py。
+
+# ---- 多词表达
+come on|快点；得了吧；加油|3
+no way|不可能；没门儿|3
+kind of|有点儿；算是|3
+sort of|有点儿；算是|3
+kind of like|有点像
+sort of like|有点像
+i mean|我是说（补充或纠正）|3
+you know|你知道的（口头禅）|3
+you know what|你知道吗（引出话题）
+you see|你看；你明白吧
+what the hell|搞什么鬼；管他呢
+what the heck|搞什么；管他呢
+the hell|（加强语气）到底
+what's up|怎么了；最近怎样|3
+what's going on|发生什么事了|3
+what's wrong|怎么了|3
+what's the matter|怎么了|3
+what do you mean|你什么意思|3
+what's the point|有什么意义
+make sense|说得通；有道理
+figure out|想明白；弄清楚
+find out|查明；发现|3
+freak out|吓坏；抓狂
+hang out|闲逛；一起玩
+hang on|等一下；坚持住
+hold on|等一下；坚持住
+hang in there|坚持住
+calm down|冷静下来|3
+shut up|闭嘴|3
+screw up|搞砸
+mess up|弄乱；搞砸
+mess with|招惹；捣乱
+give up|放弃|3
+give in|让步；屈服
+give away|泄露；送掉
+get over|从……中走出来；忘掉
+get it|明白了|3
+got it|明白了|3
+you got it|没问题；你说对了
+i got this|我能搞定
+get out of here|出去；（表惊讶）不会吧
+get rid of|摆脱；扔掉
+get along|相处融洽
+get away with|做坏事而没受惩罚
+get back to|回到；回头再联系
+get going|动身；开始
+get lost|迷路；（粗）滚开
+get real|现实点吧
+get a life|找点正经事做吧
+get this|听好了（引出惊人的消息）
+get on my nerves|让我心烦
+go ahead|请便；开始吧|3
+go on|继续；发生|3
+go for it|放手去做吧
+come up with|想出（主意）
+come over|过来|3
+come across|偶然遇到
+run into|偶遇；撞上
+run away|逃跑|3
+run out of|用完|3
+run late|要迟到了
+catch up|赶上；叙旧|3
+cheer up|振作起来|3
+check out|看看；退房|3
+show up|出现；露面|3
+show off|炫耀
+show around|带……参观
+turn out|结果是
+turn down|拒绝；调低|3
+turn up|出现；调高|3
+work out|锻炼；解决；成功|3
+work on|致力于；忙着做
+pick up|捡起；接（人）；接电话|3
+look forward to|期待|3
+look after|照顾|3
+look out|当心|3
+look up|查找；好转|3
+look into|调查|3
+watch out|小心|3
+take care|保重|3
+take care of|照顾；处理|3
+take it easy|别紧张；放轻松|3
+take your time|慢慢来|3
+take a look|看一下|3
+take off|起飞；脱下；离开|3
+take over|接管|3
+take after|长得像（长辈）
+by the way|顺便说一下|3
+no big deal|没什么大不了
+not a big deal|没什么大不了
+big deal|大事；（反语）有什么了不起
+no problem|没问题|3
+no worries|没事；别担心
+never mind|没关系；算了|3
+my bad|我的错
+oh my god|我的天哪|3
+my god|我的天|3
+for god's sake|看在老天的份上
+for real|真的；说真的
+are you kidding|你开玩笑吧|3
+are you kidding me|你在开玩笑吧|3
+you're kidding|你在开玩笑吧
+just kidding|开玩笑的|3
+no kidding|真的；（反语）还用说
+are you serious|你是认真的吗|3
+you must be joking|你一定是在开玩笑
+you bet|当然；一定
+i bet|我敢说；肯定
+i guess|我想；大概|3
+i suppose|我想；我猜|3
+i don't care|我不在乎|3
+all right|好吧；没事|3
+right now|马上；现在|3
+right away|立刻|3
+at least|至少|3
+at all|根本；完全|3
+after all|毕竟|3
+in fact|事实上|3
+of course|当然|3
+first of all|首先|3
+as well|也|3
+so far|到目前为止|3
+in a minute|马上|3
+in a second|马上
+just a minute|稍等|3
+hold it|等等；别动
+wait a minute|等一下|3
+wait a second|等一下|3
+you're welcome|不客气|3
+excuse me|对不起；打扰一下|3
+my pleasure|不客气；乐意效劳|3
+same here|我也是|3
+me neither|我也不|3
+how come|怎么会；为什么
+what if|要是……怎么办|3
+so what|那又怎样|3
+how about|……怎么样|3
+what about|……怎么样|3
+it's up to you|由你决定|3
+up to|取决于；在做（某事）
+deal with|处理；对付|3
+used to|过去常常|3
+be about to|即将|3
+had better|最好|3
+have to|不得不|3
+got to|必须|3
+let's go|走吧|3
+let me see|让我想想|3
+let it go|放手吧；算了
+let go|放手|3
+let me know|告诉我一声|3
+call it a day|今天到此为止
+on the same page|想法一致
+piece of cake|小菜一碟
+break a leg|祝你好运（演出前）
+cut it out|别闹了
+knock it off|住手；别闹了
+out of nowhere|突然冒出来
+in the middle of|在……中间；正忙于
+make up|编造；和好；化妆
+make it|成功；赶上；到场|3
+make sure|确保|3
+make fun of|取笑|3
+put on|穿上|3
+put up with|忍受
+put off|推迟|3
+bring up|提起（话题）；抚养|3
+blow up|爆炸；发火
+back off|退后；别管
+back up|支持；倒车；备份
+crack up|大笑
+chill out|放松；冷静
+hit on|搭讪
+break up|分手|3
+ask out|约（某人）出去
+fall for|爱上；上当
+end up|最后成了
+give it a shot|试一试
+give it a try|试一试|3
+give me a break|饶了我吧
+keep it up|继续保持
+keep in touch|保持联系|3
+keep an eye on|留意；照看
+lose it|失控；发火
+no offense|无意冒犯
+none of your business|不关你的事
+mind your own business|少管闲事
+on purpose|故意地|3
+out of the question|不可能
+over and over|一遍又一遍|3
+pull over|靠边停车
+rip off|敲竹杠；抄袭
+sleep on it|考虑一晚再决定
+speak up|大声点说；说出来
+stick around|留下来；别走
+there you go|给你；这就对了
+here you go|给你|3
+here we go|开始了；又来了
+here you are|给你|3
+that's it|就这样；够了|3
+that's right|没错|3
+this is it|就是这个；关键时刻到了
+i'm in|算我一个
+count me in|算我一个
+count me out|别算我
+fair enough|有道理；好吧
+good for you|你真行；真为你高兴
+way to go|干得好
+nice try|想得美；不错的尝试
+not really|不太；并不是|3
+no idea|不知道|3
+no clue|一点也不知道
+all of a sudden|突然|3
+in the end|最后|3
+sooner or later|迟早|3
+on my way|在路上了|3
+on the way|在路上|3
+in a hurry|匆忙|3
+how's it going|最近怎么样|3
+long time no see|好久不见|3
+see you|再见|3
+see you later|回头见|3
+catch you later|回头见
+it doesn't matter|没关系|3
+it's no use|没用的
+it's not worth it|不值得
+it's on me|我请客
+my treat|我请客
+i can't believe it|真不敢相信|3
+believe it or not|信不信由你|3
+to be honest|说实话|3
+to tell you the truth|说实话|3
+as a matter of fact|事实上|3
+in other words|换句话说|3
+not at all|一点也不；不客气|3
+at first|起初|3
+at last|终于|3
+for now|暂时|3
+from now on|从现在起|3
+all along|一直
+all the time|一直；总是|3
+every now and then|不时
+once in a while|偶尔
+little by little|逐渐|3
+it's a deal|一言为定
+you have my word|我保证
+cross my heart|我发誓
+over my dead body|除非我死了（绝不同意）
+the thing is|问题是
+the point is|关键是
+what's more|而且
+not to mention|更不用说
+kick ass|很棒；痛打
+pain in the ass|讨厌的人或事
+a hell of a|非常的；了不起的
+as hell|极其；非常
+like hell|拼命地；（反语）才不
+oh boy|哎呀
+oh well|唉，算了
+holy crap|天哪
+no wonder|难怪
+long story short|长话短说
+it's a long story|说来话长
+let's face it|面对现实吧
+that's the spirit|这就对了；好样的
+suit yourself|随你便
+be my guest|请便
+help yourself|随便吃；请自便
+make yourself at home|别客气，就当在自己家
+be right back|马上回来
+hurry up|快点|3
+slow down|慢点|3
+settle down|安定下来；安静下来
+shut down|关闭
+fill in|填写；临时代替|3
+fill out|填写|3
+sign up|报名；注册|3
+set up|设立；陷害|3
+sort out|解决；整理
+stand out|突出
+stand up for|支持；维护
+stand by|支持；待命
+step up|站出来；加紧
+stay out of|别掺和
+think over|仔细考虑|3
+throw up|呕吐
+try on|试穿|3
+wrap up|结束；包起来
+wind up|最终落得；上发条
+zip it|闭嘴
+cut to the chase|直奔主题
+beat around the bush|拐弯抹角
+break the ice|打破僵局
+call off|取消|3
+carry on|继续|3
+drop by|顺便拜访
+drop off|放下（人或东西）；睡着
+fool around|胡闹；鬼混
+hook up|连接；勾搭
+kick off|开始
+knock out|击倒；使筋疲力尽
+let down|使失望
+pass out|昏倒
+pay off|还清；得到回报
+play along|配合；假装同意
+point out|指出|3
+sell out|卖光；出卖
+spit it out|快说出来
+talk into|说服
+tell apart|分辨
+tick off|惹恼
+in charge|负责|3
+in trouble|有麻烦|3
+out of control|失控|3
+out of order|坏了；不合规矩|3
+under control|在控制之中|3
+on and on|没完没了
+more or less|或多或少|3
+better off|境况更好
+worn out|筋疲力尽
+fed up|受够了
+pissed off|气坏了
+drive me crazy|把我逼疯
+watch your mouth|说话注意点
+you name it|应有尽有
+what a shame|真可惜|3
+what a pity|真遗憾|3
+too bad|太遗憾了|3
+no doubt|毫无疑问|3
+for sure|肯定|3
+sure thing|当然；没问题
+you said it|你说得对
+tell me about it|可不是嘛（深有同感）
+look who's talking|你还好意思说别人
+i owe you one|我欠你个人情
+on second thought|再一想
+off the record|私下说
+behind my back|背着我
+by any chance|也许；碰巧
+in case|万一|3
+just in case|以防万一|3
+not yet|还没有|3
+as usual|像往常一样|3
+as if|好像；（反语）才怪
+or something|之类的
+or whatever|之类的；随便什么
+and stuff|之类的东西
+big time|非常；大大地
+no matter what|无论如何|3
+at the end of the day|说到底；归根结底
+it's not like|又不是说……
+it's about time|早该……了
+be supposed to|应该；本应
+can't wait|等不及了|3
+can't help|忍不住
+first thing|第一件事；一早
+in no time|很快
+on the other hand|另一方面|3
+the other day|前几天|3
+
+# ---- 单词的口语义
+cool|口语：酷；好的；没问题
+awesome|口语：太棒了
+dude|口语：老兄；伙计
+guy|口语：家伙；（复数 guys）大家，不分男女
+buddy|口语：伙计；哥们
+bro|口语：兄弟；哥们
+pal|口语：伙计
+mate|口语（英）：伙计
+kid|口语（动词）：开玩笑
+freak|口语：怪人；狂热者；吓坏
+crap|口语：废话；垃圾；糟糕
+damn|口语：该死；（加强语气）非常
+suck|口语：很烂；糟透了
+lame|口语：逊；无聊；蹩脚
+creepy|口语：让人发毛的
+gross|口语：恶心
+nuts|口语：疯了的
+bummer|口语：真扫兴
+chill|口语：冷静；放松；淡定
+gonna|口语：= going to 将要
+wanna|口语：= want to 想要
+gotta|口语：= have got to 必须
+kinda|口语：= kind of 有点
+sorta|口语：= sort of 有点
+ain't|口语：= am not / is not / have not
+dunno|口语：= don't know 不知道
+lemme|口语：= let me 让我
+gimme|口语：= give me 给我
+ya|口语：= you 你
+yeah|口语：是的
+yep|口语：是的
+yup|口语：是的
+nope|口语：不
+nah|口语：不
+jerk|口语：混蛋；蠢货
+loser|口语：失败者；废物
+geek|口语：极客；书呆子
+nerd|口语：书呆子
+sick|口语：太酷了（也指恶心、生病）
+dope|口语：很棒
+legit|口语：真的；靠谱
+totally|口语：完全；绝对
+literally|口语：简直；真的（强调）
+seriously|口语：说真的；真的吗
+screwed|口语：完蛋了
+busted|口语：被抓住了
+broke|口语：身无分文
+cop|口语：警察
+buck|口语：一美元
+grand|口语：一千美元
+fancy|口语：想要；喜欢；花哨的
+now you're talking|这才像话；这就对了
+take forever|要花很长时间
+make out|看清；听清；（口语）亲热
+break down|出故障；抛锚；（情绪）崩溃
+as long as|只要|3
+thank goodness|谢天谢地
+over here|在这儿|3
+grab|口语：（匆匆）吃、喝；顺手拿

@@ -1,0 +1,736 @@
+{
+  "book": "mj6a",
+  "printing": "2026 年度版（内容 ID 5c3e8e27-7815-4b0b-afba-03f3560d3c19）",
+  "pages": {
+    "contents": "图 5–7（书页 ii–iv）",
+    "vocab": "图 100–102（书页 93–95）"
+  },
+  "mustMarked": true,
+  "units": [
+    {
+      "id": "u1",
+      "name": "Unit 1 Wonderful Sports Events"
+    },
+    {
+      "id": "u2",
+      "name": "Unit 2 Healthy Life"
+    },
+    {
+      "id": "u3",
+      "name": "Unit 3 Good Manners"
+    },
+    {
+      "id": "u4",
+      "name": "Unit 4 Great People"
+    }
+  ],
+  "words": [
+    {
+      "u": "u1",
+      "en": "event",
+      "pos": "",
+      "zh": "事件；赛事",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "member",
+      "pos": "",
+      "zh": "成员",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "skill",
+      "pos": "",
+      "zh": "技能；技巧",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "Olympic",
+      "pos": "",
+      "zh": "奥林匹克运动会的",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "Olympics",
+      "pos": "",
+      "zh": "奥林匹克运动会",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "host",
+      "pos": "",
+      "zh": "主人；主办",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "began",
+      "pos": "",
+      "zh": "（begin的过去式）开始",
+      "must": 1
+    },
+    {
+      "u": "u1",
+      "en": "answer",
+      "pos": "",
+      "zh": "回答",
+      "must": 1
+    },
+    {
+      "u": "u1",
+      "en": "slogan",
+      "pos": "",
+      "zh": "口号；标语",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "was",
+      "pos": "",
+      "zh": "（is的过去式）是",
+      "must": 1
+    },
+    {
+      "u": "u1",
+      "en": "were",
+      "pos": "",
+      "zh": "（are的过去式）是",
+      "must": 1
+    },
+    {
+      "u": "u1",
+      "en": "popular",
+      "pos": "",
+      "zh": "受欢迎的",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "exciting",
+      "pos": "",
+      "zh": "令人兴奋的",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "future",
+      "pos": "",
+      "zh": "将来",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "medal",
+      "pos": "",
+      "zh": "奖牌",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "won",
+      "pos": "",
+      "zh": "（win的过去式）获胜；赢",
+      "must": 1
+    },
+    {
+      "u": "u1",
+      "en": "gold",
+      "pos": "",
+      "zh": "金；金色",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "silver",
+      "pos": "",
+      "zh": "银；银色",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "bronze",
+      "pos": "",
+      "zh": "青铜；青铜色",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "national",
+      "pos": "",
+      "zh": "国家的",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "fitness",
+      "pos": "",
+      "zh": "健壮；健康",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "logo",
+      "pos": "",
+      "zh": "标志；标识",
+      "must": 0
+    },
+    {
+      "u": "u1",
+      "en": "second",
+      "pos": "",
+      "zh": "第二；第二的",
+      "must": 1
+    },
+    {
+      "u": "u1",
+      "en": "hiking",
+      "pos": "",
+      "zh": "徒步旅行",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "menu",
+      "pos": "",
+      "zh": "菜单",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "matter",
+      "pos": "",
+      "zh": "事情；情况",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "ill",
+      "pos": "",
+      "zh": "生病的；不适的",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "bad",
+      "pos": "",
+      "zh": "坏的",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "well",
+      "pos": "",
+      "zh": "良好的；健康的",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "headache",
+      "pos": "",
+      "zh": "头疼",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "maybe",
+      "pos": "",
+      "zh": "也许；可能",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "fever",
+      "pos": "",
+      "zh": "发烧",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "check",
+      "pos": "",
+      "zh": "检查；核实",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "medicine",
+      "pos": "",
+      "zh": "药；医学",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "health",
+      "pos": "",
+      "zh": "健康",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "always",
+      "pos": "",
+      "zh": "总是；每次都",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "fan",
+      "pos": "",
+      "zh": "迷；爱好者",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "tip",
+      "pos": "",
+      "zh": "建议",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "hour",
+      "pos": "",
+      "zh": "小时",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "habit",
+      "pos": "",
+      "zh": "习惯",
+      "must": 0
+    },
+    {
+      "u": "u2",
+      "en": "tidy",
+      "pos": "",
+      "zh": "整洁的；有序的",
+      "must": 1
+    },
+    {
+      "u": "u2",
+      "en": "fourth",
+      "pos": "",
+      "zh": "第四；第四的",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "manners",
+      "pos": "",
+      "zh": "礼貌；礼仪",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "yourself",
+      "pos": "",
+      "zh": "你自己",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "cup",
+      "pos": "",
+      "zh": "杯子",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "pleasure",
+      "pos": "",
+      "zh": "愉快；快乐",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "bedroom",
+      "pos": "",
+      "zh": "卧室",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "borrow",
+      "pos": "",
+      "zh": "借；借用",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "sure",
+      "pos": "",
+      "zh": "当然",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "carefully",
+      "pos": "",
+      "zh": "小心地",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "mess",
+      "pos": "",
+      "zh": "混乱；凌乱",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "public",
+      "pos": "",
+      "zh": "公众；公共的",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "swing",
+      "pos": "",
+      "zh": "秋千",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "off",
+      "pos": "",
+      "zh": "从……去掉；从……离开",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "ouch",
+      "pos": "",
+      "zh": "哎哟",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "feed",
+      "pos": "",
+      "zh": "喂养；饲养",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "greet",
+      "pos": "",
+      "zh": "问候；招呼",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "did",
+      "pos": "",
+      "zh": "（do的过去式）做；干",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "meal",
+      "pos": "",
+      "zh": "一餐；饭",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "round",
+      "pos": "",
+      "zh": "圆形的",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "dining table",
+      "pos": "",
+      "zh": "餐桌",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "easily",
+      "pos": "",
+      "zh": "容易地",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "guest",
+      "pos": "",
+      "zh": "客人",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "plate",
+      "pos": "",
+      "zh": "盘；碟",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "bowl",
+      "pos": "",
+      "zh": "碗",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "spoon",
+      "pos": "",
+      "zh": "勺；匙",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "chopstick",
+      "pos": "",
+      "zh": "筷子",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "dish",
+      "pos": "",
+      "zh": "菜肴",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "middle",
+      "pos": "",
+      "zh": "中间；中间的",
+      "must": 1
+    },
+    {
+      "u": "u3",
+      "en": "polite",
+      "pos": "",
+      "zh": "礼貌的",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "drum",
+      "pos": "",
+      "zh": "敲击；鼓",
+      "must": 0
+    },
+    {
+      "u": "u3",
+      "en": "finish",
+      "pos": "",
+      "zh": "完成",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "hardworking",
+      "pos": "",
+      "zh": "努力的；勤劳的",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "country",
+      "pos": "",
+      "zh": "国家",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "soldier",
+      "pos": "",
+      "zh": "士兵；军人",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "research",
+      "pos": "",
+      "zh": "研究；调查",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "develop",
+      "pos": "",
+      "zh": "（使）发展；（使）成长",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "satellite",
+      "pos": "",
+      "zh": "人造卫星",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "aerospace",
+      "pos": "",
+      "zh": "航空航天",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "physicist",
+      "pos": "",
+      "zh": "物理学家",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "invention",
+      "pos": "",
+      "zh": "发明；创造",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "inventor",
+      "pos": "",
+      "zh": "发明者；发明家",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "smart",
+      "pos": "",
+      "zh": "聪明的",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "American",
+      "pos": "",
+      "zh": "美国的；美国人",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "invent",
+      "pos": "",
+      "zh": "发明；创造",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "prize",
+      "pos": "",
+      "zh": "奖品；奖赏",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "field",
+      "pos": "",
+      "zh": "学科；领域",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "physics",
+      "pos": "",
+      "zh": "物理",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "chemistry",
+      "pos": "",
+      "zh": "化学",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "born",
+      "pos": "",
+      "zh": "出生",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "traditional",
+      "pos": "",
+      "zh": "传统的；习俗的",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "education",
+      "pos": "",
+      "zh": "教育",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "free",
+      "pos": "",
+      "zh": "免费的",
+      "must": 1
+    },
+    {
+      "u": "u4",
+      "en": "everyone",
+      "pos": "",
+      "zh": "每个人",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "primary",
+      "pos": "",
+      "zh": "首要的；初级的",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "uniform",
+      "pos": "",
+      "zh": "制服",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "most",
+      "pos": "",
+      "zh": "最；最多",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "delivery",
+      "pos": "",
+      "zh": "递送；投递",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "bring",
+      "pos": "",
+      "zh": "带来",
+      "must": 1
+    },
+    {
+      "u": "u4",
+      "en": "ordinary",
+      "pos": "",
+      "zh": "普通的",
+      "must": 0
+    },
+    {
+      "u": "u4",
+      "en": "think",
+      "pos": "",
+      "zh": "想；认为",
+      "must": 1
+    }
+  ]
+}

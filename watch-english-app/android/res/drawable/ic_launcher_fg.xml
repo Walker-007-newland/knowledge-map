@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：一块屏幕（播放键）+ 下面两行字幕，安全区在中间 66dp 内 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#ffffff" android:pathData="M33,30 h42 a5,5 0 0 1 5,5 v26 a5,5 0 0 1 -5,5 h-42 a5,5 0 0 1 -5,-5 v-26 a5,5 0 0 1 5,-5 z" />
+    <path android:fillColor="#c2410c" android:pathData="M49,40 L62,48 L49,56 z" />
+    <path android:strokeColor="#ffd34d" android:strokeWidth="4.5" android:strokeLineCap="round"
+        android:pathData="M37,74 h34 M44,83 h20" />
+</vector>

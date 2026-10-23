@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""生成下载二维码：python qr.py <网址> <版本> <输出.png>（需要 pip install qrcode pillow）"""
+"""生成下载二维码：python qr.py <网址> <版本> <输出.png> [App 名，默认「团队审批」]（需要 pip install qrcode pillow）"""
 import sys
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
 
 url, ver, out = sys.argv[1:4]
+name = sys.argv[4] if len(sys.argv) > 4 else '团队审批'
 q = qrcode.QRCode(box_size=10, border=3)
 q.add_data(url)
 q.make(fit=True)
@@ -17,6 +18,6 @@ try:
 except OSError:
     font = ImageFont.load_default()
 d = ImageDraw.Draw(canvas)
-text = f'团队审批 App {ver}'
+text = f'{name} App {ver}'
 d.text(((w - d.textlength(text, font=font)) / 2, h + 12), text, fill='black', font=font)
 canvas.save(out)

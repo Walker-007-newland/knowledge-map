@@ -7,3 +7,8 @@ knowledge-map-app/signing/
 *.tar.gz
 /sims-c3-6.js
 __pycache__/
+# 看剧学英文：构建产物；精讲包和字幕来自用户自己的电影，有版权，绝不能提交到公开仓库
+watch-english-app/out/
+watch-english-app/work/
+*.pack.json
+!watch-english-app/www/demo/demo.pack.json

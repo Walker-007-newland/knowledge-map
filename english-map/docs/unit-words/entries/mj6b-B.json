@@ -1,0 +1,542 @@
+{
+ "book": "mj6b",
+ "printing": "2025 年 12 月第 19 次印刷（旧版，三年级起点）",
+ "pages": {
+  "contents": "图 5",
+  "vocab": "图 43（书页 76–77）"
+ },
+ "mustMarked": true,
+ "units": [
+  {
+   "id": "u1",
+   "name": "Unit 1 Winter Activities"
+  },
+  {
+   "id": "u2",
+   "name": "Unit 2 Helping Each Other"
+  },
+  {
+   "id": "u3",
+   "name": "Unit 3 Seeing a Doctor"
+  },
+  {
+   "id": "u4",
+   "name": "Unit 4 Mother's Day"
+  },
+  {
+   "id": "u5",
+   "name": "Unit 5 Occupation"
+  },
+  {
+   "id": "u6",
+   "name": "Unit 6 Dream Job"
+  },
+  {
+   "id": "u7",
+   "name": "Unit 7 A Visit to a Middle School"
+  },
+  {
+   "id": "u8",
+   "name": "Unit 8 Farewell"
+  }
+ ],
+ "words": [
+  {
+   "u": "u1",
+   "en": "anywhere",
+   "pos": "",
+   "zh": "任何地方",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "famous",
+   "pos": "",
+   "zh": "著名的",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "travel",
+   "pos": "",
+   "zh": "旅行",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "along",
+   "pos": "",
+   "zh": "沿着",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "the Yangtze River",
+   "pos": "",
+   "zh": "长江",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "go back",
+   "pos": "",
+   "zh": "回到",
+   "must": 0
+  },
+  {
+   "u": "u1",
+   "en": "made",
+   "pos": "",
+   "zh": "make的过去式",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "show",
+   "pos": "",
+   "zh": "给……看",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "fat",
+   "pos": "",
+   "zh": "胖的",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "thin",
+   "pos": "",
+   "zh": "瘦的",
+   "must": 1
+  },
+  {
+   "u": "u1",
+   "en": "Ice and Snow Festival",
+   "pos": "",
+   "zh": "冰雪节",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "break",
+   "pos": "",
+   "zh": "（过去式broke）摔断",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "hear",
+   "pos": "",
+   "zh": "听见",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "lesson",
+   "pos": "",
+   "zh": "功课；课业",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "heavy",
+   "pos": "",
+   "zh": "重的",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "carry",
+   "pos": "",
+   "zh": "携带；搬运",
+   "must": 0
+  },
+  {
+   "u": "u2",
+   "en": "light",
+   "pos": "",
+   "zh": "轻的",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "feel",
+   "pos": "",
+   "zh": "感觉到",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "hope",
+   "pos": "",
+   "zh": "希望",
+   "must": 1
+  },
+  {
+   "u": "u2",
+   "en": "soon",
+   "pos": "",
+   "zh": "不久",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "ill",
+   "pos": "",
+   "zh": "不适；生病的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "wrong",
+   "pos": "",
+   "zh": "不正常",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "headache",
+   "pos": "",
+   "zh": "头疼",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "have a cold",
+   "pos": "",
+   "zh": "感冒",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "toothache",
+   "pos": "",
+   "zh": "牙疼",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "fever",
+   "pos": "",
+   "zh": "发烧",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "open",
+   "pos": "",
+   "zh": "张开；打开",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "must",
+   "pos": "",
+   "zh": "必须",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "mustn't",
+   "pos": "",
+   "zh": "（must not）不允许",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "a lot of",
+   "pos": "",
+   "zh": "大量的",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "medicine",
+   "pos": "",
+   "zh": "药",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "doctor",
+   "pos": "",
+   "zh": "医生",
+   "must": 1
+  },
+  {
+   "u": "u3",
+   "en": "cross",
+   "pos": "",
+   "zh": "横穿",
+   "must": 0
+  },
+  {
+   "u": "u3",
+   "en": "street",
+   "pos": "",
+   "zh": "街；街道",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "kiss",
+   "pos": "",
+   "zh": "亲吻",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "love",
+   "pos": "",
+   "zh": "爱",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "surprise",
+   "pos": "",
+   "zh": "惊讶",
+   "must": 0
+  },
+  {
+   "u": "u4",
+   "en": "kind",
+   "pos": "",
+   "zh": "种；类",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "dining room",
+   "pos": "",
+   "zh": "餐厅",
+   "must": 1
+  },
+  {
+   "u": "u4",
+   "en": "restaurant",
+   "pos": "",
+   "zh": "餐馆",
+   "must": 0
+  },
+  {
+   "u": "u5",
+   "en": "farmer",
+   "pos": "",
+   "zh": "农民",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "cook",
+   "pos": "",
+   "zh": "厨师",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "worker",
+   "pos": "",
+   "zh": "工人",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "grow",
+   "pos": "",
+   "zh": "种植",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "police officer",
+   "pos": "",
+   "zh": "警察",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "nurse",
+   "pos": "",
+   "zh": "护士",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "job",
+   "pos": "",
+   "zh": "工作",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "dancer",
+   "pos": "",
+   "zh": "舞蹈演员",
+   "must": 1
+  },
+  {
+   "u": "u5",
+   "en": "singer",
+   "pos": "",
+   "zh": "歌唱演员",
+   "must": 1
+  },
+  {
+   "u": "u6",
+   "en": "true",
+   "pos": "",
+   "zh": "确实的",
+   "must": 1
+  },
+  {
+   "u": "u6",
+   "en": "driver",
+   "pos": "",
+   "zh": "司机",
+   "must": 1
+  },
+  {
+   "u": "u6",
+   "en": "scientist",
+   "pos": "",
+   "zh": "科学家",
+   "must": 1
+  },
+  {
+   "u": "u6",
+   "en": "learn",
+   "pos": "",
+   "zh": "学习",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "middle school",
+   "pos": "",
+   "zh": "中学",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "teachers' office",
+   "pos": "",
+   "zh": "教师办公室",
+   "must": 0
+  },
+  {
+   "u": "u7",
+   "en": "study",
+   "pos": "",
+   "zh": "学习",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "physics",
+   "pos": "",
+   "zh": "物理",
+   "must": 0
+  },
+  {
+   "u": "u7",
+   "en": "lab",
+   "pos": "",
+   "zh": "实验室",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "chemistry",
+   "pos": "",
+   "zh": "化学",
+   "must": 0
+  },
+  {
+   "u": "u7",
+   "en": "bottle",
+   "pos": "",
+   "zh": "瓶子",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "Edison",
+   "pos": "",
+   "zh": "爱迪生",
+   "must": 0
+  },
+  {
+   "u": "u7",
+   "en": "inventor",
+   "pos": "",
+   "zh": "发明家",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "subject",
+   "pos": "",
+   "zh": "科目",
+   "must": 1
+  },
+  {
+   "u": "u7",
+   "en": "history",
+   "pos": "",
+   "zh": "历史",
+   "must": 0
+  },
+  {
+   "u": "u7",
+   "en": "geography",
+   "pos": "",
+   "zh": "地理",
+   "must": 0
+  },
+  {
+   "u": "u8",
+   "en": "miss",
+   "pos": "",
+   "zh": "想念",
+   "must": 1
+  },
+  {
+   "u": "u8",
+   "en": "year book",
+   "pos": "",
+   "zh": "毕业留念册",
+   "must": 1
+  },
+  {
+   "u": "u8",
+   "en": "address",
+   "pos": "",
+   "zh": "地址",
+   "must": 1
+  },
+  {
+   "u": "u8",
+   "en": "information",
+   "pos": "",
+   "zh": "信息",
+   "must": 0
+  },
+  {
+   "u": "u8",
+   "en": "gave",
+   "pos": "",
+   "zh": "give的过去式",
+   "must": 1
+  },
+  {
+   "u": "u8",
+   "en": "leave",
+   "pos": "",
+   "zh": "离开",
+   "must": 0
+  }
+ ]
+}
