@@ -29,15 +29,18 @@ Windows / Mac 的 Docker Desktop：`network_mode: host` 不可用，按 compose 
 ## 二、从腾讯云搬到家里（账号、组、密钥都不丢）
 
 1. **在家里先按第一节装好、但先不要启动**（或启动后 `docker compose down` 并删掉 `km-sync-data/db/` 里新生成的两个库）。
-2. 在腾讯云上在线备份（不用停服务）：
+2. 在腾讯云上在线备份（不用停服务；`--backup` 只读打开数据库，不改表结构）：
    ```
    ssh -i ~/.ssh/km_tencent ubuntu@43.142.41.27
-   sudo -u kmsync python3 /opt/km-sync/km_sync_node.py --config /etc/km-sync/config.json --backup /var/lib/km-sync
+   sudo install -d -o kmsync -g kmsync -m 700 /tmp/kmbak
+   sudo -u kmsync python3 /opt/km-sync/km_sync_node.py --config /etc/km-sync/config.json --backup /tmp/kmbak
    ```
-   输出里的目录（`/var/lib/km-sync/km-sync-backup-<时间>/`）有 `node.db`、`admin.db`。为了不丢最后几分钟的同步，
+   服务器上还是 1.3.0（没有 `--backup`）时，先把仓库里新的 `km_sync_node.py` 传到 `/tmp/`，用它跑同一条命令（只读备份，不会升级正在用的库）。
+   输出里的目录（`/tmp/kmbak/km-sync-backup-<时间>/`）有 `node.db`、`admin.db`。为了不丢最后几分钟的同步，
    备份前可以先 `sudo systemctl stop km-sync`，备份完再决定是否 `start`。
-3. 拷回本机再拷到家里机器：`scp -i ~/.ssh/km_tencent "ubuntu@43.142.41.27:/var/lib/km-sync/km-sync-backup-*/*.db" .`
-   （kmsync 目录是 700，先 `sudo cp -r … /tmp/kmbak && sudo chown -R ubuntu /tmp/kmbak` 再 scp），放进家里的 `km-sync-data/db/`。
+3. 拷回本机再拷到家里机器：`sudo cp -r /tmp/kmbak /tmp/kmbak2 && sudo chown -R ubuntu /tmp/kmbak2` 后
+   `scp -i ~/.ssh/km_tencent "ubuntu@43.142.41.27:/tmp/kmbak2/km-sync-backup-*/*.db" .`，放进家里的 `km-sync-data/db/`；
+   拷完删掉服务器上的 `/tmp/kmbak*`（里面是全部数据）。
 4. 启动家里的容器。日志里不会出新管理码（管理密钥还是原来那把，在 admin.db 里）。
 5. **审批 App**：「节点 → 设置 → 节点地址」改成 `192.168.1.20:8787`（管理密钥不变，不用重新扫码）。
    如果手机上的管理码丢了，`run --rm km-sync new-admin-key` 换一把新的、重新扫。
@@ -58,6 +61,11 @@ Windows / Mac 的 Docker Desktop：`network_mode: host` 不可用，按 compose 
 - **8787 是明文 HTTP**（和云上一样）：同步内容和账号包都是端到端加密的，密码不上网；但在同一个 Wi-Fi 里偷听的人能拿到登录挑战，
   可以离线猜密码。所以学生密码要按规则设（8 位以上、字母加数字、不用常见密码）。
 - **局域网自动发现**要 `network_mode: host`（Linux）；路由器开了「AP 隔离 / 访客网络」时平板之间、平板和节点之间广播不通，只能手动填地址。
+- 改用桥接网络（Docker Desktop、`ports:` 映射）时，节点看到的来源 IP 都是 Docker 网关（如 172.18.0.1）：每 IP 限速、管理接口失败封 IP
+  对家里所有设备是一起算的（有人连续输错管理密钥会让全家的管理接口 1 小时不能用，同步不受影响）。能用 host 网络就用 host 网络。
+- 第一次启动的日志（`docker logs km-sync`）和卷里的 `first-run.txt` 里有管理码（含管理密钥）：只在这台机器上，别把日志发给别人。
+- 国内网络拉镜像、装 pip 包慢：Docker 设镜像加速（腾讯云服务器上是 `/etc/docker/daemon.json` 写 `{"registry-mirrors": ["https://mirror.ccs.tencentyun.com"]}`，
+  家里可以用各云厂商公开的加速地址），构建时加 `--build-arg PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple`。
 - **家里断电 / 机器关机**：已登录的平板照常离线学习，联网后自动补同步；新平板这段时间不能登录。
 - 在外面（不在家里 Wi-Fi）时连不到家里的节点，只能回家后同步。要在外面也能同步，得在路由器上做端口转发（有公网 IP 时）或用组网工具，暂不在本期范围。
 
@@ -73,7 +81,17 @@ Windows / Mac 的 Docker Desktop：`network_mode: host` 不可用，按 compose 
 | 网页后台密码忘了 | `docker compose -f … run --rm km-sync reset-web-login`，再在审批 App 里设 |
 | 停 / 启 | `docker compose -f … stop` / `start` |
 
-## 五、验证记录
+## 五、验证记录（2026-10-23，开发）
 
-本机（公司云桌面虚拟机）跑不了 Docker；镜像在腾讯云服务器上验证（`docker build` + `docker compose up` + `test_node.py --remote`）。
-入口脚本的配置生成、初始化、备份在电脑上用 `KM_DATA` / `KM_APP` 环境变量模拟过（见开发说明）。
+本机（公司云桌面虚拟机）跑不了 Docker，在腾讯云服务器上验证（Ubuntu 22.04 自带源装 docker.io 29.1 + docker-compose-v2 2.40，
+腾讯云镜像加速），用桥接网络、只监听 127.0.0.1 的测试端口，不影响正在跑的 km-sync：
+
+- `docker compose build`、`up -d`：第一次启动生成配置、管理密钥，日志里画出管理码二维码；`/data` 交给 uid 10001，节点进程以 10001 运行；健康检查 healthy
+- 经 SSH 隧道跑 `test_node.py --remote`：设备协议、邀请码、换钥、封禁、彻底删除、日志、账号（注册、登录、通行证、停用、清理）全部通过
+  （唯一不同：桥接网络下节点看到的来源 IP 是 Docker 网关，不是 127.0.0.1，见第三节）
+- `run --rm … backup`、`version`、`admin-qr` 命令可用
+- **搬家演练**：用新程序的 `--backup` 只读备份正在跑的 1.3.0 节点 → 两个库放进新卷 → 启动 1.4.0 容器：表结构 4 → 5 自动升级（留 `admin.db.v4.bak`），
+  组登记、邀请码和真实节点完全一致，原来的管理密钥照常能用，组数上限 30 自动变 300；真实节点不受影响（仍是 1.3.0、没有多出备份文件）
+- 验证完删掉了容器、镜像、测试目录和备份副本；docker 留在服务器上但已停用（`systemctl disable --now docker docker.socket`），要用时 `sudo systemctl enable --now docker`
+
+入口脚本的配置生成、初始化、备份也在电脑上用 `KM_DATA` / `KM_APP` 环境变量跑过。

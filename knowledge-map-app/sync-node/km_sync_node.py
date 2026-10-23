@@ -2372,16 +2372,29 @@ def discovery_loop(node, host, port, stop):
     s.close()
 
 
-def backup_to(node, out_dir):
-    """在线备份（1.4.0，搬家用）：用 SQLite 备份接口复制 node.db、admin.db，服务不用停。返回备份目录。"""
+def backup_to(node_or_dir, out_dir):
+    """在线备份（1.4.0，搬家用）：用 SQLite 备份接口复制 node.db、admin.db，服务不用停。返回备份目录。
+    传数据目录时只读打开（不建表、不升级表结构），旧版本节点的库也能这样备份。"""
     stamp = datetime.datetime.now(CN_TZ).strftime('%Y%m%d-%H%M%S')
     d = os.path.join(out_dir, f'km-sync-backup-{stamp}')
     os.makedirs(d, exist_ok=True)
-    with node.lock:
-        for src, name in ((node.ndb, 'node.db'), (node.adb, 'admin.db')):
+    if isinstance(node_or_dir, str):
+        for name in ('node.db', 'admin.db'):
+            p = os.path.join(node_or_dir, name)
+            if not os.path.exists(p):
+                raise SystemExit(f'数据目录里没有 {name}：{node_or_dir}')
+            src = sqlite3.connect(f'file:{p}?mode=ro', uri=True, timeout=15)
             dst = sqlite3.connect(os.path.join(d, name))
             src.backup(dst)
             dst.close()
+            src.close()
+    else:
+        node = node_or_dir
+        with node.lock:
+            for src, name in ((node.ndb, 'node.db'), (node.adb, 'admin.db')):
+                dst = sqlite3.connect(os.path.join(d, name))
+                src.backup(dst)
+                dst.close()
     with open(os.path.join(d, 'README.txt'), 'w', encoding='utf-8') as f:
         f.write(f'km-sync {VERSION} 备份 {stamp}\n把 node.db、admin.db 放进新节点的数据目录（Docker：卷里的 db/），再启动。\n'
                 '账号、组、邀请码、管理密钥、网页登录都在 admin.db 里；证书不在这里（新地址要重新签发或不用 443）。\n')
@@ -2428,10 +2441,11 @@ def main():
         print(VERSION)
         return
     cfg = load_config(a.config)
-    node = Node(cfg['data_dir'], cfg['public_host'], cfg['public_port'])
     if a.backup:
-        print('KMJSON ' + json.dumps({'version': VERSION, 'backup': backup_to(node, a.backup)}, ensure_ascii=True))
+        # 只读打开数据库备份，不建 Node（不升级表结构）：正在跑的旧版本节点也能这样在线备份
+        print('KMJSON ' + json.dumps({'version': VERSION, 'backup': backup_to(cfg['data_dir'], a.backup)}, ensure_ascii=True))
         return
+    node = Node(cfg['data_dir'], cfg['public_host'], cfg['public_port'])
     if a.init or a.new_admin_key or a.reset_access or a.reset_web_login:
         out = {'version': VERSION, 'crypto': CRYPTO_ERR is None}
         with node.lock:

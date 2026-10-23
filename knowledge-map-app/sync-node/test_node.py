@@ -1166,6 +1166,13 @@ def run_accounts():
             n2.ndb.close()
             n2.adb.close()
             check(users == {'xiaoming', 'xiaoke'} and ok, '--backup 复制出的 node.db / admin.db 直接能当新节点的数据目录用（账号、组、管理密钥都在）', users)
+            ver0 = ln.node.adb.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0]
+            d2 = K.backup_to(ln.dir, out)       # 命令行 --backup 的做法：只读打开数据目录，不建 Node、不升级表结构
+            b2 = sqlite3.connect(os.path.join(d2, 'admin.db'))
+            users2 = {r[0] for r in b2.execute('SELECT user FROM accounts')}
+            b2.close()
+            check(users2 == users and ln.node.adb.execute("SELECT v FROM meta WHERE k='schema'").fetchone()[0] == ver0,
+                  '--backup 只读备份数据目录（运行中的节点照常、表结构不动）', users2)
         finally:
             shutil.rmtree(out, ignore_errors=True)
         stop = threading.Event()
