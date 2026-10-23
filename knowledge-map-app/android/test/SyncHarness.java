@@ -33,6 +33,8 @@ public class SyncHarness {
     static String python = "python";
     /** --phase1：只跑第一期（经节点）的场景 */
     static boolean only1;
+    /** --acct：只跑 #12 账号场景（本地节点） */
+    static boolean acctOnly;
     static File root;          // 仓库根（工作区）
     static File tmp;
     static final List<Object[]> RESULTS = new ArrayList<>();
@@ -1474,6 +1476,239 @@ public class SyncHarness {
         a.m.joinClose();
     }
 
+    // ================================================================ #12 账号
+
+    static java.security.KeyPair REC;          // 测试用的账号恢复密钥（真机上公钥打包在 APK 里，私钥在审批 App）
+    static NodeCtl ANODE;
+
+    static void acctCfg(Dev... ds) {
+        for (Dev d : ds) d.m.setConfig(ANODE.host, ANODE.port, SyncCrypto.b64e(REC.getPublic().getEncoded()), "testkid1");
+    }
+
+    static Map<String, Object> reg(Dev d, String user, String pw, String code) {
+        return SyncJson.obj(d.m.acctRegister(SyncJson.stringify(SyncJson.of("user", user, "pw", pw, "code", code))));
+    }
+
+    static Map<String, Object> login(Dev d, String user, String pw) {
+        return SyncJson.obj(d.m.acctLogin(SyncJson.stringify(SyncJson.of("user", user, "pw", pw))));
+    }
+
+    static String acode(NodeCtl node) { return SyncJson.s(node.cmdM("cmd", "acode"), "code"); }
+
+    static Map<String, Object> acctOp(NodeCtl node, String op, Object... kv) { return SyncJson.m(node.cmd("cmd", "acct", "op", op, "args", SyncJson.of(kv))); }
+
+    /** 本机「学习数据」和同步文件的指纹：失败的登录 / 注册前后要一样（account.json、node.json 里的计数不算学习数据） */
+    static String snap(Dev d) {
+        StringBuilder b = new StringBuilder(SyncJson.canon(d.data));
+        List<File> fs = listAll(d.dir);
+        fs.sort(null);
+        for (File f : fs) {
+            String rel = d.dir.toPath().relativize(f.toPath()).toString().replace('\\', '/');
+            if (rel.startsWith("account.json") || rel.startsWith("node.json") || rel.startsWith("device.json")) continue;
+            try { b.append('|').append(rel).append('=').append(SyncCrypto.hex(SyncCrypto.sha256(Files.readAllBytes(f.toPath())))); }
+            catch (IOException e) { b.append('|').append(rel).append("=?"); }
+        }
+        return b.toString();
+    }
+
+    static boolean headerSeen(String h) {
+        Object[] r = lastReq;
+        @SuppressWarnings("unchecked") Map<String, String> hs = r == null ? null : (Map<String, String>) r[4];
+        return hs != null && hs.containsKey(h);
+    }
+
+    static void scenarioAccounts(NodeCtl node) throws Exception {
+        ANODE = node;
+        REC = SyncCrypto.newKeyPair();
+
+        section("A1. 新设备注册（本机数据成为账号的初始数据）→ 另一台新设备登录，拿到完全相同的数据（验收 A2）");
+        Dev x = new Dev("acx800", "X800"), p = new Dev("acp70", "P70");
+        acctCfg(x, p);
+        x.put("math", "k1", "学过 5 个知识点");
+        x.put("pet", "bones", 7);
+        x.sync();
+        String c1 = acode(node);
+        Map<String, Object> r = reg(x, "xiaoming", "x", c1);
+        check(!SyncJson.b(r, "ok") && "rule".equals(SyncJson.s(r, "code")), "密码不合规则 → 本机就拒绝（不发请求）", r);
+        r = reg(x, "xiaoming", "shuxue2026a", c1.toLowerCase().replace("-", " "));
+        check(SyncJson.b(r, "ok") && "new".equals(SyncJson.s(r, "mode")), "注册成功：新建组 + 账号", r);
+        check(x.m.acct.in() && x.m.inGroup() && x.m.acct.gid.equals(x.m.g.gid()), "本机已登录，账号组就是本机的组", x.m.acctState());
+        x.sync();
+        check(headerSeen("X-KM-Dev"), "账号组的同步请求带设备通行证 X-KM-Dev", lastReq == null ? null : lastReq[3]);
+        r = login(p, "xiaoming", "shuxue2026a");
+        check(SyncJson.b(r, "ok") && !SyncJson.b(r, "same"), "新设备登录成功", r);
+        rounds(2, p, x);
+        check(eq(x, p) && sameCids(x, p), "两台数据完全相同、分区 cid 相同", cidDiff(x, p));
+        check("xiaoming".equals(SyncJson.s(SyncJson.m(p.state().get("acct")), "user")), "同步状态里有账号名（总入口标签用）", p.m.state());
+        String st = x.m.state();
+        check(st.contains("\"status\":\"ok\""), "状态已同步", st);
+
+        section("A2. 密码错、断网、服务器出错、注册中被杀：本机学习数据和同步文件一点不变（验收 A5）");
+        Dev q = new Dev("acq", "Q");
+        acctCfg(q);
+        q.put("zh", "w1", "另一台的语文");
+        q.sync();
+        String s0 = snap(q);
+        r = login(q, "xiaoming", "wrong-pass9");
+        check(!SyncJson.b(r, "ok") && "login".equals(SyncJson.s(r, "code")) && snap(q).equals(s0) && q.m.acct == null && !q.m.inGroup(),
+            "密码错：提示「用户名或密码不对」，本机不变", r);
+        r = reg(q, "xiaoqiang", "huaxue2026q", "ABCD-EFGH-JKMN");
+        check(!SyncJson.b(r, "ok") && "code".equals(SyncJson.s(r, "code")) && snap(q).equals(s0) && !q.m.inGroup(), "注册码错：本机不变", r);
+        String cOff = acode(node);
+        node.cmd("cmd", "stop");
+        r = login(q, "xiaoming", "shuxue2026a");
+        Map<String, Object> r2 = reg(q, "xiaoqiang", "huaxue2026q", cOff);
+        node.cmd("cmd", "start");
+        check("offline".equals(SyncJson.s(r, "code")) && !SyncJson.b(r2, "ok") && snap(q).equals(s0) && !q.m.inGroup(), "服务器连不上：登录、注册都失败，本机不变", r);
+        String c2 = acode(node);
+        crashOn = "/v1/acct/register";
+        try { reg(q, "xiaoqiang", "huaxue2026q", c2); } catch (Killed k) { /* 模拟注册请求发出前进程被杀 */ }
+        q.restart();
+        acctCfg(q);
+        check(snap(q).equals(s0) && !q.m.inGroup() && (q.m.acct == null || !q.m.acct.in()), "注册中被杀：重启后本机不变、没有半个账号", q.m.acctState());
+        crashOn = "/v1/acct/login";
+        try { login(q, "xiaoming", "shuxue2026a"); } catch (Killed k) { /* 登录中被杀 */ }
+        q.restart();
+        acctCfg(q);
+        check(snap(q).equals(s0) && !q.m.inGroup(), "登录中被杀：重启后本机不变", q.m.acctState());
+
+        section("A3. 本机有别的数据、登录已有账号：两边合并，不覆盖、不丢（验收 A3）");
+        r = login(q, "xiaoming", "shuxue2026a");
+        check(SyncJson.b(r, "ok"), "登录", r);
+        rounds(3, q, x, p);
+        check(eq(q, x) && eq(x, p) && sameCids(q, x, p) && q.data.containsKey("zh") && q.data.containsKey("math"), "三台合并成一份：Q 的语文和 X 的数学都在", cidDiff(q, x, p));
+
+        section("A4. 已在 #1 同步组里的设备注册（把组升级成账号），组里没升级的设备照常同步，升级后输密码登录（验收 A4）");
+        Dev b1 = new Dev("acb1", "B1"), b2 = new Dev("acb2", "B2");
+        acctCfg(b1, b2);
+        Map<String, Object> j = SyncJson.obj(b1.m.nodeJoin(fixPort(invite(node), node)));
+        check(SyncJson.b(j, "ok"), "B1 用 #1 邀请码建组", j);
+        b1.put("en", "w", "B1 的英语");
+        b1.sync();
+        check(join(b1, b2), "B2 用加入码加入");
+        b2.put("en", "w2", "B2 的英语");
+        rounds(2, b1, b2);
+        String gidBefore = b1.m.g.gid();
+        r = reg(b1, "xiaohong", "yuwen2026b", acode(node));
+        check(SyncJson.b(r, "ok") && "bind".equals(SyncJson.s(r, "mode")) && SyncJson.n(r, "legacy", 0) == 1 && b1.m.g.gid().equals(gidBefore),
+            "B1 注册：组号不变（不新建组、不搬数据），B2 记为老设备", r);
+        b2.put("en", "w3", "B2 没升级时的改动");
+        rounds(2, b2, b1);
+        check(eq(b1, b2) && sameCids(b1, b2), "B2（还没登录，老设备）照常同步", cidDiff(b1, b2));
+        Map<String, Object> as = SyncJson.obj(b2.m.acctState());
+        check("xiaohong".equals(SyncJson.s(as, "prefill")) && "xiaohong".equals(SyncJson.s(as, "groupAcct")), "B2 的登录页能填好用户名（来自节点的 acct）", as);
+        String s2 = snap(b2);
+        r = login(b2, "xiaohong", "yuwen2026b");
+        check(SyncJson.b(r, "ok") && SyncJson.b(r, "same") && b2.m.g.gid().equals(gidBefore) && snap(b2).equals(s2), "B2 登录：同一个组，只拿通行证，数据和文件不动", r);
+        rounds(2, b1, b2);
+        check(eq(b1, b2) && sameCids(b1, b2), "登录后两台一致", cidDiff(b1, b2));
+        r = reg(b2, "another", "yuwen2026c", acode(node));
+        check(!SyncJson.b(r, "ok"), "已有账号的设备不能再注册", r);
+
+        section("A5. 停用账号：设备停止同步、回登录页、数据不变；启用后重新登录（验收 12）");
+        acctOp(node, "accounts.setDisabled", "user", "xiaoming", "disabled", true);
+        String sx = snap(x);
+        x.m.syncNow();
+        check("disabled".equals(x.m.acct.state) && "disabled".equals(SyncJson.s(SyncJson.obj(x.lastEvent("account")), "state")) && snap(x).equals(sx),
+            "设备收到 disabled：账号状态改为停用、发 account 事件，数据不变", x.m.acctState());
+        resetCounts();
+        x.sync();
+        check(REQS.get() == 0, "停用后不再发同步请求", REQS.get());
+        r = login(x, "xiaoming", "shuxue2026a");
+        check(!SyncJson.b(r, "ok") && SyncJson.s(r, "msg").contains("停用"), "停用时登录被拒（提示已停用）", r);
+        acctOp(node, "accounts.setDisabled", "user", "xiaoming", "disabled", false);
+        r = login(x, "xiaoming", "shuxue2026a");
+        check(SyncJson.b(r, "ok") && SyncJson.b(r, "same") && snap(x).equals(sx), "启用后重新登录：同一份数据", r);
+        for (Dev d : new Dev[]{p, q}) { d.m.syncNow(); login(d, "xiaoming", "shuxue2026a"); }
+        rounds(2, x, p, q);
+        check(sameCids(x, p, q), "三台照常同步", cidDiff(x, p, q));
+
+        section("A6. 管理员用恢复密钥重设密码：所有设备回登录页，旧密码不行、新密码登录后数据完整（验收 11）");
+        Map<String, Object> g = acctOp(node, "accounts.get", "user", "xiaoming", "wrap", true);
+        Map<String, Object> b = Account.openAdmin(REC.getPrivate(), "xiaoming", SyncCrypto.b64d(SyncJson.s(g, "wrap_admin")));
+        check(b != null && SyncCrypto.b64e(x.m.g.gk).equals(SyncJson.s(b, "gk")), "恢复私钥解开 wrap_admin，拿到的组密钥就是账号的", b == null ? null : b.keySet());
+        byte[] salt = SyncCrypto.rand(16);
+        byte[][] k = Account.keys("newpass2026x", salt, 100000);
+        acctOp(node, "accounts.resetPassword", "user", "xiaoming", "salt", SyncCrypto.b64e(salt), "iters", 100000L,
+            "auth_key", SyncCrypto.b64e(k[0]), "wrap_pw", SyncCrypto.b64e(Account.wrapPw(k[1], "xiaoming", SyncJson.canon(b))));
+        String sp = snap(p);
+        for (Dev d : new Dev[]{x, p, q}) d.m.syncNow();
+        check("relogin".equals(x.m.acct.state) && "relogin".equals(p.m.acct.state) && "relogin".equals(q.m.acct.state) && snap(p).equals(sp),
+            "三台都变成「要重新登录」，数据不变", p.m.acctState());
+        r = login(p, "xiaoming", "shuxue2026a");
+        check(!SyncJson.b(r, "ok") && "login".equals(SyncJson.s(r, "code")), "旧密码登录失败", r);
+        r = login(p, "xiaoming", "newpass2026x");
+        check(SyncJson.b(r, "ok") && SyncJson.b(r, "same"), "新密码登录成功（同一个组）", r);
+        login(x, "xiaoming", "newpass2026x");
+        login(q, "xiaoming", "newpass2026x");
+        rounds(2, x, p, q);
+        check(eq(x, p) && eq(p, q) && sameCids(x, p, q), "数据完整，三台一致", cidDiff(x, p, q));
+
+        section("A7. 移除设备：被移除的回登录页、数据还在；其它设备不受影响（验收 13）");
+        acctOp(node, "accounts.removeDevice", "user", "xiaoming", "dev", "acq");
+        String sq = snap(q);
+        q.m.syncNow();
+        x.put("math", "k9", "移除后的新改动");
+        rounds(2, x, p);
+        q.sync();
+        check("relogin".equals(q.m.acct.state) && snap(q).equals(sq) && !q.data.get("math").containsKey("k9"), "Q 回登录页，数据还在，收不到之后的新数据", q.m.acctState());
+        check(eq(x, p) && sameCids(x, p), "X、P 照常同步", cidDiff(x, p));
+
+        section("A8. 退出登录：停止同步，数据保留；再登录照常（验收 10 的一部分）");
+        Map<String, Object> lo = SyncJson.obj(p.m.acctLogout());
+        resetCounts();
+        p.sync();
+        check(SyncJson.b(lo, "ok") && "out".equals(p.m.acct.state) && REQS.get() == 0 && "out".equals(SyncJson.s(SyncJson.obj(p.lastEvent("account")), "state")),
+            "退出登录后不发请求，状态 out", lo);
+        check(!SyncJson.b(SyncJson.obj(p.m.joinOpen()), "ok") && !SyncJson.b(SyncJson.obj(p.m.leave()), "ok") && !SyncJson.b(SyncJson.obj(p.m.remove("acx800")), "ok"),
+            "账号模式下加入码、退出同步组、移除设备都不能用");
+        r = login(p, "xiaoming", "newpass2026x");
+        rounds(2, x, p);
+        check(SyncJson.b(r, "ok") && SyncJson.b(r, "same") && sameCids(x, p), "再登录：同一个组，照常同步", r);
+        p.restart();
+        acctCfg(p);
+        check(p.m.acct.in() && p.m.inGroup() && p.m.tokCache == null && p.m.acct.devToken(p.m.st) != null, "重启（自动登录）：不用再输密码，通行证从本机解开", p.m.acctState());
+        rounds(1, p);
+        check(p.state().get("status").equals("ok"), "重启后照常同步", p.m.state());
+
+        section("A9. 服务器搬家：已登录设备改地址，同组其它设备跟着改（组名单里的节点设置）");
+        r = SyncJson.obj(x.m.acctServer("127.0.0.1:" + node.port));
+        check(SyncJson.b(r, "ok") && x.m.g.node != null && ("127.0.0.1").equals(SyncJson.s(x.m.g.node, "h")), "改地址成功", r);
+        rounds(2, x, p);
+        check(SyncJson.n(p.m.g.node, "t", 0) == SyncJson.n(x.m.g.node, "t", 0), "另一台拿到新的节点设置", p.m.g.node);
+        r = SyncJson.obj(x.m.acctServer("bad host!"));
+        check(!SyncJson.b(r, "ok"), "地址格式不对被拒", r);
+
+        section("A10. 节点数据丢了：账号组用注册码重建，通行证照常（账号在 admin.db 里）");
+        node.cmd("cmd", "lose_db");
+        x.m.syncNow();
+        rounds(2, x, p);
+        check(sameCids(x, p) && x.state().get("status").equals("ok"), "重建后两台照常同步", x.m.state());
+
+        section("A11. 本机文件里没有明文密码、通行证、组密钥（验收 9）");
+        List<String> leaks = new ArrayList<>();
+        for (Dev d : new Dev[]{x, p, b1, b2}) {
+            byte[] tok = d.m.acct.devToken(d.m.st);
+            for (File f : listAll(d.dir)) {
+                String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.ISO_8859_1);
+                for (String needle : new String[]{"newpass2026x", "yuwen2026b", "shuxue2026a", SyncCrypto.b64e(tok), SyncCrypto.hex(tok), SyncCrypto.b64e(d.m.g.gk), SyncCrypto.hex(d.m.g.gk)})
+                    if (s.contains(needle)) leaks.add(d.id + ":" + f.getName());
+            }
+        }
+        check(leaks.isEmpty(), "四台设备的同步文件里搜不到密码、通行证、组密钥（原文 / hex / base64）", leaks);
+
+        section("A12. PBKDF2 和标准实现一致；密码规则");
+        byte[] s16 = SyncCrypto.rand(16);
+        check(Arrays.equals(Account.pbkdf2(SyncCrypto.utf8("密码abc123"), s16, 1000, 32), Account.jcePbkdf2(SyncCrypto.utf8("密码abc123"), s16, 1000, 32)),
+            "自己写的 PBKDF2-HMAC-SHA256 和 JCE 的结果一样");
+        long t0 = System.nanoTime();
+        Account.keys("abcdefg123", s16, Account.ITERS);
+        System.out.printf("    （电脑上 %d 次 PBKDF2 用时 %.0f 毫秒）%n", Account.ITERS, (System.nanoTime() - t0) / 1e6);
+        check(Account.pwProblem("xiaoming", "12345678") != null && Account.pwProblem("xiaoming", "password1") != null && Account.pwProblem("xiaoming", "xiaoming99") != null
+            && Account.pwProblem("xiaoming", "abcabcabc1") == null && Account.pwProblem("xiaoming", "shuxue2026a") == null, "密码规则：纯数字、常见词、含用户名都不行");
+        track(x, p, q, b1, b2);
+    }
+
     // ================================================================ 清理（真实节点：不留测试组）
 
     static void cleanup(NodeCtl node) {
@@ -1522,6 +1757,7 @@ public class SyncHarness {
             else if (args[i].equals("--python")) python = args[++i];
             else if (args[i].equals("--root")) root = new File(args[++i]);
             else if (args[i].equals("--phase1")) only1 = true;
+            else if (args[i].equals("--acct")) acctOnly = true;
         }
         if (root == null) root = new File(".").getAbsoluteFile();
         tmp = Files.createTempDirectory("km-sync-harness-").toFile();
@@ -1530,7 +1766,9 @@ public class SyncHarness {
         long t0 = System.currentTimeMillis();
         NodeCtl node = new NodeCtl(remote);
         try {
-            if (remote == null) {
+            if (acctOnly && remote == null) {
+                scenarioAccounts(node);         // --acct：只跑 #12 账号场景
+            } else if (remote == null) {
                 scenarioFaults(node);
                 scenarioNoGroup();
                 Dev[] d = scenarioCreateJoin(node, "dev");
@@ -1553,6 +1791,7 @@ public class SyncHarness {
                     scenarioLanMixed(node);
                     scenarioLanNodeDue(node);
                 }
+                scenarioAccounts(node);         // #12 账号
             } else {
                 System.out.println("真实节点 " + remote + "（临时测试邀请码，结束时删组、作废邀请码）");
                 String tag = "t" + Long.toString(System.currentTimeMillis() % 100000, 36);

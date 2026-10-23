@@ -1730,6 +1730,8 @@ public final class SyncManager {
         String user = Account.nz(SyncJson.s(q, "user")).trim().toLowerCase(java.util.Locale.ROOT);
         String pw = Account.nz(SyncJson.s(q, "pw"));
         String codeText = Account.nz(SyncJson.s(q, "code"));
+        Account cur0 = acct;
+        if (cur0 != null && cur0.in()) return SyncJson.stringify(fail("in", "这台设备已经登录了账号「" + cur0.user + "」"));
         String bad = Account.userProblem(user);
         if (bad == null) bad = Account.pwProblem(user, pw);
         if (bad != null) return SyncJson.stringify(fail("rule", bad));

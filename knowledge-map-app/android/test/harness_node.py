@@ -56,7 +56,11 @@ class Local:
     def op(self, name, args):
         with self.node.lock:
             fn = getattr(self.node, 'op_' + name.replace('.', '_'))
-            data, _, _ = fn(args, '127.0.0.1')
+            self.node.cur = {'kind': 'key', 'kid': 'harness'}     # 相当于审批 App 的管理密钥（账号恢复包只给它）
+            try:
+                data, _, _ = fn(args, '127.0.0.1')
+            finally:
+                self.node.cur = None
             self.node.ndb.commit()
             self.node.adb.commit()
             return data
@@ -65,6 +69,12 @@ class Local:
         cmd = c['cmd']
         if cmd == 'invite':
             return self.op('invites.create', {'label': LABEL, 'days': c.get('days', 7), 'uses': c.get('uses', 10)})
+        if cmd == 'acode':      # #12 注册码
+            return self.op('invites.create', {'kind': 'acct', 'label': LABEL, 'days': c.get('days', 7), 'uses': c.get('uses', 1)})
+        if cmd == 'acct':       # #12 账号管理操作 accounts.*（停用、重设密码、移除设备、取恢复包……）
+            if not c['op'].startswith('accounts.'):
+                raise ValueError('只能调 accounts.*')
+            return self.op(c['op'], c.get('args', {}))
         if cmd == 'clear':
             return self.op('groups.clear', {'gid': c['gid']})
         if cmd == 'remove':
@@ -133,6 +143,14 @@ class Remote:
             r = self.adm.ok('invites.create', {'label': LABEL, 'days': 1, 'uses': c.get('uses', 5)})
             self.invites.append(r['id'])
             return r
+        if cmd == 'acode':
+            r = self.adm.ok('invites.create', {'kind': 'acct', 'label': LABEL, 'days': 1, 'uses': c.get('uses', 1)})
+            self.invites.append(r['id'])
+            return r
+        if cmd == 'acct':
+            if not c['op'].startswith('accounts.'):
+                raise ValueError('只能调 accounts.*')
+            return self.adm.ok(c['op'], c.get('args', {}))
         if cmd == 'clear':
             return self.adm.ok('groups.clear', {'gid': c['gid']})
         if cmd == 'remove':
