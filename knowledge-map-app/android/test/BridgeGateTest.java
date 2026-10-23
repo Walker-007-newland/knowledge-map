@@ -26,7 +26,10 @@ public class BridgeGateTest {
     static final String[] TOKEN_METHODS = { "speak", "stopSpeak", "saveFile", "updatePet", "savePetImage", "pinWidget",
         "openAppSettings", "keepScreenOn", "goBack", "checkUpdate", "deviceName", "sharedGet", "sharedPut" };
     static final String[] SYNC_METHODS = { "syncState", "syncNow", "syncPublish", "syncTake", "syncAck", "nodeJoin", "nodeRemove",
-        "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm", "syncRename", "syncRemove", "syncLeave" };
+        "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm", "syncRename", "syncRemove", "syncLeave",
+        "pairOpen", "pairClose", "pairWith", "pairAddr", "pairConfirm" };
+    /** #1 第二期：局域网配对，只在设备同步页 */
+    static final String[] PAIR_METHODS = { "pairOpen", "pairClose", "pairWith", "pairAddr", "pairConfirm" };
     static final String[] FREE_METHODS = { "hello", "appVersion", "widgetCount", "widgetInfo" };
 
     public static void main(String[] args) {
@@ -134,6 +137,22 @@ public class BridgeGateTest {
         for (String m : SYNC_METHODS) ok(!g.check(bili2, m, t + 14), "B 站页面的令牌调 " + m + " 被拒");
         String fakeSync = g.issue(BridgeGate.WWW + "sync.html.evil", t + 15);
         ok(!g.check(fakeSync, "syncLeave", t + 16), "sync.html.evil 不算同步页");
+
+        System.out.println("8. #1 第二期：局域网配对接口只在设备同步页");
+        g = new BridgeGate();
+        String[] others = { BridgeGate.WWW + "index.html", DATA, BridgeGate.WWW + "pet/study.html", MAP, BridgeGate.WWW + "skills-map/notes.html", BridgeGate.WWW + "pet/index.html" };
+        long tt = t + 100000;
+        for (String pg : others) {
+            String k = g.issue(pg, tt);
+            for (String m : PAIR_METHODS) ok(!g.check(k, m, tt + 1), pg.substring(pg.lastIndexOf("www/") + 4) + " 调 " + m + " 被拒");
+            tt += 20000;                      // 避开 hello 限速
+        }
+        for (String m : PAIR_METHODS) ok(!g.check(null, m, tt), "不带令牌调 " + m + " 被拒");
+        String sk2 = g.issue(BridgeGate.WWW + "sync.html", tt + 1);
+        for (String m : PAIR_METHODS) ok(g.check(sk2, m, tt + 2), "sync.html 调 " + m + " 通过");
+        String dk = g.issue(DICT, tt + 3);
+        String bk = g.issue(BILI, tt + 5);
+        for (String m : PAIR_METHODS) ok(!g.check(dk, m, tt + 6) && !g.check(bk, m, tt + 6), "听写页、B 站页面调 " + m + " 被拒");
 
         System.out.println();
         System.out.println("通过 " + pass + "，失败 " + fail);

@@ -14,6 +14,7 @@ import java.util.Map;
  *   device.json   本设备编号、名字、长期公钥、包起来的私钥
  *   group.json    同步组：公开部分（名单、节点地址）+ sealed（gk、邀请码、旧组钥匙，用 KeyWrap 包起来）
  *   node.json     每个组的签名计数 ctr、since、gen
+ *   lan.json      局域网（第二期）：各组员上次的地址、从它那里收过的分区 rev（不含密钥）
  *   out/*.json    本机分区（内容用 KeyWrap 包起来，推送时再用组密钥加密）
  *   inbox/*.json  收到的别的设备的分区（同上包起来），每个「来源设备 + 分区」只留 rev 最大的一份
  * 写文件先写 .tmp 再改名，崩溃时不会留下半个文件。密钥只以 KeyWrap 包过的形式落盘（Android：Keystore 里不可导出的 AES 钥）。
@@ -104,5 +105,6 @@ public final class SyncStore {
         }
         delete("group.json");
         delete("node.json");
+        delete("lan.json");
     }
 }

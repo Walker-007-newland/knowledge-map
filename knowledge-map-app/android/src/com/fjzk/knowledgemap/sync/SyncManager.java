@@ -42,14 +42,18 @@ public final class SyncManager {
     final Clock clock;
     Events events;
 
-    // 本机身份
-    String dev = "", devName = "";
-    String pk = "";
-    PrivateKey sk;
+    // 本机身份（局域网服务端的线程也读，所以 volatile）
+    volatile String dev = "", devName = "";
+    volatile String pk = "";
+    volatile PrivateKey sk;
     String notice = "";            // 被移出组时给学生看的一句话
 
     volatile Group g;               // null = 没加入同步组
     volatile Join join;
+    /** 局域网直连（第二期）。没有 Env（电脑测试里没开局域网的设备）时什么也不做 */
+    final Lan lan = new Lan(this);
+    /** 组员 → 最近一次收到它的分区走的是哪条路（「局域网」/「节点」） */
+    final Map<String, String> via = new java.util.concurrent.ConcurrentHashMap<>();
 
     // 节点状态（不落盘的部分）
     volatile boolean busy;
@@ -301,12 +305,18 @@ public final class SyncManager {
         return g == null || g.node == null ? null : NodeClient.parseInvite(SyncJson.s(g.node, "inv"));
     }
 
-    /** 一轮同步：旧组信箱 → 拉取 → 信箱 → 换钥 → 推送。返回状态 JSON。 */
+    /** 一轮同步：先处理局域网收到的；节点（旧组信箱 → 拉取 → 信箱 → 换钥 → 推送）；再和局域网里的组员各同步一轮。返回状态 JSON。 */
     public synchronized String syncNow() {
+        lanProcess();
         if (g == null) { refreshState(); return stateCache; }
         NodeClient nc = client();
-        if (nc == null) { refreshState(); return stateCache; }
-        if (now() < backoffUntil) { refreshState(); return stateCache; }
+        if (nc != null && now() >= backoffUntil && !skipNode) nodeSync(nc);
+        lanSync(false);
+        refreshState();
+        return stateCache;
+    }
+
+    void nodeSync(NodeClient nc) {
         busy = true;
         lastTry = now();
         refreshState();
@@ -351,7 +361,6 @@ public final class SyncManager {
             refreshState();
         }
         if (gotInbox) emit("inbox", SyncJson.of("n", (long) inboxCount()));
-        return stateCache;
     }
 
     void fail(NodeClient.NodeError e) {
@@ -460,34 +469,72 @@ public final class SyncManager {
         return got;
     }
 
+    /** 解开的一个分区（节点、局域网收到的都一样） */
+    static final class Sec {
+        String gid, from, sec, name, content;
+        long rev, t;
+    }
+
+    /**
+     * 用 key 这把组钥匙解开一个分区 {sec, rev, data}（来源 from）：附加数据绑定组号、来源、分区编号、rev，
+     * 分区名要和编号对得上。只读钥匙，局域网服务端的线程也调。解不开返回 null
+     */
+    Sec decode(Group key, String gid, String from, Map<String, Object> it) {
+        String sec = SyncJson.s(it, "sec");
+        long rev = SyncJson.n(it, "rev", -1);
+        if (from == null || sec == null || key == null) return null;
+        byte[] box;
+        try { box = b64d(SyncJson.s(it, "data")); } catch (RuntimeException e) { return null; }
+        byte[] gz = open(key.encKey(), box, "km-sec|" + gid + "|" + from + "|" + sec + "|" + rev);
+        byte[] plain = gz == null ? null : gunzip(gz, MAX_SECTION * 4);
+        if (plain == null) return null;
+        Map<String, Object> env;
+        try { env = SyncJson.obj(str(plain)); } catch (RuntimeException e) { return null; }
+        String name = SyncJson.s(env, "n"), content = SyncJson.s(env, "c");
+        if (name == null || content == null || !key.secId(name).equals(sec)) return null;
+        Sec s = new Sec();
+        s.gid = gid;
+        s.from = from;
+        s.sec = sec;
+        s.name = name;
+        s.content = content;
+        s.rev = rev;
+        s.t = SyncJson.n(env, "t", 0);
+        return s;
+    }
+
     /** 解开一个分区：group 分区直接并进组名单，其它放进收件箱。返回收件箱有没有变化 */
     boolean receive(String gid, Map<String, Object> it) {
-        String from = SyncJson.s(it, "dev"), sec = SyncJson.s(it, "sec");
-        long rev = SyncJson.n(it, "rev", -1);
-        if (from == null || sec == null || from.equals(dev) || g.isRemoved(from)) return false;
-        byte[] box;
-        try { box = b64d(SyncJson.s(it, "data")); } catch (RuntimeException e) { return false; }
-        byte[] gz = open(g.encKey(), box, "km-sec|" + gid + "|" + from + "|" + sec + "|" + rev);
-        byte[] plain = gz == null ? null : gunzip(gz, MAX_SECTION * 4);
-        if (plain == null) return false;
-        Map<String, Object> env;
-        try { env = SyncJson.obj(str(plain)); } catch (RuntimeException e) { return false; }
-        String name = SyncJson.s(env, "n"), content = SyncJson.s(env, "c");
-        if (name == null || content == null || !g.secId(name).equals(sec)) return false;
-        long t = SyncJson.n(env, "t", 0);
-        Long old = seen.get(from);
-        if (old == null || t > old) seen.put(from, t);
-        if (Group.SECTION.equals(name)) {
-            if (g.mergeSection(content)) { g.save(st); publishGroup(); }
+        String from = SyncJson.s(it, "dev");
+        if (from == null || from.equals(dev) || g.isRemoved(from)) return false;
+        Sec s = decode(g, gid, from, it);
+        return s != null && store(s, "节点");
+    }
+
+    /** 收下一个解开的分区（同步线程）。组号必须是当前组的（中途换了钥匙的就丢掉，对方下一轮会重发） */
+    boolean store(Sec s, String route) {
+        Group gg = g;
+        if (gg == null || s.from.equals(dev) || gg.isRemoved(s.from) || !gg.gid().equals(s.gid)) return false;
+        Long old = seen.get(s.from);
+        if (old == null || s.t > old) seen.put(s.from, s.t);
+        via.put(s.from, route);
+        if (Group.SECTION.equals(s.name)) {
+            if (gg.mergeSection(s.content)) { gg.save(st); publishGroup(); }
             return false;
         }
-        String rel = fileOf("inbox", from + "|" + name);
+        String rel = fileOf("inbox", s.from + "|" + s.name);
         synchronized (st) {
             Map<String, Object> cur = st.json(rel);
-            if (cur != null && SyncJson.n(cur, "rev", 0) >= rev) return false;
-            st.putJson(rel, SyncJson.of("dev", from, "name", name, "rev", rev, "t", t, "box", b64e(st.seal(gzip(utf8(content))))));
+            if (cur != null && SyncJson.n(cur, "rev", 0) >= s.rev) return false;
+            st.putJson(rel, SyncJson.of("dev", s.from, "name", s.name, "rev", s.rev, "t", s.t, "box", b64e(st.seal(gzip(utf8(s.content))))));
         }
         return true;
+    }
+
+    /** 收件箱里 from 的 name 分区的 rev（没有返回 -1） */
+    long inboxRev(String from, String name) {
+        Map<String, Object> e = st.json(fileOf("inbox", from + "|" + name));
+        return e == null ? -1 : SyncJson.n(e, "rev", -1);
     }
 
     byte[] envelope(Group gg, String gid, String name, String content, long rev, long t) {
@@ -549,6 +596,17 @@ public final class SyncManager {
         }
     }
 
+    /**
+     * 有同步节点、上一轮没出错、没在退避，而且还有没推上去的分区：该来一轮节点同步了。
+     * 局域网收到组名单的变化（改名、移除、新组员）、换了钥匙，或推送期间网页又发布了新版本时，本机分区变了却没有人安排节点那一轮，
+     * 状态会一直停在「待同步」（#1 第二期真机验收第 2 条）；SyncService 在局域网收发和每轮同步之后用它补一轮。
+     * 节点连不上（offline）、出错时不在这里重试，交给前台定时和下次发布
+     */
+    public synchronized boolean nodeDue() {
+        if (g == null || busy || skipNode || !errCode.isEmpty() || now() < backoffUntil || client() == null) return false;
+        return pendingCount() > 0;
+    }
+
     int pendingCount() {
         if (g == null) return 0;
         String gid = g.gid();
@@ -595,7 +653,10 @@ public final class SyncManager {
         }
     }
 
-    /** 收到钥匙包，迁到新组：旧组留作 prev（看一段时间信箱），删掉自己在旧组的槽 */
+    /**
+     * 收到钥匙包，迁到新组：旧组留作 prev（看一段时间信箱），删掉自己在旧组的槽。
+     * nc = null：钥匙包是局域网里拿到的（第二期），节点上的事不做（旧组由节点 60 天后自动删）；旧钥匙照样留着，局域网里认旧钥匙用
+     */
     void adopt(NodeClient nc, byte[] ngk, long epoch, long gkT) throws IOException {
         String oldGid = g.gid();
         byte[] oldKey = g.nodeKey();
@@ -605,7 +666,9 @@ public final class SyncManager {
             p.gk = g.gk;
             p.epoch = g.epoch;
             p.role = "member";
-            p.until = now() + PREV_MEMBER_DAYS * DAY;
+            p.until = now() + PREV_REKEYER_DAYS * DAY;          // 局域网里认旧钥匙：60 天
+            p.nodeUntil = now() + PREV_MEMBER_DAYS * DAY;       // 节点上的旧组信箱：看 14 天
+            p.done = nc == null && client() == null;
             synchronized (st) { p.since = SyncJson.n(ns(nodeState(), oldGid), "since", 0); }
             g.prev.add(p);
         }
@@ -613,7 +676,7 @@ public final class SyncManager {
         if (conflict) {
             // 本机对上一代发起的换钥让给对方（对方也给所有组员投了钥匙包），不再负责删旧组
             for (Group.Prev q : g.prev) if ("rekeyer".equals(q.role) && q.epoch == epoch - 1) q.role = "member";
-            if (g.own) {
+            if (g.own && nc != null) {
                 // 当前组是本机建的，迁走后删掉（组员会先在旧组信箱里看到对方的钥匙包，跟着迁走）
                 try { nc.call(oldGid, oldKey, dev, "drop", SyncJson.map()); } catch (NodeClient.NodeError ignored) { }
                 g.prev.remove(p);
@@ -625,7 +688,8 @@ public final class SyncManager {
         g.own = false;
         g.save(st);
         resetGid(g.gid(), null);
-        try { nc.call(oldGid, oldKey, dev, "forget", SyncJson.of("dev", dev)); } catch (NodeClient.NodeError ignored) { }
+        lan.keyChanged();
+        if (nc != null) { try { nc.call(oldGid, oldKey, dev, "forget", SyncJson.of("dev", dev)); } catch (NodeClient.NodeError ignored) { } }
         emit("state", SyncJson.of("rekey", true));
     }
 
@@ -654,6 +718,7 @@ public final class SyncManager {
         p.epoch = g.epoch;
         p.role = "rekeyer";
         p.until = now() + PREV_REKEYER_DAYS * DAY;
+        p.nodeUntil = p.until;
         synchronized (st) { p.since = SyncJson.n(ns(nodeState(), oldGid), "since", 0); }
         for (String d : g.active()) if (!d.equals(dev)) p.pending.add(d);
         g.prev.add(p);
@@ -663,7 +728,32 @@ public final class SyncManager {
         g.own = true;
         g.save(st);                                     // 先落盘：投信件前崩溃的话，下一轮 checkPrev 会补投
         resetGid(newGid, null);
+        lan.keyChanged();
         deliver(nc, p, oldGid, oldKey);
+        emit("state", SyncJson.of("rekey", true));
+    }
+
+    /**
+     * 没有同步节点的组（局域网配对建的）换钥：只在本机生成新钥匙。旧钥匙留 60 天：
+     * 局域网里拿旧钥匙来的组员拿到钥匙包（409），被移出的设备拿到「已被移出」的名单（403）
+     */
+    void rekeyLocal() {
+        long maxRemoved = 0;
+        for (Group.Member m : g.members.values()) maxRemoved = Math.max(maxRemoved, m.removed);
+        Group.Prev p = new Group.Prev();
+        p.gk = g.gk;
+        p.epoch = g.epoch;
+        p.role = "rekeyer";
+        p.until = now() + PREV_REKEYER_DAYS * DAY;
+        p.nodeUntil = now();
+        p.done = true;
+        g.prev.add(p);
+        g.gk = rand(32);
+        g.epoch = p.epoch + 1;
+        g.gkT = Math.max(now(), maxRemoved + 1);
+        g.own = true;
+        g.save(st);
+        lan.keyChanged();
         emit("state", SyncJson.of("rekey", true));
     }
 
@@ -707,14 +797,17 @@ public final class SyncManager {
                 changed = true;
                 continue;
             }
+            if (p.done) continue;                         // 节点上的事做完了，旧钥匙只留给局域网认人
+            if (now() > p.nodeUntil) { p.done = true; changed = true; continue; }
             if ("rekeyer".equals(p.role)) {
                 Set<String> moved = devsOn(g.gid());
                 if (p.pending.removeAll(moved)) changed = true;
                 for (String d : new ArrayList<>(p.pending)) if (g.member(d) == null || g.member(d).removed > 0) { p.pending.remove(d); changed = true; }
                 if (p.pending.isEmpty()) {
                     // 剩下的组员都迁完了。旧组不主动 drop：留着里面那份最新名单，被移除的设备（可能好几天后才开机）
-                    // 拉旧组时才能看到「已被移出」；节点在新组建好 60 天后自动删旧组，旧组号记进墓碑，谁也不能再用邀请码重建它
-                    g.prev.remove(p);
+                    // 拉旧组时才能看到「已被移出」；节点在新组建好 60 天后自动删旧组，旧组号记进墓碑，谁也不能再用邀请码重建它。
+                    // 本机不再跟踪旧组，但旧钥匙留到 until（第二期：局域网里拿旧钥匙来的设备要靠它认出来）
+                    p.done = true;
                     changed = true;
                     continue;
                 }
@@ -733,11 +826,11 @@ public final class SyncManager {
                             nc.create(inv, gid, key);
                             resetGid(gid, null);
                             deliver(nc, p, gid, key);
-                        } catch (NodeClient.NodeError e2) { g.prev.remove(p); }
-                    } else g.prev.remove(p);
+                        } catch (NodeClient.NodeError e2) { p.done = true; }
+                    } else p.done = true;
                     changed = true;
                 } else if (e.status == 404 || e.status == 403) {
-                    g.prev.remove(p);
+                    p.done = true;
                     changed = true;
                 } else throw e;
             }
@@ -762,7 +855,376 @@ public final class SyncManager {
         notice = "这台设备已被移出同步组，本机数据还在";
         saveDevice();
         seen.clear();
+        via.clear();
+        lan.keyChanged();
+        lan.ensure();                  // 不在组里了：不再广播组标记（正可被发现时服务还开着，否则关掉）
         emit("state", SyncJson.of("removed", true));
+    }
+
+    // ================================================================ 局域网（第二期）
+
+    /** 平台部分（Android：NSD + Wi-Fi 地址）；kick：局域网服务端收到东西后让同步线程来处理（lanProcess） */
+    public void setLan(Lan.Env env, Runnable kick) {
+        lan.env = env;
+        lan.kick = kick;
+    }
+
+    /** 回到前台：在组里（或正可被发现）而且连着 Wi-Fi 时开局域网服务、广播、发现，再和已知组员同步一轮 */
+    public synchronized void lanStart() {
+        lan.active = true;
+        lanProcess();
+        lanSync(false);
+        refreshState();
+    }
+
+    /** 切到后台：关掉局域网服务、广播、发现（可被发现也一起结束） */
+    public synchronized void lanStop() {
+        lan.active = false;
+        lan.discUntil = 0;
+        lan.stop();
+        refreshState();
+    }
+
+    /** 只和局域网里的组员同步一轮（回到前台、本机发布后、发现组员、前台每 2 分钟） */
+    public synchronized void lanSync(boolean force) {
+        lanProcess();
+        if (g == null) { lan.ensure(); return; }
+        if (g.needsRekey() && client() == null) rekeyLocal();      // 没有同步节点的组：本机直接换钥，局域网里交钥匙
+        if (!lan.ensure()) { refreshState(); return; }
+        boolean got = lan.syncAll(force);
+        lanProcess();                                               // 收到的名单里本机可能已被移出
+        if (got) emit("inbox", SyncJson.of("n", (long) inboxCount()));
+        refreshState();
+    }
+
+    /** 局域网服务端线程收到的东西：写进收件箱、合并组名单、换钥、记下对方地址；配对收尾；被移出就退出 */
+    public synchronized void lanProcess() {
+        boolean got = false;
+        Lan.In in;
+        while ((in = lan.spool.poll()) != null) {
+            if (g == null) continue;
+            try {
+                if ("sec".equals(in.t)) { if (store(in.x, "局域网")) got = true; }
+                else if ("key".equals(in.t)) lanTakeKey(in.from, in.gid, in.pkg);
+                else if ("addr".equals(in.t)) lan.savePeer(in.from, in.host, in.port);
+            } catch (RuntimeException e) { noteError("局域网", e); }
+        }
+        pairServerFinish();
+        if (g != null && g.isRemoved(dev)) becomeRemoved();
+        if (lan.active) lan.ensure();
+        if (got) emit("inbox", SyncJson.of("n", (long) inboxCount()));
+        refreshState();
+    }
+
+    /**
+     * 局域网里收到组员给的钥匙包（本机换钥时不在，或同一代两把钥匙）。
+     * 返回 1 = 换上了新钥匙；0 = 本机的更新（应该把本机的给对方）；2 = 一样；-1 = 解不开 / 来源不对
+     */
+    int lanTakeKey(String from, String oldGid, String text) {
+        if (g == null || text == null || from == null || sk == null) return -1;
+        Group.Member fm = g.member(from);
+        if (fm == null || fm.pk.isEmpty() || fm.removed > 0) return -1;
+        Map<String, Object> k = Group.openKeyPackage(sk, fm.pk, from, dev, oldGid, text);
+        if (k == null) return -1;
+        byte[] ngk = b64d(SyncJson.s(k, "gk"));
+        long ep = SyncJson.n(k, "epoch", 0), gkT = SyncJson.n(k, "gkT", 0);
+        if (same(ngk, g.gk)) return 2;
+        boolean newer = ep > g.epoch || (ep == g.epoch && Group.fpOf(ngk).compareTo(g.fp()) < 0);
+        if (!newer) return 0;
+        try { adopt(null, ngk, ep, gkT); } catch (IOException e) { return -1; }
+        if (lan.active) lan.ensure();
+        return 1;
+    }
+
+    /** 组员说本机已被移出（403 removed），附一份用本机当前钥匙加密的名单：验真后并进来，名单上确实移出了就退出 */
+    void lanRemovedNotice(byte[] k, String from, Map<String, Object> item) {
+        if (g == null || item == null || from == null || !same(k, g.gk)) return;
+        Sec s = decode(g, g.gid(), from, item);
+        if (s == null || !Group.SECTION.equals(s.name)) return;
+        if (g.mergeSection(s.content)) g.save(st);
+        if (g.isRemoved(dev)) becomeRemoved();
+    }
+
+    /** 测试用：这台设备这一轮不连同步节点（模拟只在局域网里的设备） */
+    volatile boolean skipNode;
+
+    /** 测试用：只和一个地址同步一轮（harness 按指定的两台两两同步）。返回对方设备号 */
+    synchronized String lanWith(String host, int port) {
+        lanProcess();
+        if (g == null) return null;
+        if (g.needsRekey() && client() == null) rekeyLocal();
+        int[] n = new int[1];
+        String d = lan.ensure() ? lan.round(host, port, n) : null;
+        lanProcess();
+        if (n[0] > 0) emit("inbox", SyncJson.of("n", (long) inboxCount()));
+        refreshState();
+        return d;
+    }
+
+    public synchronized boolean lanFound(String service, String host, int port, Map<String, String> txt) {
+        boolean r = lan.found(service, host, port, txt);
+        refreshState();
+        return r;
+    }
+
+    public synchronized void lanLost(String service) { lan.lost(service); refreshState(); }
+
+    // ---------------------------------------------------------------- 局域网配对
+
+    /** 进入「可被发现」3 分钟：开局域网服务、广播设备名，列出附近同样在「添加设备」的设备。返回 {ok, addr, exp, list} */
+    public synchronized String pairOpen() {
+        if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
+        if (lan.env == null) return res(false, "这台设备用不了局域网配对，请用「扫加入码」");
+        String a;
+        try { a = lan.env.address(); } catch (RuntimeException e) { a = null; }
+        if (a == null) return res(false, "没连 Wi-Fi：局域网配对要两台设备连同一个 Wi-Fi（也可以一台开手机热点，另一台连上去）");
+        ensureKey();
+        lan.active = true;
+        lan.discUntil = now() + Lan.DISCOVERABLE;
+        lan.fails.set(0);
+        if (!lan.ensure()) {
+            lan.discUntil = 0;
+            return res(false, lan.err.isEmpty() ? "局域网服务开不了，请稍后再试" : lan.err);
+        }
+        refreshState();
+        Map<String, Object> r = SyncJson.of("ok", true, "addr", lan.addr(), "exp", lan.discUntil, "list", lan.nearbyList());
+        emit("pair-open", r);
+        return SyncJson.stringify(r);
+    }
+
+    /** 退出「可被发现」（点了关闭、3 分钟到了、配对成功） */
+    public synchronized void pairClose() {
+        lan.discUntil = 0;
+        Pairing p = lan.serverPair;
+        if (p != null && !p.finished) p.phase = "failed";
+        lan.serverPair = null;
+        if (lan.active) lan.ensure();
+        refreshState();
+    }
+
+    /** 定时检查：3 分钟到了就退出可被发现 */
+    public synchronized void pairTick() {
+        if (lan.discUntil > 0 && now() > lan.discUntil) {
+            pairClose();
+            emit("pair-close", SyncJson.of("msg", "3 分钟到了，已停止被发现。要再配对，请重新点「添加设备」"));
+        }
+    }
+
+    /** 点「附近的设备」里的一台 */
+    public synchronized String pairWith(String key) {
+        Map<String, Object> e = key == null ? null : lan.nearby.get(key);
+        if (e == null) return res(false, "这台设备已经不在附近了，请刷新后再试，或手动输入它的地址");
+        return pairAddr(SyncJson.s(e, "h") + ":" + SyncJson.n(e, "p", 0));
+    }
+
+    /** 手动输入对方地址（如 192.168.1.23:47811，不写端口就用 47811）：pair/1、pair/2，两边显示确认码 */
+    public synchronized String pairAddr(String text) {
+        if (dev.isEmpty()) return res(false, "请先回到总入口再打开设备同步（本机还没有设备编号）");
+        if (lan.env == null) return res(false, "这台设备用不了局域网配对，请用「扫加入码」");
+        java.util.regex.Matcher mt = java.util.regex.Pattern.compile("^\\s*([0-9]{1,3}(?:\\.[0-9]{1,3}){3}|[A-Za-z0-9.-]{1,253})(?:\\s*[:：]\\s*(\\d{1,5}))?\\s*$")
+            .matcher(text == null ? "" : text);
+        if (!mt.find()) return res(false, "地址格式不对，应该像 192.168.1.23:47811（看对方设备「添加设备」里显示的「本机地址」）");
+        int port = mt.group(2) == null ? Lan.PORT : Integer.parseInt(mt.group(2));
+        if (port < 1 || port > 65535) return res(false, "端口不对");
+        Pairing old = lan.clientPair;
+        if (old != null && "wait".equals(old.phase)) old.phase = "failed";
+        ensureKey();
+        try {
+            Pairing p = lan.pairStart(mt.group(1), port);
+            lan.clientPair = p;
+            lan.asking = p;
+            emit("pair-request", SyncJson.of("role", "client", "name", p.peerName, "code", p.code));
+            return SyncJson.stringify(SyncJson.of("ok", true, "name", p.peerName, "code", p.code));
+        } catch (Lan.PairError e) {
+            lan.clientPair = null;
+            return res(false, e.getMessage());
+        }
+    }
+
+    /** 学生核对确认码后点「数字一样，配对」/「不一样」。返回 {ok, msg, poll（要继续问对方）} */
+    public synchronized String pairConfirm(boolean ok) {
+        Pairing a = lan.asking;                 // 页面上弹的是最近一次的确认码
+        if (a != null && "wait".equals(a.phase) && !a.meOk && (a == lan.clientPair || a == lan.serverPair))
+            return a.client ? clientConfirm(a, ok) : serverConfirm(a, ok);
+        Pairing c = lan.clientPair;
+        if (c != null && "wait".equals(c.phase) && !c.meOk) return clientConfirm(c, ok);
+        Pairing s = lan.serverPair;
+        if (s != null && "wait".equals(s.phase) && !s.meOk) return serverConfirm(s, ok);
+        return res(false, "没有等待确认的配对");
+    }
+
+    String pairFailed(Pairing p, String role, String msg) {
+        p.phase = "failed";
+        p.msg = msg;
+        if (p.client) lan.clientPair = null;
+        emit("pair-result", SyncJson.of("ok", false, "role", role, "name", p.peerName, "msg", msg));
+        return res(false, msg);
+    }
+
+    /** 给对方的组包：本机的组（或两台都没组时新建的组）加上对方 */
+    Group groupFor(Pairing p) {
+        Group ng;
+        if (g != null) ng = g.copy();
+        else {
+            ng = Group.create(now());
+            ng.addMember(dev, devName, pk, now());
+        }
+        Group.Member pm = ng.addMember(p.peerDev, p.peerName, p.peerPk, now());
+        if (pm.removed > 0) throw new IllegalStateException("「" + p.peerName + "」以前被移出过，不能再用同一个编号加入");
+        if (!pm.pk.equals(p.peerPk)) throw new IllegalStateException("「" + p.peerName + "」的钥匙和名单里的不一样，请在那台设备上先退出同步组再配对");
+        return ng;
+    }
+
+    String serverConfirm(Pairing p, boolean ok) {
+        synchronized (p) {
+            if (!ok) {
+                p.phase = "denied";
+                p.msg = "已取消，没有配对";
+                emit("pair-result", SyncJson.of("ok", false, "role", "server", "name", p.peerName, "msg", p.msg));
+                lan.pairFail(p.msg);
+                return res(true, p.msg);
+            }
+            if (p.expired(now())) return pairFailed(p, "server", "配对超时了（2 分钟），请重新配对");
+            if (p.giver) {
+                if (g == null) return pairFailed(p, "server", "这台设备已经不在同步组里了，请重新配对");
+                try { p.outPkg = p.sealPkg(groupFor(p).packageJson()); }
+                catch (IllegalStateException e) { return pairFailed(p, "server", e.getMessage()); }
+            }
+            p.meOk = true;
+        }
+        pairServerFinish();
+        return SyncJson.stringify(SyncJson.of("ok", true, "msg", p.finished ? p.msg : "等「" + p.peerName + "」上也点「数字一样」…"));
+    }
+
+    /** 服务端（B）：两边都确认了 → 有组的把对方加进名单，没组的装上对方给的组包 */
+    void pairServerFinish() {
+        Pairing p = lan.serverPair;
+        if (p == null || p.finished) return;
+        synchronized (p) {
+            if (!p.meOk || !p.peerOk || !"wait".equals(p.phase)) return;
+            p.finished = true;
+        }
+        boolean first;
+        if (p.giver) {
+            if (g == null) { pairFailed(p, "server", "这台设备已经不在同步组里了，请重新配对"); return; }
+            g.addMember(p.peerDev, p.peerName, p.peerPk, now());
+            g.save(st);
+            publishGroup();
+            first = false;
+        } else {
+            String pkg = p.inPkg == null ? null : p.openPkg(p.inPkg);
+            if (pkg == null || !install(pkg)) { pairFailed(p, "server", "对方给的同步钥匙解不开，请重新配对"); return; }
+            first = true;
+        }
+        p.phase = "done";
+        p.msg = "已和「" + p.peerName + "」配对";
+        lan.discUntil = 0;                 // 配对成功就不再被发现
+        lan.ensure();
+        refreshState();
+        emit("pair-result", SyncJson.of("ok", true, "role", "server", "name", p.peerName, "first", first, "msg", p.msg + (first ? "，正在第一次同步…" : "")));
+    }
+
+    String clientConfirm(Pairing p, boolean ok) {
+        if (!ok) {
+            p.phase = "denied";
+            lan.clientPair = null;
+            try { lan.pairSend(p, SyncJson.of("deny", true)); } catch (IOException ignored) { }
+            emit("pair-result", SyncJson.of("ok", false, "role", "client", "name", p.peerName, "msg", "已取消，没有配对"));
+            return res(true, "已取消，没有配对");
+        }
+        if (p.expired(now())) return pairFailed(p, "client", "配对超时了（2 分钟），请重新配对");
+        if (p.giver) {
+            if (g == null) ensureKey();
+            try {
+                p.newGroup = groupFor(p);
+                p.outPkg = p.sealPkg(p.newGroup.packageJson());
+            } catch (IllegalStateException e) { return pairFailed(p, "client", e.getMessage()); }
+        }
+        p.meOk = true;
+        Map<String, Object> body = SyncJson.of("mac", b64e(p.myMac()));
+        if (p.outPkg != null) body.put("pkg", b64e(p.outPkg));
+        return clientExchange(p, body);
+    }
+
+    String clientExchange(Pairing p, Map<String, Object> body) {
+        Lan.R r;
+        try { r = lan.pairSend(p, body); }
+        catch (IOException e) { return SyncJson.stringify(SyncJson.of("ok", true, "poll", true, "msg", "连接不稳，正在重试…")); }
+        String state = SyncJson.s(r.j, "state");
+        if (r.status != 200 || "denied".equals(state)) {
+            String msg = r.status == 403 ? "配对没有通过校验（可能有人冒充），已取消。请重新配对"
+                : r.status == 410 ? "对方那边的配对已经结束了，请重新配对"
+                : "「" + p.peerName + "」上点了「不一样」，没有配对";
+            p.phase = "denied";
+            return pairFailed(p, "client", msg);
+        }
+        if ("ok".equals(state)) return clientFinish(p, r.j);
+        return SyncJson.stringify(SyncJson.of("ok", true, "poll", true, "msg", "等「" + p.peerName + "」上也点「数字一样」…"));
+    }
+
+    /** 客户端（A）点了确认、对方还没点：适配层定时来问。返回下一次的间隔毫秒，-1 = 不用再问 */
+    public synchronized long pairPoll() {
+        Pairing p = lan.clientPair;
+        if (p == null || !"wait".equals(p.phase) || !p.meOk) return -1;
+        if (p.expired(now())) { pairFailed(p, "client", "「" + p.peerName + "」没有在 2 分钟内确认，已取消。请重新配对"); return -1; }
+        return SyncJson.b(SyncJson.obj(clientExchange(p, SyncJson.map())), "poll") ? 1500 : -1;
+    }
+
+    String clientFinish(Pairing p, Map<String, Object> j) {
+        byte[] mb;
+        try { mb = b64d(SyncJson.s(j, "mac")); } catch (RuntimeException e) { mb = null; }
+        if (!p.checkPeerMac(mb)) return pairFailed(p, "client", "配对没有通过校验（可能有人冒充），已取消。请重新配对");
+        boolean first;
+        if (p.giver) {
+            if (g == null) {
+                if (p.newGroup == null || p.newGroup.member(dev) == null) return pairFailed(p, "client", "配对出错了，请重新配对");
+                g = p.newGroup;
+                notice = "";
+                saveDevice();
+                g.save(st);
+                resetGid(g.gid(), null);
+                publishGroup();
+                lan.keyChanged();
+                first = true;
+            } else {
+                g.addMember(p.peerDev, p.peerName, p.peerPk, now());
+                g.save(st);
+                publishGroup();
+                first = false;
+            }
+        } else {
+            String pkg = null;
+            try { pkg = p.openPkg(b64d(SyncJson.s(j, "pkg"))); } catch (RuntimeException ignored) { }
+            if (pkg == null || !install(pkg)) return pairFailed(p, "client", "对方给的同步钥匙解不开，请重新配对");
+            first = true;
+        }
+        p.phase = "done";
+        p.finished = true;
+        lan.clientPair = null;
+        lan.savePeer(p.peerDev, p.peerHost, p.peerPort);
+        lan.discUntil = 0;                 // 配对成功就不再被发现
+        lan.ensure();
+        refreshState();
+        String msg = "已和「" + p.peerName + "」配对" + (first ? "，正在第一次同步…" : "");
+        emit("pair-result", SyncJson.of("ok", true, "role", "client", "name", p.peerName, "first", first, "msg", msg));
+        return SyncJson.stringify(SyncJson.of("ok", true, "msg", msg));
+    }
+
+    /** 装上别的设备给的组包（加入码、局域网配对都用）：名单里要有本机、而且是本机的公钥 */
+    boolean install(String pkg) {
+        Group ng;
+        try { ng = Group.fromPackage(pkg); } catch (RuntimeException e) { return false; }
+        Group.Member me = ng.member(dev);
+        if (me == null || !pk.equals(me.pk)) return false;
+        g = ng;
+        notice = "";
+        saveDevice();
+        g.save(st);
+        resetGid(g.gid(), null);
+        publishGroup();
+        lan.keyChanged();
+        lan.ensure();
+        return true;
     }
 
     // ================================================================ 建组、节点设置
@@ -799,6 +1261,7 @@ public final class SyncManager {
         errMsg = "";
         backoffUntil = 0;
         publishGroup();
+        if (fresh) { lan.keyChanged(); lan.ensure(); }
         refreshState();
         emit("state", SyncJson.of("joined", fresh));
         return res(true, fresh ? "已建好同步组" : "已更新同步节点");
@@ -863,10 +1326,16 @@ public final class SyncManager {
                 pushAll(nc);           // 槽留着：组员要从这里看到「已退出」，换钥时会删掉它
             } catch (IOException | NodeClient.NodeError ignored) { /* 连不上也照样退出；组员下次看到名单再换钥 */ }
         }
+        if (lan.active) {
+            try { lan.syncAll(true); } catch (RuntimeException ignored) { }   // 局域网里在线的组员也马上拿到名单
+        }
         g = null;
         join = null;
         st.wipeGroup();
         seen.clear();
+        via.clear();
+        lan.keyChanged();
+        lan.ensure();
         notice = "";
         saveDevice();
         refreshState();
@@ -962,6 +1431,12 @@ public final class SyncManager {
         } catch (IOException e) {
             return res(false, "同步节点连不上，请检查网络后再点一次确认");
         } catch (NodeClient.NodeError e) {
+            if (e.status == 413) {
+                // 转交点被塞满了（PROTOCOL.md：每个转交点最多 8 条、16KB），组包放不进去：这张加入码用不了了
+                j.phase = "closed";
+                j.msg = "这张加入码已失效（被别的消息占满了），请点「添加设备」重新生成一张";
+                return res(false, j.msg);
+            }
             return res(false, "同步节点出错（" + e.status + " " + e.err + "）");
         }
         j.phase = "done";
@@ -1009,6 +1484,13 @@ public final class SyncManager {
                     }
                     return 3000;
                 }
+                if (1 + bs.size() >= Join.RDV_MSGS) {
+                    // 认出了真设备，但转交点已经满了（a 边的 ① + b 边 7 条）：确认后组包 ③ 放不进去，不如现在就说清楚
+                    j.phase = "full";
+                    j.msg = "这张加入码已失效（被别的消息占满了），请点「添加设备」重新生成一张";
+                    emit("join-result", SyncJson.of("ok", false, "role", "host", "msg", j.msg));
+                    return -1;
+                }
                 j.peerDev = SyncJson.s(c, "dev");
                 j.peerName = SyncJson.s(c, "name");
                 j.peerPk = SyncJson.s(c, "pk");
@@ -1041,16 +1523,7 @@ public final class SyncManager {
     }
 
     void installGroup(String pkg, Join j) {
-        Group ng;
-        try { ng = Group.fromPackage(pkg); } catch (RuntimeException e) { return; }
-        Group.Member me = ng.member(dev);
-        if (me == null || !pk.equals(me.pk)) return;
-        g = ng;
-        notice = "";
-        saveDevice();
-        g.save(st);
-        resetGid(g.gid(), null);
-        publishGroup();
+        if (!install(pkg)) return;
         j.phase = "done";
         j.msg = "已加入「" + j.peerName + "」的同步组";
         refreshState();
@@ -1079,13 +1552,17 @@ public final class SyncManager {
         s.put("notice", notice);
         s.put("me", SyncJson.of("dev", dev, "name", devName));
         List<Object> ms = new ArrayList<>();
-        int inbox = 0, pending = 0;
+        int inbox = 0, pending = 0, lanPending = 0;
+        boolean nodeOn = false;
         if (g != null) {
+            nodeOn = g.node != null && !SyncJson.b(g.node, "off");
             for (Map.Entry<String, Group.Member> e : g.members.entrySet()) {
                 Group.Member m = e.getValue();
                 if (m.removed > 0) continue;
                 Long last = seen.get(e.getKey());
-                ms.add(SyncJson.of("dev", e.getKey(), "name", m.name, "me", e.getKey().equals(dev), "last", last == null ? 0L : last, "via", "节点"));
+                String route = via.get(e.getKey());
+                ms.add(SyncJson.of("dev", e.getKey(), "name", m.name, "me", e.getKey().equals(dev), "last", last == null ? 0L : last,
+                    "via", route != null ? route : nodeOn ? "节点" : "局域网", "near", !e.getKey().equals(dev) && lan.isOnline(e.getKey())));
             }
             Map<String, Object> n = g.node;
             s.put("node", n == null ? null : SyncJson.of("h", SyncJson.s(n, "h"), "p", SyncJson.n(n, "p", 0), "off", SyncJson.b(n, "off"),
@@ -1093,17 +1570,38 @@ public final class SyncManager {
             s.put("epoch", g.epoch);
             inbox = inboxCount();
             pending = pendingCount();
+            if (lan.env != null) lanPending = lan.pendingCount();
         }
         s.put("members", ms);
         s.put("inbox", (long) inbox);
-        s.put("pending", (long) pending);
+        // 有同步节点时「待推」看节点；只有局域网时看有没有交给过任何一台组员
+        s.put("pending", (long) (nodeOn ? pending : lanPending));
+        long lanOk = lan.lastOk;
+        boolean lanRecent = lanOk > 0 && now() - lanOk < 10 * 60 * 1000L;
         String eMsg = errMsg;
         if (!localErr.isEmpty() && (errCode.isEmpty() || errCode.equals("offline"))) eMsg = localErr;
-        String status = g == null ? "none" : busy ? "syncing" : !localErr.isEmpty() && errCode.isEmpty() ? "error" : !errCode.isEmpty() ? (errCode.equals("offline") ? "offline" : "error")
-            : pending > 0 || inbox > 0 ? "pending" : lastOk > 0 ? "ok" : "pending";
+        String status;
+        if (g == null) status = "none";
+        else if (busy) status = "syncing";
+        else if (!localErr.isEmpty() && errCode.isEmpty()) status = "error";
+        else if (errCode.equals("offline")) {
+            // 节点连不上，但局域网刚同步过、本机改动都交出去了：照样算「已同步」，提示里说清楚
+            if (lanRecent && lanPending == 0 && inbox == 0 && localErr.isEmpty()) { status = "ok"; eMsg = "同步节点连不上，局域网同步照常"; }
+            else status = "offline";
+        }
+        else if (!errCode.isEmpty()) status = "error";
+        else if ((nodeOn ? pending : lanPending) > 0 || inbox > 0) status = "pending";
+        else status = lastOk > 0 || lanOk > 0 ? "ok" : "pending";
         s.put("status", status);
         s.put("error", eMsg);
-        s.put("lastOk", lastOk);
+        s.put("lastOk", Math.max(lastOk, lanOk));
+        if (lan.env != null) {
+            String a = lan.addr();
+            Map<String, Object> l = SyncJson.of("on", !a.isEmpty(), "addr", a, "disc", lan.discoverable() ? lan.discUntil : 0L,
+                "online", lan.onlineList(), "nearby", lan.nearbyList(), "lastOk", lanOk);
+            if (!lan.err.isEmpty()) l.put("error", lan.err);
+            s.put("lan", l);
+        }
         String old = stateCache;
         stateCache = SyncJson.stringify(s);
         if (!stateCache.equals(old)) emit("state", s);

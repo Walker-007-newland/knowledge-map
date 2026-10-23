@@ -41,7 +41,9 @@
   ['speak', 'stopSpeak', 'saveFile', 'updatePet', 'savePetImage', 'keepScreenOn', 'goBack', 'checkUpdate', 'openAppSettings', 'sharedPut',
     // #1 设备同步：没有返回值，结果经 window.__kmSyncEvent 事件回来
     'syncNow', 'syncPublish', 'syncAck', 'nodeJoin', 'nodeRemove', 'joinOpen', 'joinClose', 'joinScan', 'joinConfirm',
-    'syncRename', 'syncRemove', 'syncLeave'].forEach(function (m) {
+    'syncRename', 'syncRemove', 'syncLeave',
+    // #1 第二期：局域网配对
+    'pairOpen', 'pairClose', 'pairWith', 'pairAddr', 'pairConfirm'].forEach(function (m) {
     if (B[m]) A[m] = function () {
       var args = Array.prototype.slice.call(arguments);
       if (token) call(m, args); else queue.push([m, args]);

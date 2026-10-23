@@ -80,7 +80,7 @@
 <script>
   // 单元单词：内置课本词表，走 file://（和图谱同一个存储空间）
   document.getElementById('btnWords').onclick = function () { location.href = 'words.html'; };
-  // 单词听写：平板 App 里要走 https 虚拟地址（识别引擎在 file:// 下用不了），浏览器里直接打开
+  // 单词听写：平板 App 里走 https 虚拟地址（词单存在那个地址的 localStorage 里），浏览器里直接打开
   document.getElementById('btnDictation').onclick = function () {
     location.href = window.KMApp && KMApp.goBack
       ? 'https://appassets.androidplatform.net/english-map/dictation.html' : 'dictation.html';

@@ -53,10 +53,15 @@ public final class Group {
         }
     }
 
-    /** 换钥后的旧组：rekeyer = 本机发起的换钥，等组员迁完再 drop；member = 本机是跟着迁过来的，只看一段时间信箱 */
+    /**
+     * 换钥后的旧组：rekeyer = 本机发起的换钥，等组员迁完；member = 本机是跟着迁过来的，只看一段时间信箱。
+     * done = 节点上的事做完了（组员都迁了 / 不再看信箱），但旧钥匙留到 until：局域网里还拿旧钥匙来的设备，
+     * 要靠它认出来——落后的组员给钥匙包，被移出的设备告诉它「已被移出」（第二期）
+     */
     public static final class Prev {
         public byte[] gk;
-        public long epoch, until, since;
+        public long epoch, until, since, nodeUntil;
+        public boolean done;
         public String role = "member";
         public final TreeSet<String> pending = new TreeSet<>();
         public final List<String> mails = new ArrayList<>();       // rekeyer：已投的信件编号
@@ -65,7 +70,7 @@ public final class Group {
 
         Map<String, Object> json() {
             return SyncJson.of("gk", b64e(gk), "epoch", epoch, "until", until, "since", since, "role", role,
-                "pending", new ArrayList<Object>(pending), "mails", new ArrayList<Object>(mails));
+                "pending", new ArrayList<Object>(pending), "mails", new ArrayList<Object>(mails), "done", done, "nodeUntil", nodeUntil);
         }
 
         static Prev from(Map<String, Object> m) {
@@ -73,6 +78,8 @@ public final class Group {
             p.gk = b64d(SyncJson.s(m, "gk"));
             p.epoch = SyncJson.n(m, "epoch", 0);
             p.until = SyncJson.n(m, "until", 0);
+            p.nodeUntil = SyncJson.n(m, "nodeUntil", p.until);       // 第一期留下的：节点上的事一直做到 until
+            p.done = SyncJson.b(m, "done");
             p.since = SyncJson.n(m, "since", 0);
             p.role = nz(SyncJson.s(m, "role"));
             List<Object> l = SyncJson.l(m.get("pending"));
@@ -104,6 +111,19 @@ public final class Group {
     public byte[] idKey() { return hkdf(gk, SALT, "id", 32); }
     public static String fpOf(byte[] gk) { return hex(head(sha256(cat(utf8("km-fp"), gk)), 8)); }
     public String fp() { return fpOf(gk); }
+    /** 局域网签名钥（第二期）：组员之间直连的每个请求都用它签名 */
+    public static byte[] lanKeyOf(byte[] gk) { return hkdf(gk, SALT, "lan", 32); }
+    /**
+     * 局域网广播里的组标记：HMAC(lanKey, 日期) 前 4 字节，每天变一次，只有自己组的设备认得出来（NSD 服务名本身是随机的 km-xxxx）
+     * day = UTC 日期 yyyy-MM-dd
+     */
+    public static String tagOf(byte[] gk, String day) { return hex(head(hmac(lanKeyOf(gk), "tag|" + day), 4)); }
+
+    /**
+     * 只读快照：每次 save() 时在改动的那个线程里复制一份。局域网服务端的线程只读快照（组号、各代钥匙、名单），
+     * 不碰正在被同步线程修改的 g，也不用等同步线程的锁（两台设备同时互相同步时不会互相卡住）
+     */
+    public volatile Group snap;
 
     /** 分区在节点上的编号：看不出分区名 */
     public String secId(String name) { return b64e(head(hmac(idKey(), "sec|" + name), 16)); }
@@ -211,6 +231,7 @@ public final class Group {
     public void save(SyncStore st) {
         byte[] box = st.seal(utf8(SyncJson.stringify(json())));
         st.putJson("group.json", SyncJson.of("v", 1L, "box", b64e(box)));
+        snap = copy();
     }
 
     /** 没有组、或 Keystore 钥匙丢了（解不开）返回 null */
@@ -220,7 +241,9 @@ public final class Group {
         try {
             byte[] plain = st.open(b64d(SyncJson.s(f, "box")));
             if (plain == null) return null;
-            return from(SyncJson.obj(str(plain)));
+            Group g = from(SyncJson.obj(str(plain)));
+            g.snap = g.copy();
+            return g;
         } catch (RuntimeException e) { return null; }       // 文件坏了：当作钥匙读不出来
     }
 

@@ -29,16 +29,12 @@ body.dict main { display: block; flex: none; width: min(860px, 100%); margin: 0 
   background: var(--surface); color: var(--text); font-size: 16px; min-width: 0;
 }
 .field input:focus, .wrow input:focus, .run-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.ocr-status { margin-top: 12px; }
-.ocr-status[hidden] { display: none; }
-.ocr-text { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
 .bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .2s linear; }
 .word-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .word-head span { flex: 1; font-weight: 600; }
 .wrow { display: grid; grid-template-columns: 28px minmax(0, 1.1fr) minmax(0, 1fr) 40px 40px; gap: 8px; align-items: center; padding: 6px 4px; border-radius: 10px; }
 .wrow + .wrow { border-top: 1px dashed var(--line); }
-.wrow.doubt { background: var(--warn-bg); }
 .wrow.off input[type=text] { opacity: .45; text-decoration: line-through; }
 .wrow input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
 .wrow input.en { font-family: "Segoe UI", Roboto, Arial, sans-serif; }

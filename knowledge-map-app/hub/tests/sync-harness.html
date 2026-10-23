@@ -133,6 +133,85 @@
     ok(sameData(), label + '三台的学习数据完全一样');
   }
 
+  /* ---------- #1 第二期真机第 4 轮：两台都在前台时无限互推 ----------
+   * A 用邀请码建节点组，B 经局域网配对加入；两台各开一个真的总入口 hub/index.html（两个端口 = 两份 localStorage，
+   * 真 km-data.js / km-sync.js / 总入口的 km-sync-merged 监听），每一轮：局域网交换 → 节点同步 → 总入口合并收件箱、数据变了就发布 → 节点同步。
+   * 同一份分区先经局域网、再经节点各到一次。预热几轮之后两台数据一致，再跑 6 轮：不能再有新版本（发布）、节点 push、局域网 put */
+  const frames = {};
+  const waiters = {};
+  window.addEventListener('message', e => {
+    const m = e.data;
+    if (!m || !m.d) return;
+    const w = waiters[m.op + m.d];
+    if (w) { delete waiters[m.op + m.d]; w(m); }
+  });
+  const waitMsg = (op, d, ms) => new Promise((res, rej) => {
+    const t = setTimeout(() => { delete waiters[op + d]; rej(new Error(d + ' 没有回 ' + op)); }, ms || 15000);
+    waiters[op + d] = m => { clearTimeout(t); res(m); };
+  });
+  async function openHub(d, port) {
+    if (frames[d]) frames[d].remove();
+    const f = document.createElement('iframe');
+    f.style.cssText = 'width:420px;height:260px;border:1px solid #888;margin:4px';
+    f.title = '总入口 ' + d;
+    const ready = waitMsg('ready', d);
+    f.src = location.protocol + '//' + location.hostname + ':' + port + '/hub/index.html?harness=' + d + '&t=' + Date.now();
+    document.body.appendChild(f);
+    frames[d] = f;
+    await ready;
+  }
+  async function hubVisit(d) {
+    const p = waitMsg('visited', d);
+    frames[d].contentWindow.postMessage({ op: 'visit' }, '*');
+    return p;
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  /** 一台的一轮：局域网 → 节点 → 总入口合并并发布 → 局域网 → 节点（App 里：收件后发 inbox 事件、发布后 0.8 秒局域网、10 秒节点） */
+  async function hubRound(d) {
+    await api('lan', d);
+    await api('sync', d);
+    const v = await hubVisit(d);
+    await api('lan', d);
+    await api('sync', d);
+    await sleep(15);           // 让总入口里的 Date.now() 往前走（真机上两轮之间隔几秒）
+    return v;
+  }
+  async function loopTest() {
+    const r = await api('resetLan');
+    ok(r.ok, '准备：A 用邀请码建节点组，B 经局域网配对加入，B 也有同步节点设置');
+    if (!r.ok) return;
+    ids = r.ids;
+    const now = Date.now();
+    // 真机第 4 轮的数据：X800（A）领养了柴犬「Xdog」，P70（B）学了语文一个知识点
+    await api('pageSeedPut', 'A', { device: { id: ids.A, name: 'newland X800' },
+      keys: { 'km-pet-v1': { breed: 'shiba', name: 'Xdog', born: now - 3600000, tick: now - 3600000, fullness: 70, bones: 0, xp: 0, claimed: {}, owned: [], equip: {},
+        petDay: '', petCount: 0, lastStudy: 0, spent: {}, legacy: {}, nameT: now - 3600000, equipT: now - 3600000 } },
+      meta: { 'km-pet-v1': { '*': { t: now - 3600000, by: ids.A } } } });
+    await api('pageSeedPut', 'B', { device: { id: ids.B, name: 'Newland P70' },
+      keys: { 'fjzk-zh-progress-v1': { z1: { viewed: now - 600000, best: 0, last: null, attempts: 0, updated: now - 600000 } } },
+      meta: { 'fjzk-zh-progress-v1': { z1: { t: now - 600000, by: ids.B } } } });
+    const port = +location.port;
+    await openHub('A', port);
+    await openHub('B', port + 1);
+    let last = {};
+    for (let i = 0; i < 4; i++) for (const d of ['A', 'B']) last[d] = await hubRound(d);
+    ok(last.A.keys === last.B.keys, '预热 4 轮后两台总入口的学习数据一样（A 的小狗到了 B，B 的语文到了 A）');
+    ok(JSON.parse(last.B.pet || '{}').name === 'Xdog', 'B 上有 A 的小狗「Xdog」');
+    eq(await api('cids').then(c => canon(c.A) === canon(c.B)), true, '两台各分区 cid 相同');
+    const cids0 = canon(await api('cids'));
+    await api('resetCounts');
+    let published = 0, merged = 0;
+    for (let i = 0; i < 6; i++) for (const d of ['A', 'B']) { const v = await hubRound(d); published += v.published; if (v.merged) merged++; }
+    const cnt = await api('counts');
+    ok(!published, '再跑 6 轮（两台都开着、没人操作）：总入口没有发布新内容' + (published ? '；发布了 ' + published + ' 个分区' : ''));
+    ok(!merged, '再跑 6 轮：合并都没有改变本机数据' + (merged ? '；有 ' + merged + ' 次改了' : ''));
+    ok(!cnt.push, '再跑 6 轮：节点上没有新的 push' + (cnt.push ? '；push ' + cnt.push + ' 次' : ''));
+    ok(!cnt['lan-put'], '再跑 6 轮：局域网没有新的 put' + (cnt['lan-put'] ? '；put ' + cnt['lan-put'] + ' 次' : ''));
+    ok(canon(await api('cids')) === cids0, '再跑 6 轮：两台各分区的版本（cid）不变');
+    const st = { A: await api('state', 'A'), B: await api('state', 'B') };
+    ok(st.A.status === 'ok' && st.B.status === 'ok', '两台状态都是「已同步」（' + st.A.status + ' / ' + st.B.status + '）');
+  }
+
   try {
     await test('#2 验收 5–9 经节点（顺序 A→B→C）', async () => {
       await reset();
@@ -175,6 +254,7 @@
       const m = S.mergeTaken(dev.C, t3);
       eq(canon({ device: dev.C.device, keys: m.result.keys, meta: m.result.meta }), before, '同一批分区重复 3 次合并，结果不变');
     });
+    await test('两台总入口都开着（节点组 + 局域网加入）：合并结果不变就不再产生新版本、不再推送', loopTest);
   } catch (e) { log(false, '运行出错 ' + e); }
   res.done = true;
   document.getElementById('sum').innerHTML = '<span class="' + (res.fail ? 'bad' : 'ok') + '">通过 ' + res.pass + ' 项，失败 ' + res.fail + ' 项</span>';
