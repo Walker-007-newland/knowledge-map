@@ -39,6 +39,11 @@
       if (!confirm('要结束这次听写吗？')) { history.pushState({ v: 'vRun' }, '', '#run'); return; }
       runner.stopRun();
     }
+    // 批改页（还没点「批改完成」）：返回会丢掉这次听写，先确认（#9 真机确认问题 2，和单元单词页一致）
+    if (current === 'vCheck' && runner.isChecking()) {
+      if (!confirm('批改还没完成，要放弃这次听写吗？\n（选「取消」继续批改，批改完成后才会记分、记错词）')) { history.pushState({ v: 'vCheck' }, '', '#check'); return; }
+      runner.dropCheck();
+    }
     if (current === 'vEdit' && editDirty && to !== 'vEdit' && !confirm('修改的内容还没保存，确定离开吗？')) {
       history.pushState({ v: 'vEdit' }, '', '#edit'); return;
     }
@@ -184,7 +189,9 @@
       if (l.history.length > 50) l.history.splice(0, l.history.length - 50);
       save();
     },
-    onBack: () => { show('vList'); renderLists(); }
+    // 结果页在设置页那条历史记录上（设置 → 听写中 → 批改 → 结果都是 replaceState），退一步就是词单；
+    // 不再压新记录，免得词单页按返回先回到旧的结果页（#9 真机确认问题 1，和单元单词页一致）
+    onBack: () => history.back()
   });
   const openSetup = runner.openSetup;
 

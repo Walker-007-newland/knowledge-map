@@ -20,24 +20,68 @@
   const inApp = !!(window.KMApp && KMApp.goBack);
 
   /* ---------------- 朗读 ---------------- */
-  let sayToken = 0;
+  // 语音引擎是否可用：有的平板没装任何「文字转语音」引擎，读不出声也不报错（#9 真机确认问题 3）。
+  // 读的时候判断：读完收到 end 事件 = 可用；报错（不是我们自己打断的）或到兜底时间还没有任何事件 = 不可用。
+  // 结果记在本机（ttsKey，不进「我的数据」同步，因为是这台设备自己的情况），下次打开默写设置就默认「读中文写英文」。
+  const TTS_KEY = 'fjzk-tts-ok';
+  let ttsOk = null;
+  try { const v = localStorage.getItem(TTS_KEY); ttsOk = v === '1' ? true : v === '0' ? false : null; } catch (e) { /* 忽略 */ }
+  if (!('speechSynthesis' in window)) ttsOk = false;
+  function setTts(ok) {
+    if (ttsOk === ok) { if (!ok) showTtsWarn(); return; }
+    ttsOk = ok;
+    try { localStorage.setItem(TTS_KEY, ok ? '1' : '0'); } catch (e) { /* 忽略 */ }
+    if (ok) hideTtsWarn(); else showTtsWarn();
+  }
+  let warnClosed = false;
+  function showTtsWarn() {
+    if (warnClosed || document.getElementById('ttsWarn')) return;
+    const main = document.querySelector('main'); if (!main) return;
+    const el = document.createElement('div');
+    el.id = 'ttsWarn'; el.className = 'tts-warn'; el.setAttribute('role', 'alert');
+    el.innerHTML = '<div><b>这台平板没有语音朗读功能，听不到发音。</b>' +
+      '请在系统设置里搜索「文字转语音」，安装或开启语音引擎。没装好之前，默写请选「读中文写英文」：中文会显示在屏幕上。</div>' +
+      '<button class="btn" type="button">知道了</button>';
+    el.querySelector('button').onclick = () => { warnClosed = true; el.remove(); };
+    main.insertBefore(el, main.firstChild);
+  }
+  function hideTtsWarn() { const el = document.getElementById('ttsWarn'); if (el) el.remove(); }
+  let sayToken = 0, cancelling = false;
+  function cancelSpeech() { cancelling = true; try { speechSynthesis.cancel(); } finally { cancelling = false; } }
   // items: [{text, lang, rate}]，全部读完调用 done；读不出来时按估计时长兜底
   function say(items, done) {
     const token = ++sayToken;
+    let heard = false;
     const finish = () => { if (token === sayToken && done) { const d = done; done = null; d(); } };
-    if (!('speechSynthesis' in window)) { setTimeout(finish, 1500); return; }
-    speechSynthesis.cancel();
+    if (!('speechSynthesis' in window)) { showTtsWarn(); setTimeout(finish, 1500); return; }
+    cancelSpeech();
     let est = 600;
     items.forEach((it, i) => {
       const u = new SpeechSynthesisUtterance(it.text);
       u.lang = it.lang; u.rate = it.rate || (it.lang === 'en-US' ? 0.8 : 0.9);
       est += 700 + it.text.length * (it.lang === 'en-US' ? 110 : 260);
-      if (i === items.length - 1) { u.onend = finish; u.onerror = finish; }
+      u.onend = () => { heard = true; if (token === sayToken) setTts(true); if (i === items.length - 1) finish(); };
+      u.onerror = e => {
+        heard = true;
+        // 我们自己 cancel 打断的不算（浏览器给 interrupted / canceled，App 里在 cancel 调用中同步回调）
+        const err = e && e.error;
+        if (!cancelling && err !== 'interrupted' && err !== 'canceled' && token === sayToken) setTts(false);
+        if (i === items.length - 1) finish();
+      };
       speechSynthesis.speak(u);
     });
-    setTimeout(finish, est + 4000);
+    // 已知没有语音引擎时不用干等，很快进入下一步（读中文写英文时中文显示在屏幕上）
+    const wait = ttsOk === false ? 1200 : est + 4000;
+    setTimeout(() => {
+      if (!heard && token === sayToken && ttsOk !== false) setTts(false);   // 一直没有任何回应：没有语音引擎
+      finish();
+    }, wait);
   }
-  function stopSay() { sayToken++; if ('speechSynthesis' in window) speechSynthesis.cancel(); }
+  function stopSay() { sayToken++; if ('speechSynthesis' in window) cancelSpeech(); }
+  if (ttsOk === false) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showTtsWarn);
+    else showTtsWarn();
+  }
 
   // 听写时保持屏幕常亮
   let wakeLock = null;
@@ -135,6 +179,8 @@
 
   /* ---------------- 流程 ---------------- */
   const PACE = { fast: [3000, 250], normal: [4500, 380], slow: [6500, 520] };
+  // 在当前这条历史记录上换页面：保留页面放在 state 里的其它字段（单元单词页用 d 记录离首页几层）
+  const keepState = v => Object.assign({}, history.state || {}, { v });
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
   const tidy = s => s.replace(/[’‘`]/g, "'").replace(/\s+/g, ' ').replace(/[.。]+$/, '').trim();
   // 一般不分大小写（平板键盘会自动把首字母变大写）；但答案本身有大写（人名、月份、星期）时必须一致
@@ -157,10 +203,12 @@
       $('#nWrong').textContent = nWrong;
       document.querySelector('[data-opt=scope] [data-v=wrong]').disabled = !nWrong;
       if (S.scope === 'wrong' && !nWrong) S.scope = 'all';
+      // 这台设备没有语音引擎：默认改成「读中文写英文」（中文显示在屏幕上，不用听也能默）
+      if (ttsOk === false && S.read !== 'zh' && list.words.some(w => w.zh)) S.read = 'zh';
       $('#someN').value = Math.min(S.someN || 10, list.words.length);
       $('#someN').max = list.words.length;
       syncSetup();
-      if (replace) { history.replaceState({ v: 'vSetup' }, '', '#setup'); o.show('vSetup', false); }
+      if (replace) { history.replaceState(keepState('vSetup'), '', '#setup'); o.show('vSetup', false); }
       else o.show('vSetup');
     }
     function syncSetup() {
@@ -172,6 +220,7 @@
       document.querySelector('#vSetup .paper-only').hidden = S.mode !== 'paper';
       const hasZh = setupList && setupList.words.some(w => w.zh);
       const tips = [];
+      if (ttsOk === false) tips.push(S.read === 'zh' ? '这台平板读不出声音，中文会显示在屏幕上，看中文写英文。' : '这台平板读不出声音，建议选「读中文写英文」。');
       if (S.read !== 'en' && !hasZh) tips.push('这个' + T.listWord + '没有中文释义，会只读英文。');
       if (S.mode === 'paper') tips.push('准备好纸和笔，每个词写在对应的序号后面。' + T.act + '完再对照批改。');
       else tips.push('听到后用键盘输入，按回车进入下一个，结束后自动判分。');
@@ -201,7 +250,10 @@
       $('#runTotal').textContent = words.length;
       $('#runInput').hidden = run.mode !== 'type';
       $('#btnPause').hidden = run.mode !== 'paper';
-      if (o.current() === 'vSetup') history.replaceState({ v: 'vRun' }, '', '#run'), o.show('vRun', false);
+      // 从设置页或结果页（错词再听写 / 全部再听一遍）出发都在当前记录上替换，不再压新记录，
+      // 否则「返回词单」的 history.back() 会退回上一轮的结果页（#9 第 2 期测试问题 1）
+      const cur = o.current();
+      if (cur === 'vSetup' || cur === 'vResult') history.replaceState(keepState('vRun'), '', '#run'), o.show('vRun', false);
       else o.show('vRun');
       playCurrent();
     }
@@ -297,14 +349,14 @@
       clearTimer(); stopSay(); keepAwake(false);
       const r = run; run = null;
       checking = {
-        list: r.list, scope: r.scope, mode: r.mode, words: r.words, answers: r.answers,
+        done: false, list: r.list, scope: r.scope, mode: r.mode, words: r.words, answers: r.answers,
         wrong: r.words.map((w, i) => r.mode === 'type' ? !sameAnswer(r.answers[i] || '', w.en) : false)
       };
       $('#checkHint').textContent = r.mode === 'paper'
         ? '对照纸上写的，点一下写错的词标成 ✗（再点一下取消）。'
         : '已经自动判分。拼写其实没错（比如大小写、缩写写法不同）的话，点一下改成 ✓。';
       renderCheck();
-      history.replaceState({ v: 'vCheck' }, '', '#check');
+      history.replaceState(keepState('vCheck'), '', '#check');
       o.show('vCheck', false);
     }
     function renderCheck() {
@@ -326,6 +378,8 @@
     });
     $('#btnCheckDone').onclick = () => {
       const c = checking;
+      if (!c || c.done) return;
+      c.done = true;
       const rows = c.words.map((w, i) => ({ w, wrong: !!c.wrong[i] }));
       o.record(c.list, rows, c.scope);
       const wrongWords = rows.filter(x => x.wrong).map(x => x.w);
@@ -343,7 +397,7 @@
       $('#resWrong').innerHTML = wrongWords.length
         ? '<div class="wrong-list">' + wrongWords.map(w => `<div><b>${esc(w.en)}</b>${esc(w.zh || '')}</div>`).join('') + '</div>' : '';
       $('#btnResWrong').hidden = !wrongWords.length;
-      history.replaceState({ v: 'vResult' }, '', '#result');
+      history.replaceState(keepState('vResult'), '', '#result');
       o.show('vResult', false);
     }
     $('#btnResList').onclick = () => o.onBack();
@@ -354,9 +408,13 @@
 
     return {
       openSetup, startRun, stopRun,
-      isRunning: () => !!run
+      isRunning: () => !!run,
+      // 默写完在批改页、还没点「批改完成」（这时离开，这次默写不记分）
+      isChecking: () => !!(checking && !checking.done),
+      // 放弃批改（返回键确认放弃后调用）
+      dropCheck: () => { if (checking) checking.done = true; }
     };
   }
 
-  window.DictRun = { mount, create, say, stopSay, keepAwake, keyOf, esc, sameAnswer };
+  window.DictRun = { mount, create, say, stopSay, keepAwake, keyOf, esc, sameAnswer, ttsOk: () => ttsOk };
 })();
