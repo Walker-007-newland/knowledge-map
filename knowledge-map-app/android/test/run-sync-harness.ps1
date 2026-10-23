@@ -22,6 +22,9 @@ try {
   # 同步内核里除了 SyncAndroid（要 Android SDK）都是纯 Java
   $srcs = @(Get-ChildItem "$android\src\com\fjzk\knowledgemap\sync" -Filter *.java | Where-Object { $_.Name -ne 'SyncAndroid.java' } | ForEach-Object { $_.FullName })
   $srcs += "$test\SyncHarness.java", "$test\HarnessServer.java"
+  # #12：审批 App 的重设密码实现（AcctCrypto + Node）一起编译，测和 App 的 Account 互通
+  $admin = Join-Path $root 'team-admin-app\android\src\com\fjzk\teamadmin'
+  $srcs += "$admin\AcctCrypto.java", "$admin\Node.java"
   & javac -encoding UTF-8 -Xlint:none -d $out @srcs
   if ($LASTEXITCODE) { throw 'javac 失败' }
   $a = @('--root', $root)

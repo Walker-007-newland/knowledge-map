@@ -1627,10 +1627,15 @@ public class SyncHarness {
         Map<String, Object> g = acctOp(node, "accounts.get", "user", "xiaoming", "wrap", true);
         Map<String, Object> b = Account.openAdmin(REC.getPrivate(), "xiaoming", SyncCrypto.b64d(SyncJson.s(g, "wrap_admin")));
         check(b != null && SyncCrypto.b64e(x.m.g.gk).equals(SyncJson.s(b, "gk")), "恢复私钥解开 wrap_admin，拿到的组密钥就是账号的", b == null ? null : b.keySet());
-        byte[] salt = SyncCrypto.rand(16);
-        byte[][] k = Account.keys("newpass2026x", salt, 100000);
-        acctOp(node, "accounts.resetPassword", "user", "xiaoming", "salt", SyncCrypto.b64e(salt), "iters", 100000L,
-            "auth_key", SyncCrypto.b64e(k[0]), "wrap_pw", SyncCrypto.b64e(Account.wrapPw(k[1], "xiaoming", SyncJson.canon(b))));
+        // 审批 App 的实现（team-admin-app AcctCrypto）：恢复私钥解开 → 新密码算参数 → resetPassword，和 App 的 Account 互通
+        String bundle = com.fjzk.teamadmin.AcctCrypto.openAdmin(REC.getPrivate().getEncoded(), "testkid1", "xiaoming", SyncJson.s(g, "wrap_admin"));
+        check(SyncJson.canon(SyncJson.obj(bundle)).equals(SyncJson.canon(b)), "审批 App 的 AcctCrypto 解开的账号包和 App 的一样");
+        try {
+            com.fjzk.teamadmin.AcctCrypto.openAdmin(REC.getPrivate().getEncoded(), "otherkid", "xiaoming", SyncJson.s(g, "wrap_admin"));
+            check(false, "恢复密钥编号对不上时拒绝");
+        } catch (IllegalArgumentException e) { check(e.getMessage().contains("另一把恢复密钥"), "恢复密钥编号对不上时拒绝（中文说明）", e.getMessage()); }
+        Map<String, Object> args = SyncJson.obj(com.fjzk.teamadmin.AcctCrypto.resetArgs("xiaoming", "newpass2026x", bundle, 100000));
+        node.cmd("cmd", "acct", "op", "accounts.resetPassword", "args", args);
         String sp = snap(p);
         for (Dev d : new Dev[]{x, p, q}) d.m.syncNow();
         check("relogin".equals(x.m.acct.state) && "relogin".equals(p.m.acct.state) && "relogin".equals(q.m.acct.state) && snap(p).equals(sp),
@@ -1706,6 +1711,12 @@ public class SyncHarness {
         System.out.printf("    （电脑上 %d 次 PBKDF2 用时 %.0f 毫秒）%n", Account.ITERS, (System.nanoTime() - t0) / 1e6);
         check(Account.pwProblem("xiaoming", "12345678") != null && Account.pwProblem("xiaoming", "password1") != null && Account.pwProblem("xiaoming", "xiaoming99") != null
             && Account.pwProblem("xiaoming", "abcabcabc1") == null && Account.pwProblem("xiaoming", "shuxue2026a") == null, "密码规则：纯数字、常见词、含用户名都不行");
+        String recText = "kmrecov:1?k=" + SyncCrypto.b64e(REC.getPrivate().getEncoded()) + "&id=" + com.fjzk.teamadmin.AcctCrypto.kidOfPublic(REC.getPublic().getEncoded());
+        Object[] pr = com.fjzk.teamadmin.AcctCrypto.parseRecovery(recText);
+        check(pr[1].equals(com.fjzk.teamadmin.AcctCrypto.kidOfPublic(REC.getPublic().getEncoded())), "审批 App 导入恢复密钥：从私钥算出的编号和公钥的一致", pr[1]);
+        boolean badId;
+        try { com.fjzk.teamadmin.AcctCrypto.parseRecovery(recText.replaceAll("id=.*", "id=00000000")); badId = false; } catch (IllegalArgumentException e) { badId = true; }
+        check(badId, "恢复密钥二维码的编号被改过 → 拒绝导入");
         track(x, p, q, b1, b2);
     }
 

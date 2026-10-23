@@ -243,6 +243,78 @@ public class MainActivity extends Activity {
             });
         }
 
+        // ---------- #12 账号：恢复密钥（私钥只在原生侧）、重设学生密码、改节点地址
+
+        /** {kid}：已导入的恢复密钥编号；没导入时 kid 为空。 */
+        @JavascriptInterface
+        public String recoveryInfo() {
+            try { return new JSONObject().put("kid", NodeStore.recoveryKid(MainActivity.this)).toString(); }
+            catch (Exception e) { return "{\"kid\":\"\"}"; }
+        }
+
+        /** 导入恢复密钥（扫 km-recovery.png 得到的 kmrecov:1?…）：{ok, kid} 或 {err}。 */
+        @JavascriptInterface
+        public String recoveryImport(String text) {
+            try { return new JSONObject().put("ok", true).put("kid", NodeStore.saveRecovery(MainActivity.this, text)).toString(); }
+            catch (IllegalArgumentException e) { return "{\"err\":" + JSONObject.quote(e.getMessage()) + "}"; }
+            catch (Exception e) { return "{\"err\":" + JSONObject.quote("保存失败：" + e) + "}"; }
+        }
+
+        @JavascriptInterface
+        public void recoveryClear() { NodeStore.clearRecovery(MainActivity.this); }
+
+        /**
+         * 重设学生密码（异步，回调 window.__nodeDone(id, status, text)）：取恢复包 → 恢复私钥解开 → 用新密码算新的 salt / authKey / wrap_pw
+         * → accounts.resetPassword。新密码和组密钥都不离开这台手机。
+         */
+        @JavascriptInterface
+        public void acctReset(final String id, final String user, final String newPw) {
+            nodeExec.execute(() -> {
+                Node.Result r;
+                byte[] priv = null;
+                try {
+                    Node.Code c = NodeStore.load(MainActivity.this);
+                    priv = NodeStore.loadRecovery(MainActivity.this);
+                    String bad = AcctCrypto.pwProblem(user, newPw);
+                    if (c == null) r = new Node.Result(0, "还没有设置同步节点", false);
+                    else if (priv == null) r = new Node.Result(200, "{\"ok\":false,\"err\":\"recovery\",\"msg\":\"还没导入账号恢复密钥：先在「账号」页扫一次 km-recovery.png\"}", false);
+                    else if (bad != null) r = new Node.Result(200, "{\"ok\":false,\"err\":\"pw\",\"msg\":" + JSONObject.quote(bad) + "}", false);
+                    else {
+                        Node.Result g = Node.call(c, NodeStore.ctr(MainActivity.this), "accounts.get", new JSONObject().put("user", user).put("wrap", true).toString());
+                        if (!Node.ok(g)) r = g;
+                        else {
+                            JSONObject d = new JSONObject(g.text).getJSONObject("data");
+                            String bundle = AcctCrypto.openAdmin(priv, NodeStore.recoveryKid(MainActivity.this), user, d.getString("wrap_admin"));
+                            String args = AcctCrypto.resetArgs(user, newPw, bundle, AcctCrypto.ITERS);
+                            r = Node.call(c, NodeStore.ctr(MainActivity.this), "accounts.resetPassword", args);
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    r = new Node.Result(200, "{\"ok\":false,\"err\":\"recovery\",\"msg\":" + JSONObject.quote(e.getMessage()) + "}", false);
+                } catch (Exception e) {
+                    r = new Node.Result(0, "重设密码失败：" + e, false);
+                } finally {
+                    if (priv != null) java.util.Arrays.fill(priv, (byte) 0);
+                }
+                nodeDone(id, r);
+            });
+        }
+
+        /** 生成临时密码（8 位小写字母和数字） */
+        @JavascriptInterface
+        public String tempPassword() { return AcctCrypto.tempPassword(); }
+
+        /** 改节点地址（服务器搬家后；管理密钥不变）：{ok} 或 {err}。 */
+        @JavascriptInterface
+        public String nodeSetHost(String text) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\s*([0-9A-Za-z.\\-]{1,253})(?::(\\d{1,5}))?\\s*$").matcher(text == null ? "" : text);
+            if (!m.matches()) return "{\"err\":\"地址格式不对，应该像 192.168.1.20:8787\"}";
+            int p = m.group(2) == null ? 8787 : Integer.parseInt(m.group(2));
+            if (p < 1 || p > 65535) return "{\"err\":\"端口要在 1–65535 之间\"}";
+            NodeStore.setHost(MainActivity.this, m.group(1), p);
+            return "{\"ok\":true}";
+        }
+
         private void nodeDone(String id, Node.Result r) {
             final String js = "window.__nodeDone(" + JSONObject.quote(id) + "," + r.status + "," + JSONObject.quote(r.text) + ")";
             runOnUiThread(() -> web.evaluateJavascript(js, null));
