@@ -42,7 +42,10 @@
       { key: DICT, name: '单词听写', cat: 'dictation', merge: 'dictation', items: 'dict', store: 'shared' },
       // #9 英语单元单词（english-map/words.html，图谱页的 localStorage）：每个词一条，见 joinWord
       { key: WORDS, name: '英语单元单词', cat: 'words', merge: 'words', items: 'obj' },
-      { key: 'fjzk-en-words-set-v1', name: '单元单词设置', cat: 'pref', merge: 'whole' }
+      { key: 'fjzk-en-words-set-v1', name: '单元单词设置', cat: 'pref', merge: 'whole' },
+      // 语文生字词听写（chinese-map/tingxie.html）：每个词一条 { r, rt, w, n }，合并同 joinWord
+      { key: 'fjzk-zh-tingxie-v1', name: '语文听写', cat: 'words', merge: 'words', items: 'obj' },
+      { key: 'fjzk-zh-tingxie-set-v1', name: '语文听写设置', cat: 'pref', merge: 'whole' }
     ]);
   const byKey = {};
   KEYS.forEach(s => { byKey[s.key] = s; });
