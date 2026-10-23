@@ -672,7 +672,7 @@ public final class SyncManager {
      * 节点连不上（offline）、出错时不在这里重试，交给前台定时和下次发布
      */
     public synchronized boolean nodeDue() {
-        if (g == null || busy || skipNode || !errCode.isEmpty() || now() < backoffUntil || client() == null) return false;
+        if (g == null || busy || skipNode || !syncAllowed() || !errCode.isEmpty() || now() < backoffUntil || client() == null) return false;
         return pendingCount() > 0;
     }
 
