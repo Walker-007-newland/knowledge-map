@@ -2,4 +2,7 @@
 <!-- 系统备份（Android 11 及以下）：设备同步的钥匙和密文（files/kmsync/，#1）不进备份；就算被带走，没有原机的 Keystore 也解不开 -->
 <full-backup-content>
     <exclude domain="file" path="kmsync/" />
+    <!-- 电子教材：PDF 很大、随时可重新下载；平台登录凭据不随备份带走 -->
+    <exclude domain="file" path="textbooks/" />
+    <exclude domain="sharedpref" path="km_textbook_auth.xml" />
 </full-backup-content>

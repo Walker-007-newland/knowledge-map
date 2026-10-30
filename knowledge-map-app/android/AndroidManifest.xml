@@ -53,5 +53,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- 电子教材：平台官方登录页（不导出，只有 App 自己能打开）、PDF 阅读器（系统 PdfRenderer） -->
+        <activity
+            android:name=".TbLoginActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density" />
+        <activity
+            android:name=".PdfActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density" />
     </application>
 </manifest>

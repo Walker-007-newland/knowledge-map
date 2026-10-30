@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     Updater updater;
     String pendingOpen;    // 总入口加载完后要接着打开的页面
     final BridgeGate gate = new BridgeGate();
+    Textbooks textbooks;   // 电子教材（平台登录凭据、下载）
     SyncService sync;      // 设备同步（需求 #1），事件只送主页面；建不出来时为 null，各接口返回空（不影响学习）
     /** #12 账号状态（files/kmsync/account.json 的 state，启动时读文件，之后跟着 account 事件更新）："in" = 已登录 */
     volatile String acctState = "";
@@ -179,6 +180,20 @@ public class MainActivity extends Activity {
             Log.w(SyncAndroid.TAG, "设备同步不可用", e);
         }
         syncDevice();
+        // 电子教材：下载进度、登录状态等事件只送给电子教材页
+        textbooks = Textbooks.get(this);
+        textbooks.sink = new Textbooks.Sink() {
+            public void event(final String json) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        String u = web == null ? null : web.getUrl();
+                        if (u == null || !BridgeGate.page(u).equals(BridgeGate.WWW + "textbooks.html")) return;
+                        try { web.evaluateJavascript("window.__kmTbEvent&&__kmTbEvent(" + SyncJson.quote(json) + ")", null); }
+                        catch (Throwable e) { Log.w(Textbooks.TAG, "tb event"); }
+                    }
+                });
+            }
+        };
         web.addJavascriptInterface(new Bridge(), "KMBridge");
         // 真机自检包（build.ps1 -SelfTest）才有 selftest/ 页面和 KMSelfTest；正式包里两者都没有
         if (hasAsset("www/selftest/bridge.html")) web.addJavascriptInterface(new SelfTest(), "KMSelfTest");
@@ -229,6 +244,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         try { if (sync != null) sync.onResume(); } catch (Throwable e) { Log.w(SyncAndroid.TAG, "onResume", e); }
+        if (textbooks != null) textbooks.emitLogin();   // 从平台登录页、阅读器回来：电子教材页刷新登录状态和阅读进度
     }
 
     @Override
@@ -253,6 +269,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (tts != null) tts.shutdown();
+        if (textbooks != null) textbooks.sink = null;   // 下载线程照常跑完，事件不再送给这个已关闭的页面
         updater.destroy();
         web.destroy();
         super.onDestroy();
@@ -763,6 +780,64 @@ public class MainActivity extends Activity {
             if (!gate.check(token, "saveBackup", now()) || name == null || text == null) return "";
             if (!name.matches("[^/\\\\:*?\"<>|]{1,120}\\.json")) return "";
             try { return save(name, text.getBytes(StandardCharsets.UTF_8)); } catch (Exception e) { Log.w(SyncAndroid.TAG, "备份", e); return ""; }
+        }
+
+        // ---------------- 电子教材：只有 textbooks.html 能调（BridgeGate 规则表）
+
+        /** 登录状态、已下载的书（大小、读到第几页）、已用空间、正在下载的进度（JSON） */
+        @JavascriptInterface
+        public String tbState(String token) {
+            if (!gate.check(token, "tbState", now())) return "";
+            return textbooks.state();
+        }
+
+        /** 开始下载（同时只下一本）；返回 false = 已有一本在下载或编号不对 */
+        @JavascriptInterface
+        public boolean tbDownload(String token, String id, String title, boolean thematic) {
+            if (!gate.check(token, "tbDownload", now())) return false;
+            return textbooks.download(id, title, thematic);
+        }
+
+        @JavascriptInterface
+        public void tbCancel(String token) {
+            if (!gate.check(token, "tbCancel", now())) return;
+            textbooks.cancel();
+        }
+
+        @JavascriptInterface
+        public boolean tbDelete(String token, String id) {
+            if (!gate.check(token, "tbDelete", now())) return false;
+            return textbooks.delete(id);
+        }
+
+        /** 用原生阅读器打开已下载的教材 */
+        @JavascriptInterface
+        public void tbOpen(String token, final String id, final String title) {
+            if (!gate.check(token, "tbOpen", now()) || !TbAuth.validId(id)) return;
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    startActivity(new Intent(MainActivity.this, PdfActivity.class)
+                        .putExtra(PdfActivity.EXTRA_ID, id).putExtra(PdfActivity.EXTRA_TITLE, title == null ? "" : title));
+                }
+            });
+        }
+
+        /** 打开平台官方登录页（学生自己输入账号） */
+        @JavascriptInterface
+        public void tbLogin(String token) {
+            if (!gate.check(token, "tbLogin", now())) return;
+            runOnUiThread(new Runnable() {
+                public void run() { startActivity(new Intent(MainActivity.this, TbLoginActivity.class)); }
+            });
+        }
+
+        /** 退出平台登录：删本机凭据，清掉平台网页的登录状态 */
+        @JavascriptInterface
+        public void tbLogout(String token) {
+            if (!gate.check(token, "tbLogout", now())) return;
+            runOnUiThread(new Runnable() {
+                public void run() { TbLoginActivity.logout(MainActivity.this); }
+            });
         }
 
         // ---------------- 局域网配对（#1 第二期）：可被发现 3 分钟、点附近的设备或手输地址、核对 4 位确认码

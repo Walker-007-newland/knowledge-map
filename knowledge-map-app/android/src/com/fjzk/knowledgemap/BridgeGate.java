@@ -27,6 +27,8 @@ public class BridgeGate {
     /** #12 登录页：没登录时只能打开它 */
     public static final String[] LOGIN = { WWW + "login.html" };
     public static final String[] LOGIN_SYNC = { WWW + "login.html", WWW + "sync.html" };
+    /** 电子教材页：平台登录、下载、打开阅读器只有它能调 */
+    public static final String[] TEXTBOOKS = { WWW + "textbooks.html" };
 
     static final long KEEP_PREV_MS = 5000;      // 换新令牌后，上一张再保留 5 秒（切换瞬间正在进行的调用不失败）
     static final long HELLO_WINDOW_MS = 10000;  // hello 限速：10 秒内最多 10 次
@@ -67,6 +69,8 @@ public class BridgeGate {
             "syncRename", "syncRemove", "syncLeave");
         // #1 第二期：局域网配对，只在设备同步页
         allow(SYNC_PAGE, "pairOpen", "pairClose", "pairWith", "pairAddr", "pairConfirm");
+        // 电子教材：查状态、下载 / 取消 / 删除、打开阅读器、平台登录 / 退出，只在电子教材页（file://，听写页的 https 虚拟地址不行）
+        allow(TEXTBOOKS, "tbState", "tbDownload", "tbCancel", "tbDelete", "tbOpen", "tbLogin", "tbLogout");
     }
 
     static String[] cat(String[] a, String[] b) {

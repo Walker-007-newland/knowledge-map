@@ -184,6 +184,26 @@ public class BridgeGateTest {
         for (String m : new String[]{"acctState", "acctRegister", "acctLogin", "acctLogout", "acctServer", "acctOffline", "saveBackup"})
             ok(!g.check(dk2, m, ta + 2) && !g.check(bk2, m, ta + 2) && !g.check(null, m, ta + 2), "听写页、B 站页面、不带令牌调 " + m + " 被拒");
 
+        System.out.println("10. 电子教材：平台登录、下载、阅读器只在 textbooks.html");
+        g = new BridgeGate();
+        String TB = BridgeGate.WWW + "textbooks.html";
+        String[] TB_METHODS = { "tbState", "tbDownload", "tbCancel", "tbDelete", "tbOpen", "tbLogin", "tbLogout" };
+        long tb = t + 900000;
+        String tk = g.issue(TB + "?s=1#x", tb);
+        for (String m : TB_METHODS) ok(g.check(tk, m, tb + 1), "textbooks.html 调 " + m + " 通过");
+        for (String m : TB_METHODS) ok(!g.check(null, m, tb + 1) && !g.check("00000000000000000000000000000000", m, tb + 1), "不带令牌 / 猜的令牌调 " + m + " 被拒");
+        for (String m : new String[]{"syncTake", "syncLeave", "acctLogin", "acctLogout", "pairOpen"}) ok(!g.check(tk, m, tb + 1), "textbooks.html 调 " + m + " 被拒（不越权）");
+        ok(g.check(tk, "speak", tb + 1) && g.check(tk, "goBack", tb + 1), "textbooks.html 能用朗读、返回等普通方法");
+        String[] notTb = { BridgeGate.WWW + "index.html", DATA, BridgeGate.WWW + "sync.html", BridgeGate.WWW + "login.html", MAP,
+            BridgeGate.WWW + "skills-map/notes.html", BridgeGate.WWW + "pet/index.html", BridgeGate.WWW + "textbooks.html.evil",
+            BridgeGate.WWW + "x/../textbooks.html", BridgeGate.WWW + "%2e%2e/textbooks.html", BridgeGate.WWW + "textbooks/catalog.js",
+            BridgeGate.ASSETS + "textbooks.html", DICT, BILI, "https://basic.smartedu.cn/tchMaterial", "file:///sdcard/textbooks.html" };
+        for (String pg : notTb) {
+            tb += 20000;
+            String k = g.issue(pg, tb);
+            for (String m : TB_METHODS) ok(!g.check(k, m, tb + 1), pg + " 调 " + m + " 被拒");
+        }
+
         System.out.println();
         System.out.println("通过 " + pass + "，失败 " + fail);
         System.exit(fail == 0 ? 0 : 1);
