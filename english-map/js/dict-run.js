@@ -124,6 +124,8 @@
     next();
   }
   function stopSay() { sayToken++; stopAudio(); if ('speechSynthesis' in window) cancelSpeech(); }
+  // 批改页、结果页的「拼读」按钮（页面加载了 js/phonics.js、这个词有拼读数据时才有）
+  const phonicsBtn = w => window.KWPhonics ? KWPhonics.button(w.en, w.zh) : '';
   // 这份词里的英文是不是全都有录音（没有语音引擎的平板也能听写英文）
   const allRecorded = words => words.length > 0 && words.every(w => recFor(w.en, 'en-US'));
   if (ttsOk === false) {
@@ -441,6 +443,7 @@
         <div class="no">${i + 1}.</div>
         <div><div class="en">${esc(w.en)}</div>
           ${w.zh ? `<div class="zh">${esc(w.zh)}</div>` : ''}
+          ${phonicsBtn(w)}
           ${c.mode === 'type' ? `<div class="ans">你写的：${esc(c.answers[i] || '（没写）')}</div>` : ''}</div>
         <div class="mark">${c.wrong[i] ? '✗' : '✓'}</div>
       </div>`).join('');
@@ -471,7 +474,7 @@
       $('#resScore').classList.toggle('low', pct < 80);
       $('#resSub').textContent = pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (wrongWords.length ? `，错了 ${wrongWords.length} 个，已记进错词本` : '');
       $('#resWrong').innerHTML = wrongWords.length
-        ? '<div class="wrong-list">' + wrongWords.map(w => `<div><b>${esc(w.en)}</b>${esc(w.zh || '')}</div>`).join('') + '</div>' : '';
+        ? '<div class="wrong-list">' + wrongWords.map(w => `<div><b>${esc(w.en)}</b>${esc(w.zh || '')}${phonicsBtn(w)}</div>`).join('') + '</div>' : '';
       $('#btnResWrong').hidden = !wrongWords.length;
       history.replaceState(keepState('vResult'), '', '#result');
       o.show('vResult', false);

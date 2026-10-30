@@ -322,6 +322,8 @@
     $('#flashTip').textContent = round.flipped ? '点卡片翻回正面' : '点卡片翻面';
     const r = rec(w.key);
     $('#flash').classList.toggle('was-known', !!(r && r.k === 1));
+    // 拼读按钮：英文露出来以后才给（「看中文」「听发音」的正面先不给，免得直接看到答案）
+    $('#btnPhonics').hidden = !(window.KWPhonics && KWPhonics.has(w.en) && (round.flipped || face === 'en'));
     // 进卡读一遍英文（「看中文」时先不读，免得直接听到答案；翻面再读）
     if (enter && face !== 'zh') sayWord(w);
   }
@@ -334,6 +336,7 @@
   $('#flash').onclick = flip;
   $('#flash').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
   $('#btnSay').onclick = () => { if (round) sayWord(round.items[round.idx]); };
+  $('#btnPhonics').onclick = () => { if (round) { const w = round.items[round.idx]; KWPhonics.open(w.en, w.zh); } };
   function mark(k) {
     if (!round) return;
     const w = round.items[round.idx];
@@ -408,7 +411,7 @@
       wrongList.push(...g.words);
       return `<h3 class="w-group">${esc(g.title)}</h3>` + g.words.map(w => `<div class="w-row">
         <b>${esc(w.en)}</b><span class="w-zh">${esc(w.pos ? w.pos + ' ' : '')}${esc(w.zh)}</span><span class="w-n">错过 ${wrongTimes(w.key)} 次</span>
-        <button class="btn icon" data-say="${esc(w.en)}" aria-label="读">🔊</button></div>`).join('');
+        ${window.KWPhonics ? KWPhonics.button(w.en, w.zh) : ''}<button class="btn icon" data-say="${esc(w.en)}" aria-label="读">🔊</button></div>`).join('');
     }).join('');
     $('#wrongEmpty').hidden = wrongList.length > 0;
     $('#btnWrongStudy').disabled = $('#btnWrongDict').disabled = !wrongList.length;

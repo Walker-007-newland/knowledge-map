@@ -408,7 +408,10 @@
     if (t.dataset.say != null) { speak(sayStore[+t.dataset.say], t); return; }
     const c = t.cloneNode(true);
     c.querySelectorAll('.zh').forEach(z => z.remove());
-    speak(c.textContent.trim(), t);
+    const text = c.textContent.trim();
+    // 单词有自然拼读数据：弹出拼读卡片（会先读一遍整个词）；没有就照旧直接读
+    if (t.classList.contains('w') && window.KWPhonics && KWPhonics.open(text, '', { autoplay: true })) return;
+    speak(text, t);
   });
   let sayStore = [];
   function sayBtn(q) {

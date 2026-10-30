@@ -90,6 +90,38 @@ def main():
     open('audio/index.js', 'w', encoding='utf-8', newline='\n').write(js)
     size = sum(os.path.getsize(p) for p in glob.glob('audio/en/*.mp3'))
     print(f'{len(index)} 条，新生成 {made} 条，共 {size / 1024 / 1024:.1f} MB')
+    phoneme_audio(k)
+
+
+# 自然拼读卡片里单个音的录音：英式声音（和卡片上的英式音标一致），文件名用 ASCII
+PH_VOICE = 'bf_emma'
+PHONEMES = {
+    'æ': 'ae', 'e': 'e', 'ɪ': 'i-short', 'ɒ': 'o-short', 'ʌ': 'uh', 'ʊ': 'u-short', 'ə': 'schwa', 'i': 'i-happy',
+    'iː': 'ee', 'ɑː': 'ar', 'ɔː': 'or', 'uː': 'oo', 'ɜː': 'er',
+    'eɪ': 'ay', 'aɪ': 'eye', 'ɔɪ': 'oy', 'aʊ': 'ow', 'əʊ': 'oh', 'ɪə': 'ear', 'eə': 'air', 'ʊə': 'ure',
+    'p': 'p', 'b': 'b', 't': 't', 'd': 'd', 'k': 'k', 'g': 'g', 'f': 'f', 'v': 'v', 'θ': 'th', 'ð': 'dh',
+    's': 's', 'z': 'z', 'ʃ': 'sh', 'ʒ': 'zh', 'h': 'h', 'tʃ': 'ch', 'dʒ': 'j', 'm': 'm', 'n': 'n', 'ŋ': 'ng',
+    'l': 'l', 'r': 'r', 'w': 'w', 'j': 'y',
+}
+CONTINUANT = set('fvszʃʒθðmnŋlr') | {'h'}
+
+
+def phoneme_audio(k):
+    """每个音素单独读一遍：擦音、鼻音、边音拖长一点（sː），塞音就是一下"""
+    os.makedirs('audio/ph', exist_ok=True)
+    for ph, name in PHONEMES.items():
+        path = f'audio/ph/{name}.mp3'
+        if os.path.exists(path):
+            continue
+        src = ph.replace('g', 'ɡ').replace('r', 'ɹ')               # 模型用的是 IPA 写法的 ɡ 和 ɹ
+        src = src + 'ː' if ph in CONTINUANT else src
+        x, sr = k.create(src, voice=PH_VOICE, speed=0.8, lang='en-gb', is_phonemes=True)
+        to_mp3(trim(x, sr), sr, path)
+    js = ('// 自然拼读单个音的录音索引：由 docs/audio/build_audio.py 生成，不要手改\n'
+          f'// 声音 Kokoro {PH_VOICE}（英式）\n'
+          'window.KW_PH_AUDIO = ' + json.dumps(PHONEMES, ensure_ascii=False, separators=(',', ':')) + ';\n')
+    open('audio/ph-index.js', 'w', encoding='utf-8', newline='\n').write(js)
+    print(f'音素录音 {len(PHONEMES)} 个')
 
 
 if __name__ == '__main__':
