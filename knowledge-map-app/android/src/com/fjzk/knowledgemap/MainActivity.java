@@ -67,6 +67,7 @@ public class MainActivity extends Activity {
         MIME.put("html", "text/html"); MIME.put("js", "application/javascript"); MIME.put("css", "text/css");
         MIME.put("json", "application/json"); MIME.put("svg", "image/svg+xml"); MIME.put("png", "image/png");
         MIME.put("jpg", "image/jpeg"); MIME.put("wasm", "application/wasm"); MIME.put("gz", "application/gzip");
+        MIME.put("mp3", "audio/mpeg");                   // 课本单词录音（english-map/audio）
     }
 
     WebView web;
@@ -228,6 +229,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        voiceCache.clear();
         try { if (sync != null) sync.onResume(); } catch (Throwable e) { Log.w(SyncAndroid.TAG, "onResume", e); }
     }
 
@@ -256,6 +258,34 @@ public class MainActivity extends Activity {
         updater.destroy();
         web.destroy();
         super.onDestroy();
+    }
+
+    /** 某个语言（en-US、zh-CN）里最好的语音：已安装 > 离线 > 本地区（美式/普通话）> 音质高 > 延迟低。
+     *  结果缓存，回到前台时清掉（可能刚去系统设置装了语音数据）。没有就返回 null */
+    final Map<String, android.speech.tts.Voice> voiceCache = new HashMap<>();
+    android.speech.tts.Voice bestVoice(String tag) {
+        if (voiceCache.containsKey(tag)) return voiceCache.get(tag);
+        Locale want = Locale.forLanguageTag(tag);
+        android.speech.tts.Voice best = null;
+        int bs = -1;
+        try {
+            java.util.Set<android.speech.tts.Voice> vs = tts.getVoices();
+            if (vs != null) for (android.speech.tts.Voice v : vs) {
+                Locale l = v.getLocale();
+                if (l == null || !want.getLanguage().equals(l.getLanguage())) continue;
+                java.util.Set<String> f = v.getFeatures();
+                if (f != null && f.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
+                int s = v.getQuality();                                   // 100（很差）~ 500（很好）
+                if (!v.isNetworkConnectionRequired()) s += 1000;         // 不联网也能读，听写不会卡住
+                if (want.getCountry().equals(l.getCountry())) s += 300;
+                if (v.getLatency() <= android.speech.tts.Voice.LATENCY_NORMAL) s += 50;
+                if (s > bs) { bs = s; best = v; }
+            }
+        } catch (Exception e) {
+            best = null;
+        }
+        voiceCache.put(tag, best);
+        return best;
     }
 
     void ttsDone(final String id, final boolean ok) {
@@ -569,10 +599,36 @@ public class MainActivity extends Activity {
         public void speak(String token, String id, String text, String lang, float rate, float pitch) {
             if (!gate.check(token, "speak", now())) return;
             if (!ttsReady) { ttsDone(id, false); return; }
-            if (lang != null && !lang.isEmpty()) tts.setLanguage(Locale.forLanguageTag(lang));
+            if (lang != null && !lang.isEmpty()) {
+                // 用这个语言里最好的语音；没有这个语言的语音就算读失败（不让中文语音硬读英文）
+                android.speech.tts.Voice v = bestVoice(lang);
+                if (v != null) tts.setVoice(v);
+                else if (tts.setLanguage(Locale.forLanguageTag(lang)) < TextToSpeech.LANG_AVAILABLE) { ttsDone(id, false); return; }
+            }
             tts.setSpeechRate(rate);
             tts.setPitch(pitch);
             tts.speak(text, TextToSpeech.QUEUE_ADD, null, id);
+        }
+
+        /** 语音引擎情况（听写设置页显示）：{ engine, label, en, enLocal, zh }，en/zh 是有没有这个语言的语音 */
+        @JavascriptInterface
+        public String ttsInfo(String token) {
+            if (!gate.check(token, "ttsInfo", now())) return "";
+            try {
+                JSONObject o = new JSONObject();
+                String eng = ttsReady ? tts.getDefaultEngine() : "";
+                o.put("engine", eng == null ? "" : eng);
+                String label = "";
+                if (ttsReady) for (TextToSpeech.EngineInfo e : tts.getEngines()) if (e.name.equals(eng)) label = e.label;
+                o.put("label", label);
+                android.speech.tts.Voice en = ttsReady ? bestVoice("en-US") : null;
+                o.put("en", en != null);
+                o.put("enLocal", en != null && !en.isNetworkConnectionRequired());
+                o.put("zh", ttsReady && bestVoice("zh-CN") != null);
+                return o.toString();
+            } catch (Exception e) {
+                return "";
+            }
         }
 
         @JavascriptInterface

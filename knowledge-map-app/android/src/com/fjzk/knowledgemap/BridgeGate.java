@@ -51,7 +51,7 @@ public class BridgeGate {
         // 只读、不含个人数据：任何 frame 都能调
         free("hello", "appVersion", "widgetCount", "widgetInfo");
         // 本 App 页面才能调
-        allow(APP, "speak", "stopSpeak", "saveFile", "updatePet", "savePetImage", "pinWidget",
+        allow(APP, "speak", "stopSpeak", "ttsInfo", "saveFile", "updatePet", "savePetImage", "pinWidget",
             "openAppSettings", "keepScreenOn", "goBack", "checkUpdate");
         allow(APP, "deviceName", "sharedGet", "sharedPut");          // #2 我的数据
         // #1 第一期：设备同步。全部要令牌（syncState 含设备名也一样）；听写页（https 虚拟地址）不在 APP_FILE 里，调不到

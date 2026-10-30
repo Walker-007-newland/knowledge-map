@@ -23,7 +23,7 @@ public class BridgeGateTest {
     static final String BILI = "https://player.bilibili.com/player.html?bvid=BV1xx411c7mD&autoplay=0";
 
     /** 规则表里所有需要令牌的方法（和 MainActivity.Bridge 一致） */
-    static final String[] TOKEN_METHODS = { "speak", "stopSpeak", "saveFile", "updatePet", "savePetImage", "pinWidget",
+    static final String[] TOKEN_METHODS = { "speak", "stopSpeak", "ttsInfo", "saveFile", "updatePet", "savePetImage", "pinWidget",
         "openAppSettings", "keepScreenOn", "goBack", "checkUpdate", "deviceName", "sharedGet", "sharedPut" };
     static final String[] SYNC_METHODS = { "syncState", "syncNow", "syncPublish", "syncTake", "syncAck", "nodeJoin", "nodeRemove",
         "joinOpen", "joinClose", "joinState", "joinScan", "joinConfirm", "syncRename", "syncRemove", "syncLeave",
