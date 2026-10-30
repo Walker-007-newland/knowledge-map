@@ -75,7 +75,7 @@
 - w-p-loushi | 《陋室铭》《爱莲说》 | 陋室铭·爱莲说 | wenyan | 7 | 3 | w-zhi | 53、57
 - w-p-sanxia | 《三峡》 | 三峡 | wenyan | 8 | 3 | w-gujin | 51
 - w-p-duanwen | 《答谢中书书》《记承天寺夜游》 | 答谢中书书等 | wenyan | 8 | 3 | w-gujin | 50、58
-- w-p-mengzi | 《孟子》二章：得道多助，失道寡助；生于忧患，死于安乐 | 孟子二章 | wenyan | 8 | 3 | w-jushi1 | 43（后两则）
+- w-p-mengzi | 《孟子》三章：富贵不能淫；生于忧患，死于安乐；得道多助，失道寡助 | 孟子三章 | wenyan | 8 | 3 | w-jushi1 | 43（后两则）
 
 ## N 组 文言篇目（二）→ data/wenyan-pian-b.js
 - w-p-taohua | 《桃花源记》 | 桃花源记 | wenyan | 8 | 3 | w-fanyi | 49

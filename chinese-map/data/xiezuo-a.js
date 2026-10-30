@@ -900,7 +900,7 @@ KG.nodes.push(
 
 /* ================= 抒情 ================= */
 {
-  id: 'xz-shuqing', title: '抒情：写出真情实感', short: '抒情表达', module: 'xiezuo', grade: 7, freq: 2,
+  id: 'xz-shuqing', title: '抒情：写出真情实感', short: '抒情表达', module: 'xiezuo', grade: 6, freq: 2,
   prereqs: ['xz-xijie'],
   tip: '中考作文评分标准里“感情真挚”是一大项。会抒情不是多用感叹号，而是把感情藏进事情和细节里，关键处再直接说一两句，情感还要有变化、有层次。',
   learn: [
@@ -1057,7 +1057,7 @@ KG.nodes.push(
 /* ================= 写景与借景抒情 ================= */
 {
   id: 'xz-xiejing', title: '写景与借景抒情', short: '写景抒情', module: 'xiezuo', grade: 7, freq: 2,
-  prereqs: ['xz-xijie'],
+  prereqs: ['xz-xijie', 'xz-youlan'],
   tip: '写景不是为了“好看”，而是为了“传情”。中考记叙文里，一两段恰当的景物描写，能渲染氛围、烘托心情、推动情节，是让作文“升格”的利器。',
   learn: [
     { h: '写景先抓特点、有顺序', html: `
