@@ -65,7 +65,7 @@ def units(p):
 
 VOWELS = {'æ', 'e', 'ɪ', 'ɒ', 'ʌ', 'ʊ', 'ə', 'i', 'iː', 'ɑː', 'ɔː', 'uː', 'ɜː', 'eɪ', 'aɪ', 'ɔɪ', 'aʊ', 'əʊ', 'ɪə', 'eə', 'ʊə'}
 ONSETS = {'sp', 'st', 'sk', 'sm', 'sn', 'sl', 'sw', 'pr', 'br', 'tr', 'dr', 'kr', 'gr', 'fr', 'θr', 'ʃr', 'pl', 'bl', 'kl', 'gl', 'fl',
-          'tw', 'dw', 'kw', 'pj', 'bj', 'tj', 'dj', 'kj', 'fj', 'mj', 'nj', 'hj', 'vj', 'lj', 'spr', 'str', 'skr', 'spl', 'skw', 'skj', 'spj'}
+          'tw', 'dw', 'kw', 'pj', 'bj', 'tj', 'dj', 'kj', 'fj', 'mj', 'nj', 'hj', 'vj', 'lj', 'spr', 'str', 'skr', 'spl', 'skw', 'skj', 'spj', 'stj', 'gw', 'θj', 'sj', 'zj', 'gj'}
 
 def stressed_vowel(p):
     """espeak 音标里重读的是第几个元音（只算主重音）"""
@@ -213,6 +213,103 @@ FIX = {
     'twentieth': 't=t w=w e=e n=n t=t i=i e=ə th=θ', 'drawing': 'd=d r=r aw=ɔː i=ɪ ng=ŋ',
 }
 
+SHORT = {'æ', 'e', 'ɪ', 'ɒ', 'ʌ', 'ʊ'}
+
+
+def syllabify(chunks, k, force=()):
+    """按读音分音节，再对回字母：返回 [(音节字母, 音节音标)]
+    - 两个元音之间的辅音：能做音节开头的尽量给后一节（li·bra·ry、mu·sic）
+    - 重读短元音后面至少留一个辅音（sev·en、vis·it、hap·py）
+    - 不发音的辅音字母跟后一节（lis·ten），不发音的元音字母跟前一节（love·ly）
+    - 双写辅音从中间分开（hap·py、bal·loon）
+    - force：必须从这些字母位置开始新音节（复合词 hard·work、后缀 work·ing）"""
+    # nk 拆成 n /ŋ/ + k /k/（mon·key）；r 前面被 espeak 吞掉的元音字母补回 /ə/（dif·fer·ent、ev·er·y）
+    ch2 = []
+    for i, (g, p) in enumerate(chunks):
+        if g == 'nk' and p.replace(' ', '') == 'ŋk':
+            ch2 += [['n', 'ŋ'], ['k', 'k']]
+        elif g == 'ng' and p.replace(' ', '') == 'ŋg':
+            ch2 += [['n', 'ŋ'], ['g', 'g']]
+        elif not p and g in ('e', 'a', 'o') and 0 < i < len(chunks) - 1 and chunks[i + 1][0] in ('r', 'rr')                 and chunks[i - 1][1] and not any(c in 'aeiouy' for c in chunks[i - 1][0]):
+            ch2.append([g, 'ə'])
+        else:
+            ch2.append([g, p])
+    chunks = ch2
+    fpos, acc = set(), 0
+    for ci, (g, p) in enumerate(chunks):
+        if acc in force and ci:
+            fpos.add(ci)
+        acc += len(g)
+    seq = []                                                      # 每个音素属于哪个字母块
+    for ci, (g, p) in enumerate(chunks):
+        for u in units(p.replace(' ', '')):
+            seq.append((ci, u))
+    nuc = [i for i, (ci, u) in enumerate(seq) if u in VOWELS]
+    # aɪ/aʊ + ə 在同一个字母块里（fire、our）算一个音节
+    nuc = [i for n, i in enumerate(nuc) if not (n and seq[i][1] == 'ə' and seq[i - 1][0] == seq[i][0] and seq[i - 1][1] in ('aɪ', 'aʊ'))]
+    if len(nuc) < 2:
+        return [(''.join(g for g, p in chunks), ''.join(u for _, u in seq))]
+    starts = [0]                                                  # 每个音节从第几个字母块开始
+    for n in range(1, len(nuc)):
+        v1, v2 = nuc[n - 1], nuc[n]
+        cons = [u for _, u in seq[v1 + 1:v2]]
+        m = 0
+        for j in range(len(cons), 0, -1):
+            cl = ''.join(cons[-j:])
+            if (j == 1 and cons[-1] != 'ŋ') or cl in ONSETS:
+                m = j; break
+        if m == len(cons) and cons and seq[v1][1] in SHORT and k == n - 1:
+            m -= 1                                                # 重读短元音后面留一个辅音
+        elif m >= 2 and m == len(cons) and cons[-m] == 's':
+            m -= 1                                                # s+辅音：s 归前一节（bas·ket、sis·ter）
+        fc = [c for c in fpos if seq[v1][0] < c <= seq[v2][0]]
+        if fc:                                                    # 复合词、-ing：在词的分界处断开
+            starts.append(fc[0])
+            continue
+        b = v2 - m                                                # 后一节从第 b 个音素开始
+        cb = seq[b][0]
+        if b > 0 and seq[b - 1][0] == cb and seq[v2][0] != cb:    # 边界落在一个字母块中间（x = ks）：整块归前一节
+            cb += 1                                               # （块里有后一节的元音时整块归后一节：plea·sure）
+        while cb - 1 > starts[-1] and not chunks[cb - 1][1] and chunks[cb - 1][0][0] not in 'aeiouy':
+            cb -= 1                                               # 不发音的辅音字母跟后一节
+        if cb > starts[-1]:
+            starts.append(cb)
+    # 字母边界：双写辅音拆开
+    bounds, pos = [], []
+    acc = 0
+    for g, p in chunks:
+        pos.append(acc); acc += len(g)
+    share = {}                                                    # 双写辅音拆开时，它的音两节都有（rab /ræb/ · bit /bɪt/）
+    dbl = lambda g: len(g) == 2 and g[0] == g[1] and g[0] not in 'aeiou'
+    isv = lambda i: 0 <= i < len(chunks) and any(c in 'aeiouy' for c in chunks[i][0]) and chunks[i][1]
+    for n, s in enumerate(starts[1:], 1):
+        L = pos[s]
+        prev, cur = chunks[s - 1][0], chunks[s][0]
+        if dbl(prev) and isv(s) and isv(s - 2):
+            L -= 1; share[n] = chunks[s - 1][1]
+        elif dbl(cur) and isv(s + 1) and isv(s - 1):
+            L += 1                                               # hel·lo：重读在后一节，音只放后一节
+        bounds.append(L)
+    word = ''.join(g for g, p in chunks)
+    edges = [0] + bounds + [len(word)]
+    out = []
+    starts_end = starts + [len(chunks)]
+    syl = [[u for ci, u in seq if starts_end[n] <= ci < starts_end[n + 1]] for n in range(len(starts))]
+    for n, p in share.items():
+        us = units(p.replace(' ', ''))
+        if len(us) == 1:
+            syl[n].insert(0, us[0])                               # bb = /b/：两节都有
+        else:                                                     # cc = /ks/、zz = /ts/：前一个音留前一节，后面的给后一节
+            del syl[n - 1][len(syl[n - 1]) - len(us) + 1:]
+            syl[n][:0] = us[1:]
+    for n in range(len(starts)):
+        ph = ''.join(syl[n])
+        if n == k:
+            ph = 'ˈ' + ph
+        out.append((word[edges[n]:edges[n + 1]], ph))
+    return out
+
+
 def parse_fix(spec):
     """FIX 的写法 'u=j uː s=z'：带 = 的开始一个块，不带 = 的是上一个块的后续音素"""
     out = []
@@ -256,11 +353,26 @@ def main():
                     break
         if forced:
             report.append(f'{w}\t/{ipa}/\t硬配 {forced} 处：' + ' '.join(f'{g}={p}' for g, p in chunks))
+        chunks = [[g.rstrip('~'), p] for g, p in chunks]
         ph_out = [u for g, p in chunks for u in units(p.replace(' ', ''))]
-        disp = show_ipa(ph_out, stressed_vowel(ipa))
-        out[w] = f'{disp}|' + ' '.join(f'{g}={p.replace(" ", "")}' for g, p in chunks)
-    js = ('// 自然拼读数据：由 docs/audio/build_phonics.py 生成，不要手改（要改就改脚本里的 FIX 或规则表再重跑）\n'
-          '// 格式：小写单词 → "/音标/|字母=音 ..."；音为空是静音字母；a~ 表示和词尾的 e 一起（magic e）\n'
+        k = stressed_vowel(ipa)
+        disp = show_ipa(ph_out, k)
+        # 复合词（hard·work·ing）和 -ing 后缀：在分界处断开
+        force = set()
+        cuts = [c for c in range(3, len(w) - 2) if w[:c] in clean and w[c:] in clean]
+        if cuts:
+            force.add(cuts[0])
+        base = w[:-3]
+        if w.endswith('ing') and len(w) > 5 and w not in ('evening',) and (base in clean or base + 'e' in clean
+                or any(base[:c] in clean and base[c:] in clean for c in range(3, len(base) - 2))):
+            force.add(len(w) - 3)                                 # 原形是个词才按 -ing 断（read·ing、din·ing；mor·ning 不算）
+            for c in range(3, len(base) - 2):
+                if base[:c] in clean and base[c:] in clean:
+                    force.add(c); break
+        syls = syllabify(chunks, k, force)
+        out[w] = f'{disp}|' + ' '.join(f'{g}={s}' for g, s in syls)
+    js = ('// 音节拼读数据：由 docs/audio/build_phonics.py 生成，不要手改（要改就改脚本里的 FIX 或规则表再重跑）\n'
+          '// 格式：小写单词 → "/音标/|音节字母=音节音标 ..."；带 ˈ 的是重读音节；单音节词只有一节\n'
           'window.KW_PHONICS = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + ';\n')
     open('data/phonics-words.js', 'w', encoding='utf-8', newline='\n').write(js)
     open('docs/audio/phonics-report.txt', 'w', encoding='utf-8', newline='\n').write('\n'.join(report) + '\n')
