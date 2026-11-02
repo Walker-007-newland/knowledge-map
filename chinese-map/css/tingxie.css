@@ -149,14 +149,12 @@ body:not(.on-home) .bottom-bar { display: none; }
 .run-hand[hidden], .run-state[hidden] { display: none; }
 .run-hand { margin-top: 18px; }
 .hand-boxes { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
-.hbox { position: relative; background: #fff; border: 2px solid #c9a; border-radius: 4px; touch-action: none; user-select: none; -webkit-user-select: none;
+.hbox { box-sizing: content-box; display: block; position: relative; background: #fff; border: 2px solid #c9a; border-radius: 4px; touch-action: none; user-select: none; -webkit-user-select: none;
   background-image: linear-gradient(to right, transparent calc(50% - .5px), #e4c8cc calc(50% - .5px), #e4c8cc calc(50% + .5px), transparent calc(50% + .5px)),
                     linear-gradient(to bottom, transparent calc(50% - .5px), #e4c8cc calc(50% - .5px), #e4c8cc calc(50% + .5px), transparent calc(50% + .5px)); }
-.hbox.cur { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-.hbox.ok { border-color: var(--st-mastered); }
-.hbox.bad { border-color: var(--st-weak); }
-.hbox.nodata { display: grid; place-items: center; font-size: 60px; font-family: var(--kai); color: var(--muted); }
-.hbox svg { display: block; }
-.hand-msg { min-height: 28px; margin: 14px 0 8px; font-size: 20px; color: var(--st-mastered); }
-.hand-msg.bad { color: var(--st-weak); }
-.run-hand .btn[hidden] { display: none; }
+.hand-tools { display: flex; justify-content: center; gap: 10px; margin-top: 16px; }
+/* 批改页：手写笔迹 */
+.ink { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ink-c { width: 54px; height: 54px; padding: 0; display: grid; place-items: center; background: #fff; color: #222; border: 1.5px solid var(--line); border-radius: 4px; }
+.ink-c.bad { border: 2px solid var(--st-weak); cursor: pointer; }
+.ink-c svg { display: block; }

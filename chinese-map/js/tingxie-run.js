@@ -11,7 +11,7 @@
  *     opts.onBack()   结果页「返回单元」
  *   src = { name, words: [{ key, w, say?, k }] }
  *
- * 手写用 js/vendor/hanzi-writer.min.js（MIT），笔画数据 data/tingxie/strokes/sNN.js 按需载入。
+ * 手写：自由书写，js/hand-judge.js 判分；笔画数据 data/tingxie/strokes/sNN.js 按需载入；批改页用 js/vendor/hanzi-writer.min.js（MIT）演示笔顺。
  * 朗读用 speechSynthesis（zh-CN）：浏览器里是浏览器自带的，平板 App 里由 km-shim.js 转给安卓系统 TTS（离线）。 */
 (function () {
   'use strict';
@@ -94,8 +94,7 @@
       <input id="runInput" class="run-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="听到后在这里输入，按回车" hidden>
       <div class="run-hand" id="runHand" hidden>
         <div class="hand-boxes" id="handBoxes"></div>
-        <div class="hand-msg" id="handMsg"></div>
-        <button class="btn" id="btnHandSkip">这个字不会写</button>
+        <div class="hand-tools"><button class="btn" id="btnHandUndo">↶ 撤销一笔</button><button class="btn" id="btnHandClear">重写这个词</button></div>
       </div>
     </div>
     <div class="run-ctrl">
@@ -171,9 +170,8 @@
       $('#setupHint').textContent = S.mode === 'paper'
         ? '准备好纸和笔，每个词写在对应的序号后面。听写完再对照批改。'
         : S.mode === 'hand'
-          ? '在屏幕的田字格里一笔一笔写，要按正确笔顺。写错的笔画不会留下，可以重写这一笔；'
-            + (S.handJudge === 'strict' ? '严格：一个字里写错一笔就算错' : '宽松：一个字最多可以写错 2 笔，第 3 笔错就算错')
-            + '，并用红色演示正确笔顺。'
+          ? '在屏幕的田字格里写，写的时候不提示对错，写好点“下一个”；全部听写完再一起判分。'
+            + (S.handJudge === 'strict' ? '严格：字形和笔顺都要对。' : '宽松：只看字形，笔顺不对也算对。')
           : '听到后用键盘（拼音或手写输入法）输入，按回车进入下一个，结束后自动判分。';
     }
     document.querySelectorAll('#vSetup .seg[data-opt]').forEach(seg => seg.addEventListener('click', e => {
@@ -203,7 +201,7 @@
         return;
       }
       run = { list, scope, words, idx: 0, answers: words.map(() => ''), paused: false, mode: S.mode, reps: +S.reps || 2, pace: PACE[S.pace] || PACE.normal };
-      if (run.mode === 'hand') run.maxMiss = S.handJudge === 'strict' ? 0 : 2;
+      if (run.mode === 'hand') { run.strict = S.handJudge === 'strict'; run.res = words.map(() => null); }
       $('#runTotal').textContent = words.length;
       $('#runInput').hidden = run.mode !== 'type';
       $('#runHand').hidden = run.mode !== 'hand';
@@ -264,6 +262,7 @@
     function next() {
       if (!run) return;
       if (run.mode === 'type') run.answers[run.idx] = $('#runInput').value.trim();
+      if (run.mode === 'hand') judgeCurrent();
       if (run.idx >= run.words.length - 1) { finishRun(); return; }
       run.idx++; playCurrent();
     }
@@ -271,6 +270,7 @@
     $('#btnPrev').onclick = () => {
       if (!run || run.idx === 0) return;
       if (run.mode === 'type') run.answers[run.idx] = $('#runInput').value.trim();
+      if (run.mode === 'hand') judgeCurrent();
       stopSay(); run.idx--; playCurrent();
     };
     $('#btnRepeat').onclick = () => { if (run) { stopSay(); run.paused = false; $('#btnPause').textContent = '⏸ 暂停'; playCurrent(); } };
@@ -286,16 +286,17 @@
     $('#btnStop').onclick = () => {
       if (!run) return;
       // 手写时当前这个词一笔没写就不算进去
-      const keep = run.mode === 'hand' && !run.answers[run.idx] && !(hand && hand.res.some(x => x !== null)) ? run.idx : run.idx + 1;
+      const keep = run.mode === 'hand' && !hasInk(run.answers[run.idx]) ? run.idx : run.idx + 1;
       const done = run.idx + ((run.mode === 'type' && $('#runInput').value.trim()) || (run.mode === 'hand' && keep > run.idx) ? 1 : 0);
       if (done > 0 && confirm(`已经听写了 ${keep} 个，要批改已听写的部分吗？\n（选“取消”直接放弃这次听写）`)) {
         if (run.mode === 'type') run.answers[run.idx] = $('#runInput').value.trim();
+        if (run.mode === 'hand') { judgeCurrent(); run.res = run.res.slice(0, keep); }
         run.words = run.words.slice(0, keep);
         run.answers = run.answers.slice(0, keep);
         finishRun();
       } else { stopRun(); history.back(); }
     };
-    /* 手写（Hanzi Writer 测验模式：按笔顺逐笔判断，不显示字形轮廓） */
+    /* 手写：田字格里自由书写，写的时候不判断、不提示；离开这个词时用 js/hand-judge.js 判分，批改页统一显示 */
     const hanChars = words => [...new Set(words.map(w => bare(w.w)).join(''))].filter(c => c >= '㐀' && c <= '鿿');
     const bucketsOf = words => [...new Set(hanChars(words).map(c => c.codePointAt(0) % 16))];
     const strokeLoaded = new Set(), strokeLoading = {};
@@ -309,66 +310,82 @@
         document.head.appendChild(s);
       }))));
     }
-    let hand = null;   // 当前词：{ chars, size, writers, res: [每个字对 true / 错 false], i: 正在写第几个字 }
-    function clearHand() {
-      if (!hand) return;
-      clearTimeout(hand.timer);
-      hand.writers.forEach(wr => { try { wr.cancelQuiz(); } catch (e) { /* 已结束 */ } });
-      hand = null;
-      $('#handBoxes').innerHTML = '';
-    }
+    // 每个词的笔迹：answers[i] = [每个字的笔画 [[{x,y}…]…]]（字形坐标），一笔没写是 ''
+    const hasInk = a => Array.isArray(a) && a.some(c => c.length);
+    let hand = null;   // 当前词：{ chars, size, ink（同 answers[i]）, order: 依次写在第几个格子（撤销用） }
+    function clearHand() { hand = null; $('#handBoxes').innerHTML = ''; }
     function startHand(w) {
-      clearHand();
       const chars = [...bare(w.w)], box = $('#handBoxes');
       const avail = Math.min(box.clientWidth || 600, 760);
       const gap = avail < 420 ? 6 : 12;
       const size = Math.max(60, Math.min(170, Math.floor((avail - gap * (chars.length - 1)) / chars.length)));
+      const saved = run.answers[run.idx];
+      hand = { chars, size, ink: Array.isArray(saved) ? saved : chars.map(() => []), order: [] };
       box.style.gap = gap + 'px';
-      box.innerHTML = chars.map(() => `<div class="hbox" style="width:${size}px;height:${size}px"></div>`).join('');
-      run.answers[run.idx] = '';
-      hand = { chars, size, writers: [], res: chars.map(() => null), i: -1 };
-      $('#handMsg').textContent = '';
-      $('#btnHandSkip').hidden = false;
-      nextChar();
+      box.innerHTML = chars.map(() => `<canvas class="hbox" style="width:${size}px;height:${size}px"></canvas>`).join('');
+      [...box.children].forEach((cv, k) => initBox(cv, k));
     }
-    function nextChar() {
-      const h = hand;
-      h.i++;
-      [...$('#handBoxes').children].forEach((el, k) => el.classList.toggle('cur', k === h.i));
-      if (h.i >= h.chars.length) { finishWord(); return; }
-      const k = h.i, c = h.chars[k], el = $('#handBoxes').children[k];
-      // 没有笔画数据的字没法判断：直接显示出来，不算错
-      if (!KT.strokes[c] || !window.HanziWriter) { h.res[k] = true; el.textContent = c; el.classList.add('nodata'); nextChar(); return; }
-      const wr = HanziWriter.create(el, c, {
-        width: h.size, height: h.size, padding: Math.round(h.size * 0.08),
-        showOutline: false, showCharacter: false, showHintAfterMisses: false, highlightOnComplete: false,
-        strokeColor: '#222', drawingColor: '#333', drawingWidth: Math.max(4, Math.round(h.size / 24)),
-        leniency: run.maxMiss ? 1.3 : 1,
-        charDataLoader: (ch, ok) => ok(KT.strokes[ch])
+    function initBox(cv, k) {
+      const h = hand, dpr = window.devicePixelRatio || 1;
+      cv.width = cv.height = Math.round(h.size * dpr);
+      const ctx = cv.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.lineCap = ctx.lineJoin = 'round'; ctx.strokeStyle = '#222'; ctx.lineWidth = Math.max(3, h.size / 26);
+      const px = p => HandJudge.fromChar(p, h.size);
+      const drawStroke = st => { ctx.beginPath(); st.forEach((p, n) => { const q = px(p); if (n) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }); ctx.stroke(); };
+      cv.redraw = () => { ctx.clearRect(0, 0, h.size, h.size); h.ink[k].forEach(drawStroke); };
+      cv.redraw();
+      let cur = null;
+      const at = e => { const r = cv.getBoundingClientRect(); return HandJudge.toChar(e.clientX - r.left - cv.clientLeft, e.clientY - r.top - cv.clientTop, h.size); };
+      cv.addEventListener('pointerdown', e => {
+        if (hand !== h) return;
+        e.preventDefault();
+        try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 模拟事件没有真实指针 */ }
+        cur = [at(e)];
       });
-      h.writers[k] = wr;
-      wr.quiz({
-        onMistake: s => { if (hand === h && h.res[k] === null && s.totalMistakes > run.maxMiss) failChar(k); },
-        onComplete: () => { if (hand !== h || h.res[k] !== null) return; h.res[k] = true; el.classList.add('ok'); nextChar(); }
+      cv.addEventListener('pointermove', e => {
+        if (!cur) return;
+        const p = at(e), last = cur[cur.length - 1];
+        if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) < 6) return;
+        cur.push(p);
+        const a = px(last), b = px(p);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       });
+      const end = () => {
+        if (!cur) return;
+        // 只点了一下：当作一个向右下的短点
+        if (cur.length === 1) cur.push({ x: cur[0].x + 25, y: cur[0].y - 25 });
+        h.ink[k].push(cur); h.order.push(k); cur = null;
+        if (hand === h && run) run.answers[run.idx] = h.ink;
+        cv.redraw();
+      };
+      cv.addEventListener('pointerup', end);
+      cv.addEventListener('pointercancel', end);
     }
-    // 这个字算错：停止作答，用红色演示正确笔顺
-    function failChar(k) {
-      const h = hand, wr = h.writers[k], el = $('#handBoxes').children[k];
-      h.res[k] = false;
-      el.classList.add('bad');
-      if (wr) { try { wr.cancelQuiz(); } catch (e) { /* 已结束 */ } wr.updateColor('strokeColor', '#d33'); wr.animateCharacter(); }
-      nextChar();
+    $('#btnHandUndo').onclick = () => {
+      const h = hand; if (!h) return;
+      // 优先撤销这次写的最后一笔；回到前面的词再写时，从最后一个有笔画的格子撤销
+      let k = h.order.pop();
+      if (k === undefined) for (k = h.ink.length - 1; k >= 0 && !h.ink[k].length; k--);
+      if (k < 0 || !h.ink[k].length) return;
+      h.ink[k].pop();
+      $('#handBoxes').children[k].redraw();
+    };
+    $('#btnHandClear').onclick = () => {
+      const h = hand; if (!h) return;
+      h.ink.forEach(c => { c.length = 0; }); h.order = [];
+      [...$('#handBoxes').children].forEach(cv => cv.redraw());
+    };
+    // 给一个词判分：{ ok, bad: [写错的字的序号], none: 一笔没写 }；没有笔画数据的字没法判，不算错
+    function judgeWord(w, ink, strict) {
+      if (!hasInk(ink)) return { ok: false, bad: [], none: true };
+      const bad = [];
+      [...bare(w.w)].forEach((c, k) => {
+        if (KT.strokes[c] && !HandJudge.judge(ink[k] || [], KT.strokes[c].medians, strict)) bad.push(k);
+      });
+      return { ok: !bad.length, bad };
     }
-    function finishWord() {
-      const h = hand, ok = h.res.every(Boolean);
-      run.answers[run.idx] = { ok, bad: h.chars.filter((c, k) => !h.res[k]) };
-      $('#btnHandSkip').hidden = true;
-      $('#handMsg').textContent = ok ? '✓ 写对了' : '✗ 红色的字写错了，看看正确写法，再点“下一个”';
-      $('#handMsg').classList.toggle('bad', !ok);
-      if (ok) h.timer = setTimeout(() => { if (hand === h && run) { stopSay(); next(); } }, 1000);
-    }
-    $('#btnHandSkip').onclick = () => { if (hand && hand.i < hand.chars.length) failChar(hand.i); };
+    function judgeCurrent() { if (run && run.mode === 'hand') run.res[run.idx] = judgeWord(run.words[run.idx], run.answers[run.idx], run.strict); }
 
     // 中文输入法选字时按回车不算（isComposing / keyCode 229）
     $('#runInput').addEventListener('keydown', e => {
@@ -382,13 +399,14 @@
       const r = run; run = null;
       checking = {
         list: r.list, scope: r.scope, mode: r.mode, words: r.words, answers: r.answers,
-        wrong: r.words.map((w, i) => r.mode === 'type' ? !sameAnswer(r.answers[i] || '', w.w)
-          : r.mode === 'hand' ? !(r.answers[i] && r.answers[i].ok) : false)
+        hand: r.mode === 'hand' ? r.words.map((w, i) => r.res[i] || judgeWord(w, r.answers[i], r.strict)) : null
       };
+      checking.wrong = r.words.map((w, i) => r.mode === 'type' ? !sameAnswer(r.answers[i] || '', w.w)
+        : r.mode === 'hand' ? !checking.hand[i].ok : false);
       $('#checkHint').textContent = r.mode === 'paper'
         ? '对照纸上写的，点一下写错的词标成 ✗（再点一下取消）。错一个字也算错。'
         : r.mode === 'hand'
-          ? '已经按手写自动判分。判得不对的话，点一下改判。'
+          ? '已经按手写自动判分，红框是判错的字，点一下红框看正确笔顺。判得不对的话，点这一行改判。'
           : '已经自动判分（去掉空格、标点后完全一致才算对）。判得不对的话，点一下改判。';
       renderCheck();
       history.replaceState({ v: 'vCheck' }, '', '#check');
@@ -400,11 +418,28 @@
         <div class="no">${i + 1}.</div>
         <div><div class="cw">${esc(w.w)}</div>
           ${c.mode === 'type' ? `<div class="ans">你写的：${esc(c.answers[i] || '（没写）')}</div>` : ''}
-          ${c.mode === 'hand' && !(c.answers[i] && c.answers[i].ok) ? `<div class="ans">${c.answers[i] ? '写错的字：' + esc(c.answers[i].bad.join('、')) : '（没写完）'}</div>` : ''}</div>
+          ${c.mode === 'hand' ? inkRow(w, c.answers[i], c.hand[i], i) : ''}</div>
         <div class="mark">${c.wrong[i] ? '✗' : '✓'}</div>
       </div>`).join('');
     }
+    // 手写的笔迹：每个字一个小格子，判错的字红框
+    function inkRow(w, ink, res, i) {
+      if (res.none) return '<div class="ans">（没写）</div>';
+      return '<div class="ink">' + [...bare(w.w)].map((c, k) => res.bad.includes(k)
+        ? `<button class="ink-c bad" data-i="${i}" data-k="${k}" aria-label="看“${esc(c)}”的正确笔顺">${HandJudge.svg(ink[k] || [], 54)}</button>`
+        : `<span class="ink-c">${HandJudge.svg(ink[k] || [], 54)}</span>`).join('') + '</div>';
+    }
+    // 点红框：在格子里用红色演示正确笔顺，再点一下回到自己写的
+    function toggleDemo(btn) {
+      const i = +btn.dataset.i, k = +btn.dataset.k, c = [...bare(checking.words[i].w)][k];
+      if (btn.dataset.demo) { delete btn.dataset.demo; btn.innerHTML = HandJudge.svg((checking.answers[i] || [])[k] || [], 54); return; }
+      if (!window.HanziWriter || !KT.strokes[c]) return;
+      btn.dataset.demo = 1; btn.innerHTML = '';
+      HanziWriter.create(btn, c, { width: 54, height: 54, padding: 4, showOutline: true, strokeColor: '#d33',
+        strokeAnimationSpeed: 1.5, delayBetweenStrokes: 150, charDataLoader: (ch, ok) => ok(KT.strokes[ch]) }).animateCharacter();
+    }
     $('#checkRows').addEventListener('click', e => {
+      const demo = e.target.closest('.ink-c.bad'); if (demo) { toggleDemo(demo); return; }
       const row = e.target.closest('.crow'); if (!row) return;
       const i = +row.dataset.i;
       checking.wrong[i] = !checking.wrong[i];
