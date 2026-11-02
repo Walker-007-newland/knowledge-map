@@ -18,7 +18,7 @@
   const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   function readJSON(k) { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return isObj(v) ? v : null; } catch (e) { return null; } }
   function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 存储不可用时只在本次有效 */ } }
-  const DICT_DEFAULTS = { scope: 'all', mode: 'paper', reps: '2', pace: 'normal', order: 'random', someN: 10 };
+  const DICT_DEFAULTS = { scope: 'all', mode: 'paper', handJudge: 'loose', reps: '2', pace: 'normal', order: 'random', someN: 10 };
   let S = readJSON(SETS) || {};
   S = Object.assign({ grade: 4, term: '上', sel: {} }, S);
   S.dict = Object.assign({}, DICT_DEFAULTS, isObj(S.dict) ? S.dict : {});

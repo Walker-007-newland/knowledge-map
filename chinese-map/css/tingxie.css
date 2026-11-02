@@ -144,3 +144,19 @@ body:not(.on-home) .bottom-bar { display: none; }
   .run-no { font-size: 64px; }
   .dopt-label { width: 100%; }
 }
+
+/* 手写：田字格 */
+.run-hand[hidden], .run-state[hidden] { display: none; }
+.run-hand { margin-top: 18px; }
+.hand-boxes { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.hbox { position: relative; background: #fff; border: 2px solid #c9a; border-radius: 4px; touch-action: none; user-select: none; -webkit-user-select: none;
+  background-image: linear-gradient(to right, transparent calc(50% - .5px), #e4c8cc calc(50% - .5px), #e4c8cc calc(50% + .5px), transparent calc(50% + .5px)),
+                    linear-gradient(to bottom, transparent calc(50% - .5px), #e4c8cc calc(50% - .5px), #e4c8cc calc(50% + .5px), transparent calc(50% + .5px)); }
+.hbox.cur { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.hbox.ok { border-color: var(--st-mastered); }
+.hbox.bad { border-color: var(--st-weak); }
+.hbox.nodata { display: grid; place-items: center; font-size: 60px; font-family: var(--kai); color: var(--muted); }
+.hbox svg { display: block; }
+.hand-msg { min-height: 28px; margin: 14px 0 8px; font-size: 20px; color: var(--st-mastered); }
+.hand-msg.bad { color: var(--st-weak); }
+.run-hand .btn[hidden] { display: none; }
