@@ -1,7 +1,7 @@
 /* 手写字判分：整字写完后，把孩子写的笔画和标准字的笔画中线（hanzi-writer-data 的 medians）比对
  * 单笔是否吻合照搬 Hanzi Writer（MIT，js/vendor/hanzi-writer.LICENSE.txt）的 strokeMatches：平均距离、起止点、方向、形状（Fréchet 距离）、长度。
  * 不同的是：先把写的整个字按外框对齐到标准字（写偏、写大写小都不要紧），再给笔画配对——
- *   宽松：笔画数相同，且每一笔都能和标准字里不同的一笔对上（不管笔顺、不管起笔方向）
+ *   宽松：每一笔都能和标准字里不同的一笔对上（不管笔顺、不管起笔方向；8 画以上的字允许多一笔或少一笔）
  *   严格：笔画数相同，且第 i 笔对第 i 笔（笔顺、方向都要对）
  * 坐标用字形坐标：x 0–1024，y -124–900，y 向上（同 hanzi-writer-data）。
  *
@@ -135,51 +135,77 @@
     else if (sx === null) sx = sy; else if (sy === null) sy = sx;
     return user.map(s => s.map(p => ({ x: t.cx + (p.x - u.cx) * sx, y: t.cy + (p.y - u.cy) * sy })));
   }
+  // 两档的阈值。宽松：手写变化大也能过；严格：笔顺对、字形更规整
+  const LEVELS = {
+    loose: { len: 2.0, longer: 1.6, longerFrac: 0.85, keyGap: 260, keyFrac: 0.1, keyGapUser: 240, aspect: 1.8, slack: n => (n >= 8 ? 1 : 0) },
+    strict: { len: 1.4, longer: 1.4, longerFrac: 1, keyGap: 220, keyFrac: 0.2, keyGapUser: 200, aspect: 1.5, slack: () => 0 }
+  };
+  // 一笔中途抬手写成了两笔：前一笔的终点离后一笔的起点很近（150 以内）就接起来，直到笔画数对上
+  function mergeSplits(user, n) {
+    const u = user.slice();
+    while (u.length > n) {
+      let best = -1, gap = 150;
+      for (let i = 0; i + 1 < u.length; i++) {
+        const d = dist(u[i][u[i].length - 1], u[i + 1][0]);
+        if (d < gap) { gap = d; best = i; }
+      }
+      if (best < 0) break;
+      u.splice(best, 2, u[best].concat(u[best + 1]));
+    }
+    return u;
+  }
   function judge(strokes, medians, strict, leniency) {
+    const L = LEVELS[strict ? 'strict' : 'loose'];
     const target = medians.map(m => m.map(([x, y]) => ({ x, y })));
-    const user = strokes.map(dedupe).filter(s => s.length >= 2).map(smooth);
-    if (user.length !== target.length) return false;
-    if (!aspectOk(user, target)) return false;
-    const u = align(user, target), len = leniency || (strict ? 1.2 : 1.5);
-    if (strict) return u.every((s, i) => strokeMatch(s, target[i], len, false)) && structureOk(u, target);
-    // 宽松：每笔配一个不同的标准笔画，在单笔吻合的配对里取平均距离总和最小的一种（匈牙利算法）
-    const INF = 1e9, cost = u.map(s => target.map(m => strokeMatch(s, m, len, true) ? avgDist(s, m) : INF));
+    const user = mergeSplits(strokes.map(dedupe).filter(s => s.length >= 2).map(smooth), target.length);
+    const slack = L.slack(target.length);
+    if (!user.length || Math.abs(user.length - target.length) > slack) return false;
+    if (!aspectOk(user, target, L)) return false;
+    const u = align(user, target), len = leniency || L.len;
+    if (strict) return u.every((s, i) => strokeMatch(s, target[i], len, false)) && structureOk(u, target, L);
+    // 宽松：每笔配一个不同的标准笔画，在单笔吻合的配对里取平均距离总和最小的一种（匈牙利算法）；
+    // 笔画多的字允许多写或少写一笔（补一个“空”的行或列，配到空上的就是多出来或漏掉的那一笔）
+    const INF = 1e9, SKIP = 5000, n = Math.max(u.length, target.length);
+    const cost = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) =>
+      i >= u.length || j >= target.length ? SKIP : strokeMatch(u[i], target[j], len, true) ? avgDist(u[i], target[j]) : INF));
     const owner = assign(cost);
     if (owner.some((i, j) => i < 0 || cost[i][j] >= INF)) return false;
-    // 按标准笔画的顺序排好；反方向写的笔画倒过来，方便比较起止点
-    const paired = owner.map((i, j) => {
+    // 配上的笔画按标准笔画的顺序排好；反方向写的笔画倒过来，方便比较起止点
+    const pu = [], pt = [];
+    owner.forEach((i, j) => {
+      if (i >= u.length || j >= target.length) return;
       const s = u[i], t = target[j];
       const fwd = dist(s[0], t[0]) + dist(s[s.length - 1], t[t.length - 1]);
       const back = dist(s[s.length - 1], t[0]) + dist(s[0], t[t.length - 1]);
-      return back < fwd ? s.slice().reverse() : s;
+      pu.push(back < fwd ? s.slice().reverse() : s); pt.push(t);
     });
-    return structureOk(paired, target);
+    return structureOk(pu, pt, L);
   }
 
-  /* ---- 整体结构：单笔都对上以后，再看笔画之间的长短和相对位置（区分 土/士、未/末、己/已、人/入 这类字） ---- */
+  /* ---- 整体结构：单笔都对上以后，再看笔画之间的长短和相对位置（区分 土/士、未/末、人/入 这类字） ---- */
   // 整字的宽高比不能差太多（日/曰）；很扁或很窄的字不比
-  function aspectOk(user, target) {
+  function aspectOk(user, target, L) {
     const u = box(user), t = box(target);
     if (u.w < 120 || u.h < 120 || t.w < 120 || t.h < 120) return true;
     const r = (u.w / u.h) / (t.w / t.h);
-    return r < 1.45 && r > 1 / 1.45;
+    return r < L.aspect && r > 1 / L.aspect;
   }
-  function structureOk(u, t) {
+  function structureOk(u, t, L) {
     const n = t.length;
-    // 长短：标准字里明显长的一笔（长 35% 以上），写的也要比另一笔长
+    // 长短：标准字里明显长的一笔，写的也要比另一笔长（宽松允许差一点）
     const lu = u.map(lenOf), lt = t.map(lenOf);
     for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
-      if (lt[a] > 1.35 * lt[b] && !(lu[a] > lu[b])) return false;
+      if (lt[a] > L.longer * lt[b] && !(lu[a] > L.longerFrac * lu[b])) return false;
     }
-    // 起止点的相对位置：一边两个点上下或左右明显错开（200 以上，约字宽的 1/5），另一边也要同向错开，且至少错开它的 1/4
-    //（两个方向都查，写的一边阈值 170：标准字里撇起笔略低于横，写成高出横很多也不行，如 天/夫）
+    // 起止点的相对位置：一边两个点上下或左右明显错开，另一边也要同向错开一些
+    //（两个方向都查：标准字里撇起笔略低于横，写成高出横很多也不行，如 天/夫）
     const key = s => [s[0], s[s.length - 1]];
     const pu = [].concat(...u.map(key)), pt = [].concat(...t.map(key));
     for (let a = 0; a < pt.length; a++) for (let b = a + 1; b < pt.length; b++) {
       for (const k of ['x', 'y']) {
         const dt = pt[b][k] - pt[a][k], du = pu[b][k] - pu[a][k];
-        if (Math.abs(dt) > 200 && !(du * Math.sign(dt) >= 0.25 * Math.abs(dt))) return false;
-        if (Math.abs(du) > 170 && !(dt * Math.sign(du) >= 0.25 * Math.abs(du))) return false;
+        if (Math.abs(dt) > L.keyGap && !(du * Math.sign(dt) >= L.keyFrac * Math.abs(dt))) return false;
+        if (Math.abs(du) > L.keyGapUser && !(dt * Math.sign(du) >= L.keyFrac * Math.abs(du))) return false;
       }
     }
     return true;
