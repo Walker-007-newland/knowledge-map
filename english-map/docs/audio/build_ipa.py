@@ -21,7 +21,7 @@ import numpy as np
 import soundfile as sf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from build_audio import PEAK, clip, envelope, speech_span, to_mp3   # noqa: E402
+from build_audio import PEAK, clip, envelope, lead_cut, speech_span, to_mp3   # noqa: E402
 
 VOICE, SPEED = 'bf_emma', 0.85
 UA = 'KnowledgeMapEdu/1.0 (https://github.com/Walker-007-newland/knowledge-map)'
@@ -125,7 +125,8 @@ def symbol_audio(cache, redo):
 def tts(k, text, phonemes=False):
     x, sr = k.create(text, voice=VOICE, speed=SPEED, lang='en-gb', is_phonemes=phonemes, trim=False)
     t0, t1 = speech_span(x, sr)
-    return clip(x * (PEAK / np.abs(x).max()), sr, t0, t1, pre=0.03, post=0.1), sr
+    c = lead_cut(x, sr, t0, text if phonemes else k.tokenizer.phonemize(text, 'en-gb'))
+    return clip(x * (PEAK / np.abs(x).max()), sr, c, t1, pre=0.03 if c == t0 else 0, post=0.1), sr
 
 
 def word_audio(k, words, letters, redo):

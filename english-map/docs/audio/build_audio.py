@@ -90,6 +90,42 @@ def speech_span(x, sr, ratio=0.03):
     return idx[0] * st, (idx[-1] + 1) * st
 
 
+# Kokoro 读辅音开头的词时，常在辅音前多出一小团浊音（听起来像「呃-cat」「呃-six」）：
+# 一段低过零率（浊音）的声音 → 能量掉下去或者开始出现摩擦噪音 → 才是真正的辅音和元音。
+# 只处理清辅音和 b/d/g/dʒ 开头的词；v、z、th（ð）、ʒ 本身就是浊音，前面那段很可能就是辅音，不切。
+LEAD_CONS = set('ptkfθsʃhʧbdgɡʤ')
+
+
+def zcr(x, sr, step=0.01):
+    w = int(sr * step)
+    n = len(x) // w
+    s = np.sign(x[:n * w].reshape(n, w))
+    return np.mean(np.abs(np.diff(s, axis=1)) > 0, axis=1)
+
+
+def lead_cut(x, sr, t0, phonemes):
+    """返回去掉开头那团多余浊音后的起点（秒）；不需要切就返回 t0"""
+    ph = phonemes.lstrip('ˈˌ ')
+    if not ph or ph[0] not in LEAD_CONS:
+        return t0
+    e, st = envelope(x, sr, 0.01)
+    e = e / e.max()
+    z = zcr(x, sr, 0.01)
+    i0 = int(round(t0 / st))
+    s = next((i for i in range(i0, min(i0 + 3, len(e))) if z[i] <= 0.15 and e[i] >= 0.15), None)
+    if s is None:                                   # 一开头就是摩擦噪音（t、s、ch 等），正常
+        return t0
+    peak, cut = 0.0, None
+    for i in range(s, min(s + 14, len(e))):
+        if z[i] > 0.15 or (peak >= 0.25 and e[i] <= 0.6 * peak):
+            cut = i
+            break
+        peak = max(peak, e[i])
+    if cut is None or cut <= s or peak < 0.25 or e[cut:cut + 20].max() < max(peak, 0.6):
+        return t0
+    return cut * st
+
+
 def to_mp3(x, sr, path):
     pcm = (np.clip(x, -1, 1) * 32767).astype('<i2').tobytes()
     e = lameenc.Encoder()
@@ -125,7 +161,8 @@ def word_audio(k, redo):
             continue
         x, sr = k.create(spoken(en), voice=VOICE, speed=SPEED, lang='en-us', trim=False)
         t0, t1 = speech_span(x, sr)
-        to_mp3(clip(x * (PEAK / np.abs(x).max()), sr, t0, t1, pre=0.03, post=0.1), sr, path)
+        c = lead_cut(x, sr, t0, k.tokenizer.phonemize(spoken(en), 'en-us'))
+        to_mp3(clip(x * (PEAK / np.abs(x).max()), sr, c, t1, pre=0.03 if c == t0 else 0, post=0.1), sr, path)
         made += 1
         if made % 100 == 0:
             print('整词', made, en, flush=True)
@@ -179,7 +216,11 @@ def syllable_audio(k, redo):
             while a < b and full[a] == 'ˈ':
                 a += 1
             # 第一节从声音起点开始，最后一节到声音终点再留一点余音；中间在边界附近最安静处切，不带相邻音节的声音
-            t0 = on - 0.02 if n == 0 else quietest(x, sr, at(tm[a].start))
+            if n == 0:
+                c = lead_cut(x, sr, on, full)
+                t0 = on - 0.02 if c == on else c
+            else:
+                t0 = quietest(x, sr, at(tm[a].start))
             t1 = off + 0.06 if n == last else quietest(x, sr, at(tm[b - 1].end))
             if t1 - t0 >= 0.12:
                 seg = clip(x, sr, t0, t1, pre=0, post=0)
@@ -187,7 +228,8 @@ def syllable_audio(k, redo):
                 y = k.create(syls[n][1].lstrip('ˈ').replace('g', 'ɡ').replace('r', 'ɹ'), voice=SYL_VOICE,
                              speed=SYL_SPEED, lang='en-gb', is_phonemes=True, trim=False)[0]
                 u0, u1 = speech_span(y, sr)
-                seg = clip(y, sr, u0, u1, pre=0.02, post=0.06)
+                c = lead_cut(y, sr, u0, syls[n][1])
+                seg = clip(y, sr, c, u1, pre=0.02 if c == u0 else 0, post=0.06)
                 alone.append(f'{w}-{n}')
             # 每节单独放大到 PEAK（弱读音节本来就轻，最多放大 4 倍）
             to_mp3(seg * min(4.0, PEAK / max(np.abs(seg).max(), 1e-6)), sr, path)
