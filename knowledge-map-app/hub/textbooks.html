@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电子教材</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --good: #2f8a4c; --warn: #b8641a; --bad: #c23f2e; --soft: #f1ede4;
+    --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --good: #5cbf7a; --warn: #e3a05a; --bad: #ef7a68; --soft: #2a2b30;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100vh; padding: 20px 16px 40px; }
+  main { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .back { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 999px; background: var(--surface);
+    border: 1px solid var(--line); color: var(--text); text-decoration: none; font-size: 15px; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: 1px; }
+  .space { margin-left: auto; color: var(--muted); font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 10px; font-size: 18px; }
+  .login { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .login .st { font-size: 16px; font-weight: 600; }
+  .login .st.ok { color: var(--good); } .login .st.bad { color: var(--bad); }
+  .login .sub { flex: 1 1 260px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .btn { font: 600 15px var(--font); padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft);
+    color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: nowrap; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--bad); }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .45; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; }
+  .lab { flex: none; width: 3.2em; color: var(--muted); font-size: 14px; padding-top: 9px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+  .chip { font: 15px var(--font); padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip .star { color: #e8a33b; margin-right: 2px; }
+  .chip.on .star { color: #ffe08a; }
+  .more { font-size: 14px; color: var(--accent); background: none; border: none; padding: 7px 6px; cursor: pointer; font-family: var(--font); }
+  .filters { display: flex; flex-direction: column; gap: 10px; }
+  .book { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .book:first-child { border-top: none; }
+  .book .ico { font-size: 26px; flex: none; }
+  .book .info { flex: 1 1 260px; min-width: 0; }
+  .book .name { font-size: 17px; font-weight: 600; }
+  .book .full { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .book .stat { font-size: 13px; margin-top: 4px; color: var(--muted); }
+  .book .stat.ok { color: var(--good); } .book .stat.bad { color: var(--bad); } .book .stat.ing { color: var(--accent); }
+  .book .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .prog { height: 6px; border-radius: 999px; background: var(--soft); overflow: hidden; margin-top: 6px; max-width: 320px; }
+  .prog i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s; }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px 0; line-height: 1.6; }
+  .note { font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .banner { padding: 10px 14px; border-radius: 12px; background: #fff4e0; color: #8a5300; font-size: 14px; line-height: 1.6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .banner { background: #3a2e1c; color: #f0c486; } }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: #1f2328; color: #fff; padding: 10px 18px;
+    border-radius: 999px; font-size: 15px; z-index: 20; max-width: 90vw; text-align: center; box-shadow: var(--shadow); }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="index.html">← 总入口</a><h1>📖 电子教材</h1><span class="space" id="space"></span></div>
+
+  <div class="banner" id="browserNote" hidden>在浏览器里只能浏览目录；登录平台、下载和阅读教材请在平板 App 里使用。</div>
+
+  <div class="card login" id="loginCard">
+    <span class="st" id="loginSt">未登录平台</span>
+    <span class="sub" id="loginSub">教材来自国家中小学智慧教育平台（教育部官方），下载前要先用你自己的平台账号登录一次。</span>
+    <button class="btn primary" id="btnLogin">登录平台</button>
+    <button class="btn danger" id="btnLogout" hidden>退出平台登录</button>
+  </div>
+
+  <div class="card" id="mineCard" hidden>
+    <h2>我的教材</h2>
+    <div id="mine"></div>
+  </div>
+
+  <div class="card filters">
+    <div class="row"><span class="lab">学段</span><div class="chips" id="fStage"></div></div>
+    <div class="row"><span class="lab">学科</span><div class="chips" id="fSubject"></div></div>
+    <div class="row"><span class="lab">版本</span><div class="chips" id="fVersion"></div></div>
+    <div class="row"><span class="lab">年级</span><div class="chips" id="fGrade"></div></div>
+  </div>
+
+  <div class="card">
+    <div id="list"></div>
+  </div>
+
+  <p class="note">目录来自平台公开的教材目录（共 <span id="total"></span> 册，已去掉盲校、聋校等特殊教育版本）。每册 PDF 约 10～80MB，下载到本机后不联网也能看；同时只下载一本。
+    平台登录凭据只保存在本机，用来下载教材，不会上传。</p>
+</main>
+<script src="textbooks/catalog.js"></script>
+<script>
+(function () {
+  var C = window.KM_TEXTBOOKS, D = C.dict;
+  var BOOKS = C.rows.map(function (r) {
+    return { id: r[0], title: r[1], stage: D.stage[r[2]], subject: D.subject[r[3]], version: D.version[r[4]],
+      grade: D.grade[r[5]], vol: D.vol[r[6]], thematic: !!r[7] };
+  });
+  var BY_ID = {};
+  BOOKS.forEach(function (b) { BY_ID[b.id] = b; });
+  document.getElementById('total').textContent = BOOKS.length;
+
+  // 常用版本置顶（福建）：小学语文统编、小学英语闽教版、初中英语科普版（仁爱）、历史/道法统编、数学和理化生人教版
+  var PREF = {
+    '小学|语文': ['统编版'], '初中|语文': ['统编版'], '小学|英语': ['闽教版'], '初中|英语': ['科普版'],
+    '*|道德与法治': ['统编版'], '*|历史': ['统编版'], '*|中国历史': ['统编版'], '*|世界历史': ['统编版'],
+    '*|数学': ['人教版', '北师大版'], '初中|物理': ['人教版'], '初中|化学': ['人教版'], '初中|生物学': ['人教版'],
+    '初中|地理': ['人教版'], '小学|科学': ['教科版']
+  };
+  var ALIAS = { '科普版': '科普版（仁爱）' };
+  function prefs(stage, subject) { return PREF[stage + '|' + subject] || PREF['*|' + subject] || []; }
+
+  // ---------- App 接口；浏览器里用演示数据（?mock=1 时可以模拟登录、下载）
+  var mock = /[?&]mock=1/.test(location.search);
+  var App = window.KMApp && KMApp.tbState ? KMApp : null;
+  if (!App) {
+    document.getElementById('browserNote').hidden = mock;
+    App = mockApp();
+  }
+  var st = { login: { in: false }, books: {}, used: 0, free: 0 };
+
+  function readState() {
+    var s = App.tbState();
+    if (!s) return;
+    try { st = JSON.parse(s); } catch (e) { /* 保留上次 */ }
+  }
+
+  // ---------- 选择（记住上次选的）
+  var KEY = 'km-textbooks-filter-v1', sel = {};
+  try { sel = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { sel = {}; }
+  function saveSel() { try { localStorage.setItem(KEY, JSON.stringify(sel)); } catch (e) { /* 忽略 */ } }
+  var showAllVersions = false;
+
+  function uniq(list, f) {
+    var seen = {}, out = [];
+    list.forEach(function (b) { var v = f(b); if (!seen[v]) { seen[v] = 1; out.push(v); } });
+    return out;
+  }
+
+  function chips(el, values, cur, onPick, opt) {
+    el.innerHTML = '';
+    values.forEach(function (v) {
+      var b = document.createElement('button');
+      b.className = 'chip' + (v === cur ? ' on' : '');
+      if (opt && opt.star && opt.star.indexOf(v) >= 0) { var s = document.createElement('span'); s.className = 'star'; s.textContent = '★'; b.appendChild(s); }
+      b.appendChild(document.createTextNode((opt && opt.label ? opt.label(v) : v)));
+      b.onclick = function () { onPick(v); };
+      el.appendChild(b);
+    });
+    if (opt && opt.more) el.appendChild(opt.more);
+  }
+
+  function renderFilters() {
+    var stages = uniq(BOOKS, function (b) { return b.stage; });
+    if (stages.indexOf(sel.stage) < 0) sel.stage = '初中';
+    chips(document.getElementById('fStage'), stages, sel.stage, function (v) { sel.stage = v; sel.subject = sel.version = sel.grade = ''; refresh(); });
+
+    var inStage = BOOKS.filter(function (b) { return b.stage === sel.stage; });
+    var subjects = uniq(inStage, function (b) { return b.subject; });
+    if (subjects.indexOf(sel.subject) < 0) { sel.subject = subjects[0]; sel.version = sel.grade = ''; }
+    chips(document.getElementById('fSubject'), subjects, sel.subject, function (v) { sel.subject = v; sel.version = sel.grade = ''; showAllVersions = false; refresh(); });
+
+    var inSub = inStage.filter(function (b) { return b.subject === sel.subject; });
+    var versions = uniq(inSub, function (b) { return b.version; });
+    var star = prefs(sel.stage, sel.subject).filter(function (v) { return versions.indexOf(v) >= 0; });
+    versions = star.concat(versions.filter(function (v) { return star.indexOf(v) < 0; }));
+    if (versions.indexOf(sel.version) < 0) { sel.version = versions[0]; sel.grade = ''; }
+    // 版本太多时先显示常用和前几个，其余点「更多版本」
+    var LIMIT = 8, shown = versions;
+    var more = null;
+    if (versions.length > LIMIT && !showAllVersions) {
+      shown = versions.slice(0, LIMIT);
+      if (shown.indexOf(sel.version) < 0) shown.push(sel.version);
+      more = document.createElement('button');
+      more.className = 'more';
+      more.textContent = '更多版本（共 ' + versions.length + ' 个）▾';
+      more.onclick = function () { showAllVersions = true; renderFilters(); };
+    }
+    chips(document.getElementById('fVersion'), shown, sel.version, function (v) { sel.version = v; sel.grade = ''; refresh(); },
+      { star: star, more: more, label: function (v) { return ALIAS[v] || v; } });
+
+    var inVer = inSub.filter(function (b) { return b.version === sel.version; });
+    var grades = ['全部'].concat(uniq(inVer, function (b) { return b.grade; }));
+    if (grades.indexOf(sel.grade) < 0) sel.grade = '全部';
+    chips(document.getElementById('fGrade'), grades, sel.grade, function (v) { sel.grade = v; refresh(); });
+    saveSel();
+    return inVer.filter(function (b) { return sel.grade === '全部' || b.grade === sel.grade; });
+  }
+
+  // ---------- 每册一行
+  function mb(n) { return n >= 1073741824 ? (n / 1073741824).toFixed(1) + 'GB' : (n / 1048576).toFixed(n >= 104857600 ? 0 : 1) + 'MB'; }
+  var lastErr = {};
+
+  function bookRow(b, mine) {
+    var row = document.createElement('div');
+    row.className = 'book';
+    var have = st.books && st.books[b.id], job = st.job && st.job.id === b.id ? st.job : null;
+    var info = document.createElement('div');
+    info.className = 'info';
+    var name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = mine ? b.stage + b.subject + ' · ' + (ALIAS[b.version] || b.version) + ' · ' + b.grade + ' ' + b.vol : b.grade + ' ' + b.vol;
+    var full = document.createElement('div');
+    full.className = 'full';
+    full.textContent = b.title;
+    var stat = document.createElement('div');
+    stat.className = 'stat';
+    info.appendChild(name); info.appendChild(full); info.appendChild(stat);
+    var acts = document.createElement('div');
+    acts.className = 'acts';
+    function btn(text, cls, fn) {
+      var x = document.createElement('button');
+      x.className = 'btn ' + (cls || '');
+      x.textContent = text;
+      x.onclick = fn;
+      acts.appendChild(x);
+      return x;
+    }
+    if (have) {
+      stat.className = 'stat ok';
+      stat.textContent = '已下载 ' + mb(have.size) + (have.page > 0 ? ' · 读到第 ' + (have.page + 1) + (have.pages ? ' / ' + have.pages : '') + ' 页' : '');
+      btn('打开', 'primary', function () { App.tbOpen(b.id, b.title); });
+      btn('删除', 'danger', function () {
+        if (!confirm('删除「' + b.title + '」？\n删除后要重新下载才能看。')) return;
+        if (!App.tbDelete(b.id)) toast('删除失败');
+        refresh();
+      });
+    } else if (job) {
+      var pct = job.total > 0 ? Math.min(100, Math.floor(job.got * 100 / job.total)) : 0;
+      stat.className = 'stat ing';
+      stat.textContent = '下载中 ' + (job.total > 0 ? pct + '%（' + mb(job.got) + ' / ' + mb(job.total) + '）' : mb(job.got) + '…');
+      var p = document.createElement('div');
+      p.className = 'prog';
+      p.innerHTML = '<i style="width:' + pct + '%"></i>';
+      info.appendChild(p);
+      btn('取消', '', function () { App.tbCancel(); });
+    } else {
+      stat.textContent = lastErr[b.id] ? lastErr[b.id] : '未下载';
+      if (lastErr[b.id]) stat.className = 'stat bad';
+      if (!st.login || !st.login.in || st.login.expired) {
+        btn('登录后下载', '', function () { App.tbLogin(); });
+      } else {
+        var d = btn('下载', 'primary', function () {
+          delete lastErr[b.id];
+          if (!App.tbDownload(b.id, b.title, b.thematic)) toast(st.job ? '同时只能下载一本，请等这本下完' : '现在不能下载，请稍后再试');
+          refresh();
+        });
+        if (st.job) d.disabled = true;
+      }
+    }
+    var ico = document.createElement('span');
+    ico.className = 'ico';
+    ico.textContent = have ? '📘' : '📕';
+    row.appendChild(ico); row.appendChild(info); row.appendChild(acts);
+    return row;
+  }
+
+  function renderLogin() {
+    var L = st.login || {}, ok = L.in && !L.expired;
+    var s = document.getElementById('loginSt');
+    s.textContent = ok ? '✅ 已登录平台' : L.expired ? '⚠️ 平台登录已失效' : '未登录平台';
+    s.className = 'st ' + (ok ? 'ok' : L.expired ? 'bad' : '');
+    document.getElementById('loginSub').textContent = ok
+      ? '可以下载教材了。下载好的教材不联网也能看。'
+      : L.expired ? '平台说登录过期了，请重新登录后再下载（已下载的教材照常能看）。'
+      : '教材来自国家中小学智慧教育平台（教育部官方），下载前要先用你自己的平台账号登录一次。';
+    var bi = document.getElementById('btnLogin');
+    bi.hidden = ok;
+    bi.textContent = L.expired ? '重新登录平台' : '登录平台';
+    document.getElementById('btnLogout').hidden = !L.in;
+    document.getElementById('space').textContent = '已用 ' + mb(st.used || 0) + (st.free ? ' · 剩余 ' + mb(st.free) : '');
+  }
+
+  function renderMine() {
+    var ids = Object.keys(st.books || {}), box = document.getElementById('mine');
+    if (st.job && ids.indexOf(st.job.id) < 0) ids.unshift(st.job.id);
+    document.getElementById('mineCard').hidden = !ids.length;
+    box.innerHTML = '';
+    ids.forEach(function (id) {
+      var b = BY_ID[id];
+      if (!b) {   // 目录更新后不在目录里的书：仍可打开、删除
+        var t = (st.books[id] && st.books[id].title) || '教材 ' + id.slice(0, 8);
+        b = { id: id, title: t, stage: '', subject: '', version: '', grade: t, vol: '', thematic: false };
+      }
+      box.appendChild(bookRow(b, !!BY_ID[id]));
+    });
+  }
+
+  function refresh() {
+    readState();
+    renderLogin();
+    renderMine();
+    var list = renderFilters(), box = document.getElementById('list');
+    box.innerHTML = '';
+    if (!list.length) box.innerHTML = '<div class="empty">这个选择下没有教材。</div>';
+    list.forEach(function (b) { box.appendChild(bookRow(b, false)); });
+  }
+
+  var tm = null;
+  function toast(msg) {
+    var t = document.querySelector('.toast');
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(tm);
+    tm = setTimeout(function () { t.hidden = true; }, 3500);
+  }
+
+  // Java 送来的事件：progress / done / error / cancelled / login
+  function onEvent(json) {
+    var e;
+    try { e = JSON.parse(json); } catch (x) { return; }
+    if (e.type === 'progress' && st.job && st.job.id === e.id) { st.job.got = e.got; st.job.total = e.total; renderLists(); return; }
+    if (e.type === 'done') toast('下载完成：' + ((BY_ID[e.id] || {}).title || ''));
+    if (e.type === 'error') { lastErr[e.id] = e.msg; toast(e.msg); }
+    if (e.type === 'cancelled') toast('已取消下载');
+    setTimeout(refresh, e.type === 'login' ? 0 : 300);   // 下载线程收尾后再读状态
+  }
+  // 只刷新列表（进度条），不重新读状态
+  function renderLists() {
+    renderMine();
+    var box = document.getElementById('list'), list = renderFilters();
+    box.innerHTML = '';
+    list.forEach(function (b) { box.appendChild(bookRow(b, false)); });
+  }
+  try { Object.defineProperty(window, '__kmTbEvent', { value: onEvent, writable: false, configurable: false }); }
+  catch (x) { window.__kmTbEvent = onEvent; }
+  App.__onEvent && App.__onEvent(onEvent);
+
+  document.getElementById('btnLogin').onclick = function () { App.tbLogin(); };
+  document.getElementById('btnLogout').onclick = function () {
+    if (!confirm('退出国家中小学智慧教育平台的登录？\n已下载的教材不会删除。')) return;
+    App.tbLogout();
+  };
+  window.addEventListener('pageshow', function () { refresh(); });
+  if (window.KMApp && KMApp.ready) KMApp.ready().then(refresh);
+  refresh();
+
+  // ---------- 浏览器演示：不联网、不下载，只模拟界面状态
+  function mockApp() {
+    var m = { login: { in: mock, at: 0, expired: false, full: true }, books: {}, used: 0, free: mock ? 32e9 : 0 }, job = null, timer = 0, cb = null;
+    if (mock) {
+      var first = BOOKS.filter(function (b) { return b.stage === '初中' && b.subject === '数学' && b.version === '人教版'; })[0];
+      if (first) { m.books[first.id] = { size: 41234567, page: 11, pages: 156, title: first.title }; m.used = 41234567; }
+    }
+    function fire(o) { if (cb) cb(JSON.stringify(o)); }
+    return {
+      __onEvent: function (f) { cb = f; },
+      tbState: function () { var o = JSON.parse(JSON.stringify(m)); if (job) o.job = job; return JSON.stringify(o); },
+      tbDownload: function (id, title) {
+        if (job || !mock) return false;
+        job = { id: id, got: 0, total: 23456789 };
+        timer = setInterval(function () {
+          job.got = Math.min(job.total, job.got + 2345678);
+          fire({ type: 'progress', id: id, got: job.got, total: job.total });
+          if (job.got >= job.total) {
+            clearInterval(timer);
+            m.books[id] = { size: job.total, page: 0, pages: 0, title: title }; m.used += job.total; job = null;
+            fire({ type: 'done', id: id, size: m.books[id].size });
+          }
+        }, 300);
+        return true;
+      },
+      tbCancel: function () { if (!job) return; clearInterval(timer); var id = job.id; job = null; fire({ type: 'cancelled', id: id }); },
+      tbDelete: function (id) { if (m.books[id]) { m.used -= m.books[id].size; delete m.books[id]; } return true; },
+      tbOpen: function (id, title) { toast('（演示）打开：' + title); },
+      tbLogin: function () { if (!mock) { toast('请在平板 App 里登录平台'); return; } m.login.in = true; m.login.expired = false; fire({ type: 'login' }); },
+      tbLogout: function () { m.login.in = false; fire({ type: 'login' }); }
+    };
+  }
+})();
+</script>
+</body>
+</html>

@@ -69,6 +69,10 @@ if (Test-Path $nodeInfo) {
 }
 $cfgJson = '{"v":1,"server":{"h":' + (ConvertTo-Json $nodeHost) + ',"p":' + $nodePort + '},"recovery":{"pub":"' + $rec.pub + '","kid":"' + $rec.kid + '"}}'
 [IO.File]::WriteAllText("$work\assets\km-config.json", $cfgJson, (New-Object Text.UTF8Encoding $false))
+# 电子教材：页面 + 官方目录索引（tools/make-textbook-catalog.py 生成）；PDF 不打包，学生登录平台后下载到 App 私有目录
+Copy-Item "$here\hub\textbooks.html" "$work\assets\www\textbooks.html"
+New-Item -ItemType Directory -Force "$work\assets\www\textbooks" | Out-Null
+Copy-Item "$here\hub\textbooks\catalog.js" "$work\assets\www\textbooks\catalog.js"
 New-Item -ItemType Directory -Force "$work\assets\www\vendor" | Out-Null
 Copy-Item "$here\hub\vendor\jsQR.js" "$work\assets\www\vendor\jsQR.js"
 Copy-Item "$here\hub\vendor\qrcode.js" "$work\assets\www\vendor\qrcode.js"
@@ -165,7 +169,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   # 自检页只在 -SelfTest 包里（正式包里没有 selftest/，也就不会注入 KMSelfTest）
@@ -178,6 +182,12 @@ try {
   try { $inApk = $sr.ReadToEnd() | ConvertFrom-Json } finally { $sr.Dispose() }
   if ($inApk.recovery.pub -ne $rec.pub -or $inApk.recovery.kid -ne $rec.kid) { throw 'APK 里的账号恢复公钥和 signing\km-recovery.json 不一致' }
   if (-not $inApk.server.h -or -not $inApk.server.p) { throw 'APK 里没有默认服务器地址' }
+  # 电子教材：目录索引不能是空的；新 Activity 要在 manifest 里登记（漏登记的话一打开就闪退）
+  $cr = New-Object IO.StreamReader($zip.GetEntry('assets/www/textbooks/catalog.js').Open(), [Text.Encoding]::UTF8)
+  try { $catText = $cr.ReadToEnd() } finally { $cr.Dispose() }
+  if (-not ($catText -match '"count":(\d+)') -or [int]$Matches[1] -lt 1000) { throw '电子教材目录 catalog.js 不完整（少于 1000 册）' }
+  $man = [IO.File]::ReadAllText("$here\android\AndroidManifest.xml", [Text.Encoding]::UTF8)
+  foreach ($act in '.PdfActivity', '.TbLoginActivity') { if ($man -notmatch [regex]::Escape("android:name=`"$act`"")) { throw "AndroidManifest 里没有登记 $act" } }
   $arsc = $zip.GetEntry('resources.arsc')
   if ($arsc.CompressedLength -ne $arsc.Length) { throw 'resources.arsc 被压缩了，Android 11+ 会拒绝安装' }
 } finally { $zip.Dispose() }

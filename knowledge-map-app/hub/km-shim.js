@@ -45,14 +45,17 @@
     // #1 第二期：局域网配对
     'pairOpen', 'pairClose', 'pairWith', 'pairAddr', 'pairConfirm',
     // #12 账号：结果经事件 action-result（op = acctLogin 等）、acct-progress、acct-found 回来
-    'acctRegister', 'acctLogin', 'acctLogout', 'acctServer', 'acctDiscover'].forEach(function (m) {
+    'acctRegister', 'acctLogin', 'acctLogout', 'acctServer', 'acctDiscover',
+    // 电子教材：结果经 window.__kmTbEvent 事件回来（progress / done / error / cancelled / login）
+    'tbCancel', 'tbOpen', 'tbLogin', 'tbLogout'].forEach(function (m) {
     if (B[m]) A[m] = function () {
       var args = Array.prototype.slice.call(arguments);
       if (token) call(m, args); else queue.push([m, args]);
     };
   });
   var empty = { pinWidget: false, deviceName: '', ttsInfo: '', sharedGet: '', syncState: '', syncTake: '', joinState: '',
-    acctState: '', acctOffline: false, saveBackup: '' };     // #12
+    acctState: '', acctOffline: false, saveBackup: '',      // #12
+    tbState: '', tbDownload: false, tbDelete: false };      // 电子教材
   Object.keys(empty).forEach(function (m) {
     if (B[m]) A[m] = function () { return token ? call(m, Array.prototype.slice.call(arguments)) : empty[m]; };
   });
