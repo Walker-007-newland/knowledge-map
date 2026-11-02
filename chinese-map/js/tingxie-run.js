@@ -3,7 +3,7 @@
  * 用法：
  *   TingxieRun.mount(容器)             把四个视图（vSetup / vRun / vCheck / vResult）的 HTML 放进容器
  *   const R = TingxieRun.create(opts)  绑定按钮，返回 { openSetup, startRun, isRunning, stopRun }
- *     opts.settings   设置对象（会被直接修改：scope, mode(paper/hand/type), handJudge, reps, pace, order, someN）
+ *     opts.settings   设置对象（会被直接修改：scope, mode(paper/hand/type), handJudge, reps, speed, pace, order, someN）
  *     opts.save()     设置改了以后保存
  *     opts.show(v, push) / opts.current()   页面切换（配合返回键，由页面自己管理 history）
  *     opts.wrongCount(src) / opts.isWrong(key)   这份词里有几个错词、某个词是不是错词
@@ -23,21 +23,30 @@
 
   /* ---------------- 朗读 ---------------- */
   let sayToken = 0;
-  // texts: 要读的几段文字，全部读完调用 done；读不出来时按估计时长兜底
+  // 语速：系统 TTS 的 rate（1 是正常说话速度，听写要放慢）
+  const RATE = { normal: 0.8, slow: 0.6, slower: 0.45 };
+  let rate = RATE.slow;
+  const GAP = 1200;   // 同一个词读几遍时，每遍之间停一下（毫秒）
+  // texts: 要读的几段文字，一段一段读，中间停一下；全部读完调用 done；读不出来时按估计时长兜底
   function say(texts, done) {
     const token = ++sayToken;
     const finish = () => { if (token === sayToken && done) { const d = done; done = null; d(); } };
     if (!('speechSynthesis' in window)) { setTimeout(finish, 1500); return; }
     speechSynthesis.cancel();
-    let est = 600;
-    texts.forEach((t, i) => {
-      const u = new SpeechSynthesisUtterance(t);
-      u.lang = 'zh-CN'; u.rate = 0.8;
-      est += 900 + t.length * 330;
-      if (i === texts.length - 1) { u.onend = finish; u.onerror = finish; }
+    let i = 0, guard = 0;
+    const one = () => {
+      if (token !== sayToken) return;
+      if (i >= texts.length) { clearTimeout(guard); finish(); return; }
+      const t = texts[i++], u = new SpeechSynthesisUtterance(t);
+      u.lang = 'zh-CN'; u.rate = rate;
+      let moved = false;
+      const nextOne = () => { if (moved) return; moved = true; clearTimeout(guard); setTimeout(one, i < texts.length ? GAP : 0); };
+      u.onend = nextOne; u.onerror = nextOne;
+      // 引擎没回调时按估计时长兜底
+      guard = setTimeout(nextOne, 3000 + t.length * 450 / rate);
       speechSynthesis.speak(u);
-    });
-    setTimeout(finish, est + 4000);
+    };
+    one();
   }
   function stopSay() { sayToken++; if ('speechSynthesis' in window) speechSynthesis.cancel(); }
 
@@ -70,6 +79,9 @@
       </div></div>
       <div class="dopt"><span class="dopt-label">每个词读</span><div class="seg" data-opt="reps">
         <button data-v="1">1 遍</button><button data-v="2">2 遍</button><button data-v="3">3 遍</button>
+      </div></div>
+      <div class="dopt"><span class="dopt-label">语速</span><div class="seg" data-opt="speed">
+        <button data-v="normal">正常</button><button data-v="slow">慢</button><button data-v="slower">很慢</button>
       </div></div>
       <div class="dopt paper-only"><span class="dopt-label">书写时间</span><div class="seg" data-opt="pace">
         <button data-v="fast">快</button><button data-v="normal">中</button><button data-v="slow">慢</button>
@@ -160,6 +172,8 @@
       else o.show('vSetup');
     }
     function syncSetup() {
+      if (!RATE[S.speed]) S.speed = 'slow';
+      rate = RATE[S.speed];
       document.querySelectorAll('#vSetup .seg[data-opt]').forEach(seg => {
         const v = String(S[seg.dataset.opt]);
         seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
@@ -177,6 +191,7 @@
     document.querySelectorAll('#vSetup .seg[data-opt]').forEach(seg => seg.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b || b.disabled) return;
       S[seg.dataset.opt] = b.dataset.v; o.save(); syncSetup();
+      if (seg.dataset.opt === 'speed') say(['听写']);   // 试听
     }));
     $('#someN').oninput = () => { S.someN = Math.max(1, +$('#someN').value || 1); o.save(); };
     $('#btnSetupBack').onclick = () => history.back();
