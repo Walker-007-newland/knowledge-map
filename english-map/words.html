@@ -65,6 +65,7 @@
     </div>
     <div class="card-btns">
       <button class="btn icon say" id="btnSay" aria-label="再读一遍">🔊</button>
+      <button class="btn icon say" id="btnPhonics" aria-label="自然拼读" hidden>🔤</button>
       <button class="btn big no" id="btnNo">不会</button>
       <button class="btn big yes" id="btnYes">会了</button>
     </div>
@@ -105,6 +106,10 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="data/words/books.js"></script>
+<script src="audio/index.js"></script>
+<script src="audio/syl-index.js"></script>
+<script src="data/phonics-words.js"></script>
+<script src="js/phonics.js"></script>
 <script src="js/dict-run.js"></script>
 <script>
   DictRun.mount(document.getElementById('dictRun'), {

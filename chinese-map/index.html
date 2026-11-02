@@ -19,6 +19,7 @@
   <div class="actions">
     <button class="btn primary" id="btnDiag">入门诊断</button>
     <button class="btn" id="btnPath">学习路线</button>
+    <button class="btn" id="btnTingxie">生字词听写</button>
     <button class="btn" id="btnNext">下一步学什么</button>
     <button class="btn" id="btnBackup">备份进度</button>
   </div>
@@ -73,6 +74,23 @@
 <script src="data/wenyan-skill.js"></script>
 <script src="data/gushi-xx-a.js"></script>
 <script src="data/gushi-xx-b.js"></script>
+<script src="data/gushi-kb-4a.js"></script>
+<script src="data/gushi-kb-4b.js"></script>
+<script src="data/gushi-kb-5a.js"></script>
+<script src="data/gushi-kb-5b.js"></script>
+<script src="data/gushi-kb-6a.js"></script>
+<script src="data/gushi-kb-6b.js"></script>
+<script src="data/gushi-kb-7a.js"></script>
+<script src="data/gushi-kb-7b.js"></script>
+<script src="data/gushi-kb-8a.js"></script>
+<script src="data/gushi-kb-8b.js"></script>
+<script src="data/gushi-kb-9a.js"></script>
+<script src="data/gushi-kb-9b.js"></script>
+<script src="data/wenyan-xx.js"></script>
+<script src="data/wenyan-pian-d.js"></script>
+<script src="data/wenyan-pian-e.js"></script>
+<script src="data/mingzhu-d.js"></script>
+<script src="data/skill-supp.js"></script>
 <script src="data/gushi-cz-a.js"></script>
 <script src="data/gushi-cz-b.js"></script>
 <script src="data/wenyan-pian-a.js"></script>
@@ -89,5 +107,9 @@
 <script src="data/xiezuo-a.js"></script>
 <script src="data/xiezuo-b.js"></script>
 <script src="js/app.js"></script>
+<script>
+  // 生字词听写：内置课本生字词表，走 file://（和图谱同一个存储空间）
+  document.getElementById('btnTingxie').onclick = function () { location.href = 'tingxie.html'; };
+</script>
 </body>
 </html>

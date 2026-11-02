@@ -3,7 +3,7 @@ KG.nodes.push(
 
 /* ================= 应用文格式 ================= */
 {
-  id: 'c-xiexin', title: '应用文格式：书信、通知、启事', short: '应用文格式', module: 'zonghe', grade: 5, freq: 2,
+  id: 'c-xiexin', title: '应用文格式：书信、通知、启事', short: '应用文格式', module: 'zonghe', grade: 4, freq: 2,
   prereqs: [],
   tip: '综合性学习常让你写一则通知、启事或一段书信，或者找出其中的格式错误。格式是“送分点”，错一处就会丢分。',
   learn: [
