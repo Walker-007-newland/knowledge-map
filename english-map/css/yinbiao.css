@@ -1,0 +1,89 @@
+/* 音标课：在 style.css、dictation.css 的基础上补充 */
+.muted { color: var(--muted); }
+.hint { color: var(--muted); font-size: 14px; }
+.hint a { color: var(--accent); }
+.yb .ipa { font-family: "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", "Segoe UI", "Noto Sans", sans-serif; }
+.yb-intro p { margin: 4px 0; line-height: 1.6; }
+.hl { color: var(--st-weak); }
+
+/* 课程列表 */
+.yb-sec { margin: 18px 4px 6px; font-size: 16px; color: var(--muted); }
+.yb-list { padding: 4px 8px; }
+.yb-lesson { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 8px 6px; border: 0; border-bottom: 1px solid var(--line);
+  background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.yb-lesson:last-child { border-bottom: 0; }
+.yb-lesson .num { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-weight: 600; }
+.yb-lesson .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.yb-lesson .t small { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yb-lesson .st { flex: none; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.st-learning { background: var(--warn-bg) !important; color: var(--st-learning) !important; }
+.st-weak { background: var(--bad-bg) !important; color: var(--st-weak) !important; }
+.st-mastered { background: var(--ok-bg) !important; color: var(--st-mastered) !important; }
+
+/* 学 */
+.yb-tabs { margin: 4px 0 4px; }
+.yb-tabs button { min-width: 72px; min-height: 44px; font-size: 17px; }
+.yb-sym { border: 1px solid var(--accent); background: var(--rhyme-bg); color: var(--text); border-radius: 10px; padding: 4px 10px; font-size: 18px; cursor: pointer;
+  font-family: "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", "Segoe UI", "Noto Sans", sans-serif; display: inline-flex; flex-direction: column; align-items: center; line-height: 1.2; vertical-align: middle; }
+.yb-sym small { font-size: 11px; color: var(--muted); font-family: var(--font); }
+.yb-sym.big { font-size: 34px; min-width: 104px; min-height: 84px; justify-content: center; flex: none; }
+.yb-sound { display: flex; gap: 16px; align-items: flex-start; }
+.yb-sound-body { flex: 1; min-width: 0; }
+.yb-sound-body p { margin: 2px 0 10px; line-height: 1.6; }
+.yb-words { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.yb-word { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--text); cursor: pointer; font: inherit; min-width: 84px; }
+.yb-word .w { font-size: 20px; font-weight: 600; }
+.yb-word .ipa { font-size: 14px; color: var(--muted); }
+.yb-word .zh { font-size: 12px; color: var(--muted); }
+.yb-word:hover, .yb-sym:hover, .yb-letter:hover { border-color: var(--accent); }
+
+.yb-letters { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin: 8px 0; }
+.yb-letter { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+.yb-letter b { font-size: 26px; }
+.yb-letter .ipa { font-size: 14px; color: var(--muted); }
+
+.yb-vl { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.yb-vl-letter { flex: none; width: 64px; height: 64px; border-radius: 14px; background: var(--rhyme-bg); display: grid; place-items: center; font-size: 36px; font-weight: 700; }
+.yb-vl-col { flex: 1; min-width: 200px; }
+.yb-vl-col h4 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+
+.yb-combo { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.yb-combo:last-child { border-bottom: 0; }
+.yb-combo-g { flex: none; width: 116px; font-size: 20px; font-weight: 700; padding-top: 4px; }
+.yb-read { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 6px; }
+.yb-read .yb-words { margin-top: 0; }
+
+.yb-syls { display: flex; flex-wrap: wrap; gap: 8px; }
+.yb-sylw { display: inline-flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  color: var(--text); cursor: pointer; font: inherit; text-align: left; }
+.yb-sylw span:first-child { font-size: 19px; }
+.yb-sylw i { font-style: normal; padding: 0 2px; border-radius: 4px; }
+.yb-sylw i.stress { outline: 2px solid var(--st-weak); }
+.yb-sylw .ipa { font-size: 13px; color: var(--muted); }
+
+/* 练 / 测 */
+.yb-q-top { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+.yb-q-text { font-size: 19px; line-height: 1.6; margin: 8px 0 12px; }
+.yb-qword { font-size: 26px; font-weight: 700; padding: 0 4px; }
+.yb-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 14px 0; }
+.yb-opt { min-height: 56px; font-size: 21px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); cursor: pointer;
+  font-family: "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", "Segoe UI", "Noto Sans", sans-serif; }
+.yb-opt:hover { border-color: var(--accent); }
+.yb-opt.right { background: var(--ok-bg); border-color: var(--st-mastered); }
+.yb-opt.wrong { background: var(--bad-bg); border-color: var(--st-weak); }
+.yb-opt.dim { opacity: .5; }
+.yb-why { background: var(--surface-2); border-radius: 12px; padding: 10px 14px; line-height: 1.6; }
+.yb-why .ok { color: var(--st-mastered); font-weight: 600; margin: 0 0 6px; }
+.yb-why .bad { color: var(--st-weak); font-weight: 600; margin: 0 0 6px; }
+.yb-result { text-align: center; }
+.big-score { font-size: 48px; font-weight: 700; margin: 8px 0; }
+.big-score.ok { color: var(--st-mastered); }
+.big-score.bad { color: var(--st-weak); }
+
+@media (max-width: 560px) {
+  .yb-sound { flex-direction: column; }
+  .yb-combo { flex-direction: column; gap: 4px; }
+  .yb-combo-g { width: auto; }
+}

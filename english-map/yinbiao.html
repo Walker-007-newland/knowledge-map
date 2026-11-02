@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音标课</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/dictation.css">
+<link rel="stylesheet" href="css/yinbiao.css">
+</head>
+<body class="dict yb">
+<header class="topbar">
+  <button class="btn" id="btnBack">← 返回</button>
+  <div class="brand">
+    <h1 id="title">音标课</h1>
+    <span class="sub" id="subtitle">字母 · 48 个国际音标 · 字母组合 · 音节和重音</span>
+  </div>
+</header>
+
+<main>
+  <!-- 课程列表 -->
+  <section class="view" id="vHome">
+    <div class="card yb-intro">
+      <p>音标就是单词读音的“拼音”。学会 48 个音标和常见的字母组合，没学过的单词也能自己读出来，背单词也更快。</p>
+      <p class="muted">每课先「学」再「练」，最后「测」：测试正确率 80% 以上算学会（计入小狗奖励）。按顺序学最好。</p>
+    </div>
+    <div id="lessons"></div>
+    <p class="hint src">音标录音来自维基共享资源（Wikimedia Commons）的国际音标录音，按 CC BY-SA 3.0 等许可使用，作者和来源见
+      <a href="audio/ipa/CREDITS.txt">audio/ipa/CREDITS.txt</a>。双元音和 tr、dr、ts、dz 没有单独录音，点它们读例词。
+      例词和字母读音是电脑合成的英式发音。</p>
+  </section>
+
+  <!-- 一课 -->
+  <section class="view" id="vLesson" hidden>
+    <div class="seg yb-tabs" id="tabs">
+      <button data-t="learn">学</button><button data-t="practice">练</button><button data-t="test">测</button>
+    </div>
+    <div id="pane"></div>
+  </section>
+</main>
+
+<script src="data/yinbiao.js"></script>
+<script src="audio/ipa-index.js"></script>
+<script src="audio/index.js"></script>
+<script src="audio/syl-index.js"></script>
+<script src="data/phonics-words.js"></script>
+<script src="js/phonics.js"></script>
+<script src="js/yinbiao.js"></script>
+</body>
+</html>

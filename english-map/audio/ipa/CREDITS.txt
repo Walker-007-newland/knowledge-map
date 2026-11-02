@@ -1,0 +1,38 @@
+音标录音来自维基共享资源（Wikimedia Commons），按各自许可使用；辅音只截取了第一段并调整了音量。
+音标	文件	作者	许可	地址
+/iː/	File:Close front unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AClose_front_unrounded_vowel.ogg
+/ɪ/	File:Near-close near-front unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3ANear-close_near-front_unrounded_vowel.ogg
+/e/	File:Close-mid front unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AClose-mid_front_unrounded_vowel.ogg
+/æ/	File:Near-open front unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3ANear-open_front_unrounded_vowel.ogg
+/ɜː/	File:Open-mid central unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AOpen-mid_central_unrounded_vowel.ogg
+/ə/	File:Mid-central vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AMid-central_vowel.ogg
+/ʌ/	File:Open-mid back unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AOpen-mid_back_unrounded_vowel.ogg
+/uː/	File:Close back rounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AClose_back_rounded_vowel.ogg
+/ʊ/	File:Near-close near-back rounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3ANear-close_near-back_rounded_vowel.ogg
+/ɔː/	File:Open-mid back rounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AOpen-mid_back_rounded_vowel.ogg
+/ɒ/	File:Open back rounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AOpen_back_rounded_vowel.ogg
+/ɑː/	File:Open back unrounded vowel.ogg	No machine-readable author provided. Denelson83 assumed (based on copyright claims).	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AOpen_back_unrounded_vowel.ogg
+/p/	File:Voiceless bilabial plosive.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_bilabial_plosive.ogg
+/b/	File:Voiced bilabial plosive.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_bilabial_plosive.ogg
+/t/	File:Voiceless alveolar plosive.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_alveolar_plosive.ogg
+/d/	File:Voiced alveolar plosive.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_alveolar_plosive.ogg
+/k/	File:Voiceless velar plosive.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_velar_plosive.ogg
+/ɡ/	File:Voiced velar plosive.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_velar_plosive.ogg
+/f/	File:Voiceless labiodental fricative.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_labiodental_fricative.ogg
+/v/	File:Voiced labiodental fricative.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_labiodental_fricative.ogg
+/θ/	File:Voiceless dental fricative.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_dental_fricative.ogg
+/ð/	File:Voiced dental fricative.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_dental_fricative.ogg
+/s/	File:Voiceless alveolar sibilant.ogg	Peter Isotalo	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_alveolar_sibilant.ogg
+/z/	File:Voiced alveolar sibilant.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_alveolar_sibilant.ogg
+/ʃ/	File:Voiceless palato-alveolar sibilant.ogg	Peter Isotalo	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_palato-alveolar_sibilant.ogg
+/ʒ/	File:Voiced palato-alveolar sibilant.ogg	Peter Isotalo	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_palato-alveolar_sibilant.ogg
+/tʃ/	File:Voiceless palato-alveolar affricate.ogg	Peter Isotalo	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_palato-alveolar_affricate.ogg
+/dʒ/	File:Voiced palato-alveolar affricate.ogg	The original uploader was Octane at English Wikipedia.	Public domain	https://commons.wikimedia.org/wiki/File%3AVoiced_palato-alveolar_affricate.ogg
+/m/	File:Bilabial nasal.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3ABilabial_nasal.ogg
+/n/	File:Alveolar nasal.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AAlveolar_nasal.ogg
+/ŋ/	File:Velar nasal.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVelar_nasal.ogg
+/h/	File:Voiceless glottal fricative.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiceless_glottal_fricative.ogg
+/l/	File:Alveolar lateral approximant.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AAlveolar_lateral_approximant.ogg
+/r/	File:Alveolar approximant.ogg	Erutuon	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AAlveolar_approximant.ogg
+/w/	File:Voiced labio-velar approximant.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3AVoiced_labio-velar_approximant.ogg
+/j/	File:Palatal approximant.ogg	见文件页	CC BY-SA 3.0	https://commons.wikimedia.org/wiki/File%3APalatal_approximant.ogg

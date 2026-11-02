@@ -17,6 +17,7 @@
     <span id="progressText">0 / 0</span>
   </div>
   <div class="actions">
+    <button class="btn" id="btnYinbiao">音标课</button>
     <button class="btn" id="btnWords">单元单词</button>
     <button class="btn" id="btnDictation">单词听写</button>
     <button class="btn primary" id="btnDiag">入门诊断</button>
@@ -84,6 +85,7 @@
 <script>
   // 单元单词：内置课本词表，走 file://（和图谱同一个存储空间）
   document.getElementById('btnWords').onclick = function () { location.href = 'words.html'; };
+  document.getElementById('btnYinbiao').onclick = function () { location.href = 'yinbiao.html'; };
   // 单词听写：平板 App 里走 https 虚拟地址（词单存在那个地址的 localStorage 里），浏览器里直接打开
   document.getElementById('btnDictation').onclick = function () {
     location.href = window.KMApp && KMApp.goBack
