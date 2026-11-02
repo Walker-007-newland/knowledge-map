@@ -107,7 +107,7 @@ class Textbooks {
             long used = 0;
             File[] fs = dir(ctx).listFiles();
             if (fs != null) for (File f : fs) {
-                used += f.length();
+                used += TbAudio.size(f);   // 点读录音在 {id}.audio 子目录
                 String n = f.getName();
                 if (!n.endsWith(".pdf")) continue;
                 String id = n.substring(0, n.length() - 4);
@@ -127,6 +127,7 @@ class Textbooks {
         if (!TbAuth.validId(id) || id.equals(jobId)) return false;
         File f = file(ctx, id);
         boolean ok = !f.exists() || f.delete();
+        TbAudio.delete(ctx, id);
         ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
             .remove("page_" + id).remove("pages_" + id).remove("title_" + id).apply();
         return ok;

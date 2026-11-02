@@ -10,6 +10,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.media.AudioAttributes;
+import android.media.MediaPlayer;
 import android.graphics.pdf.PdfRenderer;
 import android.os.Bundle;
 import android.os.Handler;
@@ -34,12 +36,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 电子教材阅读器：系统自带的 PdfRenderer（不需要第三方库、不联网）。
  * 单页显示；左右滑动或点屏幕左右两侧翻页；点中间显示/隐藏工具栏；点页码跳转；双指缩放、双击放大/还原，放大后拖动查看。
  * 每本书记住最后阅读页（SharedPreferences km_textbooks 的 page_{id}）。横竖屏都可用（manifest 里 configChanges，不重建，按新尺寸重新排版）。
  * 渲染在后台线程，PdfRenderer 同一时间只开一页。
+ * 点读（TbAudio）：平台给这本书做了点读热区时，工具栏出现「点读」；打开后页面上框出能点的句子，点一下放录音（第一次放要联网、
+ * 用平台登录下载，下过的离线也能放），也可以一次下完整本书的录音。点读开关记在 km_textbooks 的 dd_on。
  */
 public class PdfActivity extends Activity {
     static final String EXTRA_ID = "id", EXTRA_TITLE = "title";
@@ -58,6 +64,14 @@ public class PdfActivity extends Activity {
     LinearLayout bar;
     TextView label;
     SharedPreferences prefs;
+    List<TbAudio.Zone> zones;     // 点读热区（null = 没有或还没取到）
+    boolean ddOn;
+    Button ddBtn;
+    MediaPlayer player;
+    TbAudio.Zone playing;         // 正在放（或正在下载准备放）的那块
+    int playSeq;                  // 点得快时只放最后点的那段
+    volatile boolean bulkStop;
+    volatile int bulkDone = -1, bulkTotal;   // 全部下载的进度（-1 = 没在下）
 
     int dp(float v) { return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics()); }
 
@@ -108,6 +122,9 @@ public class PdfActivity extends Activity {
         t.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         t.setPadding(dp(8), 0, dp(8), 0);
         bar.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        ddBtn = button("点读", new View.OnClickListener() { public void onClick(View v) { ddMenu(); } });
+        ddBtn.setVisibility(View.GONE);
+        bar.addView(ddBtn);
         bar.addView(button("‹ 上一页", new View.OnClickListener() { public void onClick(View v) { go(page - 1); } }));
         label = button("", new View.OnClickListener() { public void onClick(View v) { askPage(); } });
         bar.addView(label);
@@ -116,6 +133,166 @@ public class PdfActivity extends Activity {
         setContentView(root);
         showLabel();
         view.load(page);
+        loadZones();
+    }
+
+    // ---------------- 点读
+
+    void loadZones() {
+        final String bid = id;
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            public void run() {
+                final List<TbAudio.Zone> z = TbAudio.load(app, bid);
+                ui.post(new Runnable() {
+                    public void run() {
+                        if (isFinishing() || z == null || z.isEmpty()) return;
+                        zones = z;
+                        ddOn = prefs.getBoolean("dd_on", true);
+                        ddBtn.setVisibility(View.VISIBLE);
+                        showDd();
+                        view.invalidate();
+                    }
+                });
+            }
+        }, "km-tb-zones").start();
+    }
+
+    void showDd() {
+        if (bulkDone >= 0) ddBtn.setText("录音 " + bulkDone + "/" + bulkTotal);
+        else ddBtn.setText(ddOn ? "点读：开" : "点读：关");
+    }
+
+    void ddMenu() {
+        if (zones == null) return;
+        final int got = TbAudio.cached(this, id, zones), total = zones.size();
+        List<String> items = new ArrayList<>();
+        items.add(ddOn ? "关闭点读" : "打开点读（框出能点的句子，点一下放录音）");
+        if (bulkDone >= 0) items.add("停止下载录音（已下 " + bulkDone + " / " + bulkTotal + " 段）");
+        else if (got < total) items.add("下载本书全部录音，以后不联网也能点读（已下 " + got + " / " + total + " 段）");
+        new AlertDialog.Builder(this).setTitle("点读（本书 " + total + " 段录音）")
+            .setItems(items.toArray(new String[0]), new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface d, int w) {
+                    if (w == 0) {
+                        ddOn = !ddOn;
+                        prefs.edit().putBoolean("dd_on", ddOn).apply();
+                        if (!ddOn) stopAudio();
+                        showDd();
+                        view.invalidate();
+                    } else if (bulkDone >= 0) bulkStop = true;
+                    else downloadAll();
+                }
+            }).setNegativeButton("关闭", null).show();
+    }
+
+    /** 点读区里点了一下：没下过就先下载，再放 */
+    void play(final TbAudio.Zone z) {
+        stopAudio();
+        playing = z;
+        final int seq = ++playSeq;
+        view.invalidate();
+        final String bid = id;
+        final Context app = getApplicationContext();
+        new Thread(new Runnable() {
+            public void run() {
+                final int r = TbAudio.fetchAudio(app, bid, z);
+                ui.post(new Runnable() {
+                    public void run() {
+                        if (seq != playSeq || isFinishing()) return;
+                        if (r != 0) { playing = null; view.invalidate(); audioError(r); return; }
+                        startAudio(TbAudio.audioFile(app, bid, z), seq);
+                    }
+                });
+            }
+        }, "km-tb-audio").start();
+    }
+
+    void startAudio(File f, final int seq) {
+        MediaPlayer m = new MediaPlayer();
+        try {
+            m.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+            m.setDataSource(f.getPath());
+            m.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                public void onCompletion(MediaPlayer mp) { if (seq == playSeq) stopAudio(); }
+            });
+            m.prepare();
+            m.start();
+            player = m;
+        } catch (Exception e) {
+            Log.w(TAG, "play " + e.getClass().getSimpleName());
+            m.release();
+            f.delete();                      // 文件坏了，下次点重新下载
+            playing = null;
+            view.invalidate();
+            Toast.makeText(this, "这段录音放不出来，请再点一次", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    void stopAudio() {
+        if (player != null) { try { player.stop(); } catch (Exception ignored) { } player.release(); player = null; }
+        if (playing != null) { playing = null; view.invalidate(); }
+    }
+
+    void audioError(int r) {
+        String msg;
+        if (r == -3) msg = "第一次点读要下载录音：请先在「电子教材」页登录国家中小学智慧教育平台";
+        else if (r == 401) { Textbooks.get(this).markExpired(); msg = "平台登录已失效，请回「电子教材」页重新登录"; }
+        else if (r == 400 || r == 403) msg = "平台拒绝下载录音（" + r + "），请回「电子教材」页退出登录后重新登录";
+        else if (r == -1) msg = "录音下载失败，请检查网络（下载过的录音不联网也能放）";
+        else msg = "录音下载失败（" + r + "），请稍后再试";
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+    }
+
+    /** 一次下完整本书的录音：按顺序下，出错就停下提示 */
+    void downloadAll() {
+        if (!Textbooks.loggedIn(this)) { audioError(-3); return; }
+        if (Textbooks.dir(this).getUsableSpace() < 2 * Textbooks.RESERVE) {
+            Toast.makeText(this, "存储空间不够（一本书的录音大约几十 MB），请先删除一些教材", Toast.LENGTH_LONG).show();
+            return;
+        }
+        final List<TbAudio.Zone> list = zones;
+        final String bid = id;
+        final Context app = getApplicationContext();
+        bulkStop = false;
+        bulkTotal = list.size();
+        bulkDone = 0;
+        showDd();
+        new Thread(new Runnable() {
+            public void run() {
+                int r = 0, done = 0;
+                for (TbAudio.Zone z : list) {
+                    if (bulkStop) break;
+                    r = TbAudio.fetchAudio(app, bid, z);
+                    if (r != 0) break;
+                    bulkDone = ++done;
+                    if (done % 5 == 0) ui.post(new Runnable() { public void run() { showDd(); } });
+                }
+                final int res = r, n = done;
+                ui.post(new Runnable() {
+                    public void run() {
+                        bulkDone = -1;
+                        if (isFinishing()) return;
+                        showDd();
+                        if (res != 0) audioError(res);
+                        else if (n == list.size()) Toast.makeText(PdfActivity.this, "本书录音都下好了，不联网也能点读", Toast.LENGTH_LONG).show();
+                        else Toast.makeText(PdfActivity.this, "已停止，下好了 " + n + " 段", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        }, "km-tb-audio-all").start();
+    }
+
+    /** 点在哪个点读区里（屏幕坐标）；没开点读或没点中返回 null */
+    TbAudio.Zone zoneAt(float sx, float sy) {
+        if (!ddOn || zones == null || view.pw <= 0) return null;
+        float fx = (sx - view.tx) / view.dispW(), fy = (sy - view.ty) / view.dispH();
+        TbAudio.Zone best = null;
+        for (TbAudio.Zone z : zones) {
+            // 重叠时取小的那块（大块一般是整幅图、整段对话）
+            if (z.page == page && z.contains(fx, fy) && (best == null || z.w * z.h < best.w * best.h)) best = z;
+        }
+        return best;
     }
 
     Button button(String text, View.OnClickListener l) {
@@ -138,6 +315,7 @@ public class PdfActivity extends Activity {
             return;
         }
         if (p == page) return;
+        stopAudio();
         page = p;
         showLabel();
         prefs.edit().putInt("page_" + id, page).apply();
@@ -188,6 +366,9 @@ public class PdfActivity extends Activity {
             bg.post(new Runnable() { public void run() { closeRenderer(); } });   // 在渲染线程上关，避免和正在进行的渲染撞上
             worker.quitSafely();
         } else closeRenderer();
+        bulkStop = true;
+        playSeq++;
+        if (player != null) { player.release(); player = null; }
         if (view != null) view.drop();
         super.onDestroy();
     }
@@ -226,7 +407,8 @@ public class PdfActivity extends Activity {
         final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
         final Paint white = new Paint();
         final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-        final RectF dst = new RectF();
+        final Paint zoneLine = new Paint(Paint.ANTI_ALIAS_FLAG), zoneOn = new Paint(Paint.ANTI_ALIAS_FLAG);
+        final RectF dst = new RectF(), zr = new RectF();
         final ScaleGestureDetector scaler;
         final GestureDetector gestures;
         boolean scaling;
@@ -234,6 +416,10 @@ public class PdfActivity extends Activity {
         PageView(Context c) {
             super(c);
             white.setColor(Color.WHITE);
+            zoneLine.setStyle(Paint.Style.STROKE);
+            zoneLine.setStrokeWidth(dp(1.2f));
+            zoneLine.setColor(0x992F80ED);
+            zoneOn.setColor(0x55FFC107);
             text.setColor(0xFFBBBBBB);
             text.setTextSize(dp(16));
             text.setTextAlign(Paint.Align.CENTER);
@@ -245,6 +431,8 @@ public class PdfActivity extends Activity {
             gestures = new GestureDetector(c, new GestureDetector.SimpleOnGestureListener() {
                 public boolean onDown(MotionEvent e) { return true; }
                 public boolean onSingleTapConfirmed(MotionEvent e) {
+                    TbAudio.Zone z = zoneAt(e.getX(), e.getY());
+                    if (z != null) { play(z); return true; }
                     float w = getWidth();
                     if (zoom <= 1.01f && e.getX() < w * 0.2f) go(page - 1);
                     else if (zoom <= 1.01f && e.getX() > w * 0.8f) go(page + 1);
@@ -382,6 +570,15 @@ public class PdfActivity extends Activity {
                 dst.set(tx, ty, tx + dispW(), ty + dispH());
                 c.drawRect(dst, white);
                 if (bmp != null && !bmp.isRecycled() && bmpPage == page) c.drawBitmap(bmp, null, dst, paint);
+                if (ddOn && zones != null) {
+                    float dw = dispW(), dh = dispH(), r = dp(3);
+                    for (TbAudio.Zone z : zones) {
+                        if (z.page != page) continue;
+                        zr.set(tx + z.x * dw, ty + z.y * dh, tx + (z.x + z.w) * dw, ty + (z.y + z.h) * dh);
+                        if (z == playing) c.drawRoundRect(zr, r, r, zoneOn);
+                        c.drawRoundRect(zr, r, r, zoneLine);
+                    }
+                }
             }
             if (loading && (bmp == null || bmpPage != page)) c.drawText("正在打开第 " + (page + 1) + " 页…", getWidth() / 2f, getHeight() / 2f, text);
         }

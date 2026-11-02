@@ -56,6 +56,8 @@
   .book .info { flex: 1 1 260px; min-width: 0; }
   .book .name { font-size: 17px; font-weight: 600; }
   .book .full { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .book .dd { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 500; vertical-align: 2px;
+    background: var(--accent); color: #fff; }
   .book .stat { font-size: 13px; margin-top: 4px; color: var(--muted); }
   .book .stat.ok { color: var(--good); } .book .stat.bad { color: var(--bad); } .book .stat.ing { color: var(--accent); }
   .book .acts { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -107,7 +109,7 @@
   var C = window.KM_TEXTBOOKS, D = C.dict;
   var BOOKS = C.rows.map(function (r) {
     return { id: r[0], title: r[1], stage: D.stage[r[2]], subject: D.subject[r[3]], version: D.version[r[4]],
-      grade: D.grade[r[5]], vol: D.vol[r[6]], thematic: !!r[7] };
+      grade: D.grade[r[5]], vol: D.vol[r[6]], thematic: !!r[7], diandu: !!r[8] };
   });
   var BY_ID = {};
   BOOKS.forEach(function (b) { BY_ID[b.id] = b; });
@@ -213,6 +215,13 @@
     var name = document.createElement('div');
     name.className = 'name';
     name.textContent = mine ? b.stage + b.subject + ' · ' + (ALIAS[b.version] || b.version) + ' · ' + b.grade + ' ' + b.vol : b.grade + ' ' + b.vol;
+    if (b.diandu) {   // 平台做了点读热区：阅读时点句子放录音
+      var dd = document.createElement('span');
+      dd.className = 'dd';
+      dd.textContent = '可点读';
+      dd.title = '打开后点课本上的句子就能听录音';
+      name.appendChild(dd);
+    }
     var full = document.createElement('div');
     full.className = 'full';
     full.textContent = b.title;
