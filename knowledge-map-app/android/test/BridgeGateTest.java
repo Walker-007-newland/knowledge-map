@@ -207,7 +207,7 @@ public class BridgeGateTest {
         System.out.println("11. 语文背诵：麦克风、语音识别只在 chinese-map/beisong.html");
         g = new BridgeGate();
         String BS = BridgeGate.WWW + "chinese-map/beisong.html";
-        String[] BS_METHODS = { "asrAvailable", "asrStart", "asrStop" };
+        String[] BS_METHODS = { "asrAvailable", "asrModel", "asrDownload", "asrStart", "asrStop" };
         long bs = t + 1900000;
         String bsk = g.issue(BS + "#run", bs);
         for (String m : BS_METHODS) ok(g.check(bsk, m, bs + 1), "beisong.html 调 " + m + " 通过");

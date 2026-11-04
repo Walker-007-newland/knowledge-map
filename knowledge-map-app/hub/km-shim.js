@@ -49,7 +49,7 @@
     // 电子教材：结果经 window.__kmTbEvent 事件回来（progress / done / error / cancelled / login）
     'tbCancel', 'tbOpen', 'tbLogin', 'tbLogout',
     // 语文背诵：离线语音识别，结果经 window.__kmAsrEvent 事件回来（state / text / level / error）
-    'asrStart', 'asrStop'].forEach(function (m) {
+    'asrStart', 'asrStop', 'asrDownload'].forEach(function (m) {
     if (B[m]) A[m] = function () {
       var args = Array.prototype.slice.call(arguments);
       if (token) call(m, args); else queue.push([m, args]);
@@ -58,7 +58,7 @@
   var empty = { pinWidget: false, deviceName: '', ttsInfo: '', sharedGet: '', syncState: '', syncTake: '', joinState: '',
     acctState: '', acctOffline: false, saveBackup: '',      // #12
     tbState: '', tbDownload: false, tbDelete: false,        // 电子教材
-    asrAvailable: false };                                   // 语文背诵
+    asrAvailable: false, asrModel: '' };                     // 语文背诵
   Object.keys(empty).forEach(function (m) {
     if (B[m]) A[m] = function () { return token ? call(m, Array.prototype.slice.call(arguments)) : empty[m]; };
   });

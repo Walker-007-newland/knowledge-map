@@ -30,17 +30,29 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 语文背诵（chinese-map/beisong.html）的离线语音识别：sherpa-onnx 流式 zipformer 中文模型（14M，assets/asr/），全程不联网。
- * 第一次用时把模型从 assets 复制到 files/asr/（sherpa-onnx 按文件路径读），再建识别器（之后一直留着）。
- * 录音 16 kHz 单声道，每 100 ms 送一次；识别结果、音量、出错经 Sink 发给页面：
+ * 语文背诵（chinese-map/beisong.html）的离线语音识别：sherpa-onnx 流式 zipformer 中文模型（14M），识别全程不联网。
+ * 原生库只有 arm64-v8a，放在 assets/asr-lib/（放 APK 的 lib/ 的话 32 位平板整个 App 都装不上），
+ * 第一次用时复制到 files/asr/lib/ 再 System.load；32 位平板没有语音背诵，页面改用家长核对。
+ * 模型不打进 APK（约 24 MB，每次更新都要重下）：第一次语音背诵时从仓库 tag MODEL_TAG（tools/publish-asr-model.ps1 推上去的）
+ * 经 jsDelivr 镜像下载到 files/asr/，逐个文件核对 SHA-256；App 更新不会删掉，之后一直离线用。
+ * 录音 16 kHz 单声道，每 100 ms 送一次；识别结果、音量、下载进度、出错经 Sink 发给页面：
  *   {type:"state", state:"loading"|"listening"|"stopped"}、{type:"text", text, seg}（seg：已断句的部分 + 正在说的）、
- *   {type:"level", v:0~1}、{type:"error", code:"perm"|"model"|"mic", msg}
+ *   {type:"level", v:0~1}、{type:"dl", got, total}、{type:"dl-done"}、{type:"error", code:"perm"|"model"|"mic"|"dl", msg}
  * 热词：页面传原文各句（/ 分隔），模型字表里没有的字整句去掉（有一个不认识的字，sherpa-onnx 会把整组热词都丢掉）。
  */
 public class Asr {
     static final String TAG = "KMAsr";
     static final int RATE = 16000;
     static final String[] FILES = { "encoder.int8.onnx", "decoder.onnx", "joiner.int8.onnx", "tokens.txt" };
+    static final long[] SIZES = { 15366685, 7509745, 1795562, 48697 };
+    static final String[] SHA256 = {
+        "20d4998206e61f7aaf87f354f9cb6aa466d0ef8ae44d568fdee2f7d23672b1e2", "5ee0f03a2768ff1d5c83ef3a493243c7935d316cd41280037b14783a3467cc78",
+        "a7cf9d82757bdcf786059454495a9ca95e4bd7347f72473fc08d794475c36169", "8b294db9045d6e5f94647f4c1eec1af4da143a75053c399611444b378ff966ac" };
+    static final String MODEL_TAG = "asr-zh14m-v1";
+    static final String[] MIRRORS = {
+        "https://cdn.jsdelivr.net/gh/" + Updater.REPO + "@" + MODEL_TAG + "/",
+        "https://fastly.jsdelivr.net/gh/" + Updater.REPO + "@" + MODEL_TAG + "/",
+        "https://github.com/" + Updater.REPO + "/raw/" + MODEL_TAG + "/" };
     public static final int REQ_MIC = 7;
 
     public interface Sink { void event(String json); }
@@ -52,6 +64,11 @@ public class Asr {
     volatile boolean running;
     Thread worker;
     String pendingHotwords;     // 等麦克风权限时先记着
+    volatile boolean downloading;
+    volatile long dlGot;
+    static final String LIB_ASSET = "asr-lib/arm64-v8a/libsherpa-onnx-jni.so";
+    static final long LIB_SIZE = 24177488;
+    Boolean canRun;             // 这台设备能不能语音背诵（64 位、App 里带着库）
 
     Asr(Activity a) { act = a; }
 
@@ -63,10 +80,121 @@ public class Asr {
         try { JSONObject o = new JSONObject(); o.put("type", "error"); o.put("code", code); o.put("msg", msg == null ? "" : msg); emit(o); } catch (Exception ignored) { }
     }
 
-    /** 页面问：App 里有没有带识别模型（打包时没带上就是 false） */
-    boolean available() {
-        try { for (String f : FILES) { InputStream in = act.getAssets().open("asr/" + f); in.close(); } return true; }
-        catch (Exception e) { return false; }
+    /** 页面问：这台设备能不能语音背诵（64 位、App 里带着库） */
+    synchronized boolean available() {
+        if (canRun == null) {
+            boolean ok = false;
+            for (String abi : android.os.Build.SUPPORTED_ABIS) if ("arm64-v8a".equals(abi)) ok = true;
+            if (ok) { try { act.getAssets().open(LIB_ASSET).close(); } catch (Exception e) { ok = false; } }
+            canRun = ok;
+        }
+        return canRun;
+    }
+
+    /** 原生库从 assets 复制到 files/asr/lib/（大小不对才复制），再加载 */
+    void loadLib() throws Exception {
+        File dir = new File(modelDir(), "lib");
+        dir.mkdirs();
+        File so = new File(dir, "libsherpa-onnx-jni.so");
+        if (!so.isFile() || so.length() != LIB_SIZE) {
+            File tmp = new File(so.getPath() + ".tmp");
+            try (InputStream in = act.getAssets().open(LIB_ASSET); OutputStream out = new FileOutputStream(tmp)) {
+                byte[] buf = new byte[1 << 16];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            }
+            if (so.isFile()) so.delete();
+            if (!tmp.renameTo(so)) throw new Exception("复制识别程序库失败");
+        }
+        com.k2fsa.sherpa.onnx.LibraryLoader.loadFrom(so.getPath());
+    }
+
+    File modelDir() { return new File(act.getFilesDir(), "asr"); }
+
+    boolean modelReady() {
+        for (int i = 0; i < FILES.length; i++) { File f = new File(modelDir(), FILES[i]); if (!f.isFile() || f.length() != SIZES[i]) return false; }
+        return true;
+    }
+
+    /** 模型状态（JSON）：ready、downloading、got、total（字节） */
+    String modelState() {
+        long total = 0;
+        for (long n : SIZES) total += n;
+        try {
+            JSONObject o = new JSONObject();
+            o.put("ready", modelReady()); o.put("downloading", downloading); o.put("got", dlGot); o.put("total", total);
+            return o.toString();
+        } catch (Exception e) { return "{}"; }
+    }
+
+    /** 下载模型：逐个文件、按镜像顺序试，边下边算 SHA-256，对上了才改名生效 */
+    synchronized void download() {
+        if (modelReady()) { emit("dl-done", null, null); return; }
+        if (downloading) return;
+        downloading = true;
+        dlGot = 0;
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    File dir = modelDir();
+                    dir.mkdirs();
+                    long total = 0;
+                    for (long n : SIZES) total += n;
+                    for (int i = 0; i < FILES.length; i++) {
+                        File dst = new File(dir, FILES[i]);
+                        if (dst.isFile() && dst.length() == SIZES[i]) { dlGot += SIZES[i]; continue; }
+                        long base = dlGot;
+                        Exception last = null;
+                        boolean ok = false;
+                        for (String m : MIRRORS) {
+                            try { fetch(m + FILES[i], dst, SHA256[i], total); ok = true; break; }
+                            catch (Exception e) { last = e; dlGot = base; Log.w(TAG, "下载 " + m + FILES[i] + "：" + e); }
+                        }
+                        if (!ok) throw last != null ? last : new Exception("下载失败");
+                    }
+                    downloading = false;
+                    emit("dl-done", null, null);
+                } catch (Exception e) {
+                    downloading = false;
+                    error("dl", String.valueOf(e.getMessage()));
+                }
+            }
+        }, "km-asr-dl").start();
+    }
+
+    void fetch(String url, File dst, String sha, long total) throws Exception {
+        java.net.HttpURLConnection c = Updater.open(url);
+        File tmp = new File(dst.getPath() + ".tmp");
+        try {
+            int code = c.getResponseCode();
+            if (code != 200) throw new Exception("HTTP " + code);
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            long lastEmit = 0;
+            try (InputStream in = c.getInputStream(); OutputStream out = new FileOutputStream(tmp)) {
+                byte[] buf = new byte[1 << 16];
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                    md.update(buf, 0, n);
+                    dlGot += n;
+                    long now = System.currentTimeMillis();
+                    if (now - lastEmit > 300) {
+                        lastEmit = now;
+                        JSONObject o = new JSONObject();
+                        o.put("type", "dl"); o.put("got", dlGot); o.put("total", total);
+                        emit(o);
+                    }
+                }
+            }
+            StringBuilder hex = new StringBuilder();
+            for (byte b : md.digest()) hex.append(String.format("%02x", b));
+            if (!hex.toString().equals(sha)) throw new Exception("文件校验不对");
+            if (dst.isFile()) dst.delete();
+            if (!tmp.renameTo(dst)) throw new Exception("保存失败");
+        } finally {
+            c.disconnect();
+            if (tmp.isFile()) tmp.delete();
+        }
     }
 
     synchronized void start(String hotwords) {
@@ -98,14 +226,15 @@ public class Asr {
         worker = null;
     }
 
-    /** 模型复制到 files/asr/、建识别器；只做一次 */
+    /** 建识别器（模型要已经下载好）；只做一次 */
     synchronized boolean ensureModel() {
         if (rec != null) return true;
+        if (!available()) { error("model", "这台设备不支持语音背诵"); return false; }
+        if (!modelReady()) { error("model", "语音模型还没下载"); return false; }
         emit("state", "state", "loading");
         try {
-            File dir = new File(act.getFilesDir(), "asr");
-            dir.mkdirs();
-            for (String f : FILES) copyAsset("asr/" + f, new File(dir, f));
+            loadLib();
+            File dir = modelDir();
             File hwFile = new File(dir, "hotwords.txt");      // 空的热词文件：开了它，每次建流时带的热词才生效
             if (!hwFile.isFile()) new FileOutputStream(hwFile).close();
             OnlineTransducerModelConfig tr = OnlineTransducerModelConfig.builder()
@@ -132,20 +261,6 @@ public class Asr {
             error("model", String.valueOf(e.getMessage()));
             return false;
         }
-    }
-
-    void copyAsset(String name, File dst) throws Exception {
-        long want;
-        try (android.content.res.AssetFileDescriptor fd = act.getAssets().openFd(name)) { want = fd.getLength(); }
-        catch (Exception e) { want = -1; }     // 压缩存放的 asset 拿不到长度：已有文件就不再复制
-        if (dst.isFile() && (want < 0 ? dst.length() > 0 : dst.length() == want)) return;
-        File tmp = new File(dst.getPath() + ".tmp");
-        try (InputStream in = act.getAssets().open(name); OutputStream out = new FileOutputStream(tmp)) {
-            byte[] buf = new byte[1 << 16];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-        }
-        if (!tmp.renameTo(dst)) throw new Exception("复制模型失败：" + name);
     }
 
     static Set<String> readTokens(File f) throws Exception {

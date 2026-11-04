@@ -73,7 +73,7 @@ public class BridgeGate {
         allow(SYNC_PAGE, "pairOpen", "pairClose", "pairWith", "pairAddr", "pairConfirm");
         // 电子教材：查状态、下载 / 取消 / 删除、打开阅读器、平台登录 / 退出，只在电子教材页（file://，听写页的 https 虚拟地址不行）
         allow(TEXTBOOKS, "tbState", "tbDownload", "tbCancel", "tbDelete", "tbOpen", "tbLogin", "tbLogout");
-        allow(BEISONG, "asrAvailable", "asrStart", "asrStop");
+        allow(BEISONG, "asrAvailable", "asrModel", "asrDownload", "asrStart", "asrStop");
     }
 
     static String[] cat(String[] a, String[] b) {

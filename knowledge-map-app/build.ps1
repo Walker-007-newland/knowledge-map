@@ -84,14 +84,14 @@ if ($SelfTest) {
   $idx = ([regex]'</body>').Replace($idx, "$btn`n</body>", 1)
   [IO.File]::WriteAllText("$work\assets\www\index.html", $idx, (New-Object Text.UTF8Encoding $false))
 }
-# 语文背诵的离线语音识别（sherpa-onnx v2.0.1，Apache-2.0）：原生库（static-link-onnxruntime 版）和 14M 中文流式模型不进仓库，
-# 按固定地址下载、校验 SHA-256 后缓存在 asr-cache\（已 gitignore）；模型放进 assets/asr/，原生库在下面第 4 步放进 lib/<abi>/
+# 语文背诵的离线语音识别（sherpa-onnx v2.0.1，Apache-2.0）：原生库（static-link-onnxruntime 版）不进仓库，
+# 按固定地址下载、校验 SHA-256 后缓存在 asr-cache\（已 gitignore），在下面第 4 步放进 assets/asr-lib/arm64-v8a/：只要 64 位，
+# 而且不能放 APK 的 lib/（只有 64 位的库放 lib/，32 位平板整个 App 都装不上），由 Asr.java 复制到私有目录后加载。32 位平板没有语音背诵。
+# 识别模型不打包：App 第一次语音背诵时从仓库 tag asr-zh14m-v1 下载（tools\publish-asr-model.ps1 推上去的，见 Asr.java）
 $asrCache = "$here\asr-cache"
 $asrPkgs = @(
   @{ dir = 'lib'; sha = 'fe1c9ceffd86770218a1d4bba6b410d6f726b2b8dda6a5488499b05250b53aea'
-     url = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android-static-link-onnxruntime.tar.bz2' },
-  @{ dir = 'model'; sha = 'd394cab72b17f788b8b09ffc610f5f070e610fecf022eedca2eae9e38be4f20a'
-     url = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23-mobile.tar.bz2' })
+     url = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android-static-link-onnxruntime.tar.bz2' })
 foreach ($p in $asrPkgs) {
   $d = Join-Path $asrCache $p.dir
   if (Test-Path "$d\.ok") { continue }
@@ -107,13 +107,7 @@ foreach ($p in $asrPkgs) {
   Remove-Item $tmp
   Set-Content "$d\.ok" $p.sha
 }
-$asrModel = Get-ChildItem "$asrCache\model" -Directory | Select-Object -First 1 -ExpandProperty FullName
-New-Item -ItemType Directory -Force "$work\assets\asr" | Out-Null
-Copy-Item "$asrModel\encoder-epoch-99-avg-1.int8.onnx" "$work\assets\asr\encoder.int8.onnx"
-Copy-Item "$asrModel\decoder-epoch-99-avg-1.onnx" "$work\assets\asr\decoder.onnx"
-Copy-Item "$asrModel\joiner-epoch-99-avg-1.int8.onnx" "$work\assets\asr\joiner.int8.onnx"
-Copy-Item "$asrModel\tokens.txt" "$work\assets\asr\tokens.txt"
-$asrAbis = 'arm64-v8a', 'armeabi-v7a'
+$asrAbis = @('arm64-v8a')
 
 # 宠物狗页面（three.js + 狗模型），模型转换脚本不打包
 $petSrc = "$here\hub\pet"
@@ -169,7 +163,7 @@ try {
   foreach ($abi in $asrAbis) {
     $so = Get-ChildItem "$asrCache\lib" -Recurse -Filter libsherpa-onnx-jni.so | Where-Object { $_.Directory.Name -eq $abi } | Select-Object -First 1
     if (-not $so) { throw "asr-cache 里没有 $abi 的 libsherpa-onnx-jni.so" }
-    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $so.FullName, "lib/$abi/libsherpa-onnx-jni.so", 'Optimal')
+    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $so.FullName, "assets/asr-lib/$abi/libsherpa-onnx-jni.so", 'Optimal')
   }
   Get-ChildItem "$work\assets" -Recurse -File | ForEach-Object {
     $name = 'assets/' + $_.FullName.Substring("$work\assets".Length + 1).Replace('\', '/')
@@ -206,10 +200,12 @@ try {
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
   foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc',
-      'assets/asr/encoder.int8.onnx', 'assets/asr/decoder.onnx', 'assets/asr/joiner.int8.onnx', 'assets/asr/tokens.txt',
-      'lib/arm64-v8a/libsherpa-onnx-jni.so', 'lib/armeabi-v7a/libsherpa-onnx-jni.so') {
+      'assets/asr-lib/arm64-v8a/libsherpa-onnx-jni.so') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
+  # APK 里不能有 lib/：只有 64 位的库的话，32 位平板会因为没有匹配的 ABI 整个装不上
+  $libs = @($names | Where-Object { $_.StartsWith('lib/') })
+  if ($libs.Count) { throw "APK 里不能有 lib/：$($libs[0])" }
   # 自检页只在 -SelfTest 包里（正式包里没有 selftest/，也就不会注入 KMSelfTest）
   $st = @($names | Where-Object { $_.StartsWith('assets/www/selftest/') })
   if ($SelfTest) {

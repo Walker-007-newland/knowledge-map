@@ -1,6 +1,6 @@
 # 背诵比对用的拼音表：识别模型能输出的字（tokens.txt）+ 古诗词默写诗文里的字 → 不带声调的拼音（多音字列出全部读音）
 # 生成 data/beisong/pinyin.js（window.KBP = { "字": "xie|xia", … }），页面按拼音比对，同音、近音字都算背对。
-# 用法：python build_pinyin.py <tokens.txt>（模型在 knowledge-map-app/asr-cache/model/…/tokens.txt，build.ps1 第一次打包时下载）
+# 用法：python build_pinyin.py <tokens.txt>（识别模型的字表：https://cdn.jsdelivr.net/gh/Walker-007-newland/knowledge-map@asr-zh14m-v1/tokens.txt）
 import json, os, re, sys
 from pypinyin import pinyin, Style
 

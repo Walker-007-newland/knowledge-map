@@ -1,7 +1,8 @@
 /* 古诗词背诵（beisong.html）：选一首诗 → 对着平板背（App 里离线语音识别，见 knowledge-map-app Asr.java）或家长核对 → 结果
  * 诗文：data/moxie/poems.js（window.KMX）；比对：js/beisong-match.js（按拼音对齐）。
  * 背的时候：原文先遮住，背对的句子显示出来；背错 / 漏背的句子马上标出并给出原句；停顿 5 秒提示下一句开头两个字，再停 5 秒整句提示。
- * 浏览器里（没有 KMApp）只能家长核对；调试用 window.__beisong.feed(text) 模拟识别结果。
+ * 语音模型（约 24 MB）不在安装包里：第一次点“开始背诵”时问一下再下载（KMApp.asrDownload），之后离线用。
+ * 32 位平板、浏览器里（没有 KMApp）只能家长核对；调试用 window.__beisong.feed(text) 模拟识别结果。
  * 存储（纳入「我的数据」导出导入与设备同步，合并规则同语文听写，见 hub/km-data.js）：
  *   fjzk-zh-beisong-v1      逐句记录 { "<诗id>#<小句序号>": { r, rt, w: {设备: 背错次数}, n: {设备: 背诵次数} } }
  *   fjzk-zh-beisong-set-v1  年级、册、是否显示原文 */
@@ -113,8 +114,11 @@
   });
 
   /* ---------------- 背诵 ---------------- */
-  let asrOk = false;      // App 里有识别模型
-  if (inApp && KMApp.ready) KMApp.ready().then(() => { asrOk = !!KMApp.asrAvailable(); if (current === 'vRun') syncButtons(); });
+  let asrOk = false;      // 这台设备能语音背诵（App 里、64 位）
+  let modelReady = false, dlBusy = false;
+  function readModel() { try { const m = JSON.parse(KMApp.asrModel() || '{}'); modelReady = !!m.ready; dlBusy = !!m.downloading; } catch (e) { modelReady = false; } }
+  if (inApp && KMApp.ready) KMApp.ready().then(() => { asrOk = !!KMApp.asrAvailable(); if (asrOk) readModel(); if (current === 'vRun') syncButtons(); });
+  const MB = n => (n / 1048576).toFixed(1);
   let run = null;   // { poem, P, mode: 'voice'|'parent', heard, A, cls: 每句状态, hint: {句号: 1 开头两字 / 2 整句}, told: 已经提示过错的句子, last: 上次有进展的时间 }
   function openPoem(p) {
     stopListen();
@@ -133,12 +137,15 @@
   function syncButtons() {
     const started = run && run.mode;
     $('#btnVoice').hidden = !!started || !asrOk;
+    $('#btnVoice').disabled = dlBusy;
+    $('#btnVoice').textContent = modelReady ? '🎤 开始背诵' : dlBusy ? '正在下载语音模型…' : '🎤 开始背诵（先下载语音模型）';
     $('#btnParent').hidden = !!started;
     $('#btnFinish').hidden = !started;
     $('#runStatus').hidden = !(run && run.mode === 'voice');
     $('#runTip').textContent = started
       ? (run.mode === 'voice' ? '大声、一句一句背；背完点“背完了”。' : '孩子背，家长看着原文：点一下句子标成背错（再点一下是提示过，再点回到正确）。')
-      : asrOk ? '点“开始背诵”后对着平板背，第一次会请求使用麦克风。' : (inApp ? '这个版本的 App 没有语音识别，可以请家长核对。' : '在浏览器里没有语音识别，可以请家长核对；平板 App 里能语音背诵。');
+      : asrOk ? (modelReady ? '点“开始背诵”后对着平板背，第一次会请求使用麦克风。' : '第一次语音背诵要先下载语音模型（约 24 MB，建议连 Wi-Fi），下载后不联网也能用。')
+        : (inApp ? '这台平板（32 位）用不了语音背诵，可以请家长核对。' : '在浏览器里没有语音识别，可以请家长核对；平板 App 里能语音背诵。');
   }
   // 原文：每句一段；没背到的句子遮住（显示原文时灰色），背对的绿色，背错 / 漏背的标出来并给原句
   function renderText() {
@@ -158,7 +165,15 @@
 
   /* 语音背诵 */
   $('#btnVoice').onclick = () => {
-    if (!run || !asrOk) return;
+    if (!run || !asrOk || dlBusy) return;
+    readModel();
+    if (!modelReady) {
+      if (!confirm('语音背诵要先下载语音模型（约 24 MB，只下载一次，建议连 Wi-Fi）。现在下载吗？')) return;
+      dlBusy = true; syncButtons();
+      $('#runTip').textContent = '正在下载语音模型…';
+      KMApp.asrDownload();
+      return;
+    }
     run.mode = 'voice'; run.heard = ''; run.last = Date.now();
     syncButtons(); renderText();
     $('#runState').textContent = '正在准备语音识别…';
@@ -175,6 +190,10 @@
   // 原生识别的事件（Asr.java）：state / text / level / error
   window.__kmAsrEvent = json => {
     let e; try { e = JSON.parse(json); } catch (err) { return; }
+    // 模型下载：不管在不在背
+    if (e.type === 'dl') { dlBusy = true; if (run && !run.mode) $('#runTip').textContent = `正在下载语音模型… ${MB(e.got)} / ${MB(e.total)} MB`; return; }
+    if (e.type === 'dl-done') { dlBusy = false; modelReady = true; if (run && !run.mode) syncButtons(); toast('语音模型下载好了，点“开始背诵”吧'); return; }
+    if (e.type === 'error' && e.code === 'dl') { dlBusy = false; if (run && !run.mode) syncButtons(); toast('语音模型下载失败，检查一下网络再试：' + (e.msg || '')); return; }
     if (!run || run.mode !== 'voice') return;
     if (e.type === 'state') {
       run.listening = e.state === 'listening';

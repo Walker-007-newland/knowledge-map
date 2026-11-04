@@ -920,11 +920,25 @@ public class MainActivity extends Activity {
 
         // ---------------- 语文背诵：离线语音识别（只有背诵页能调，结果经 window.__kmAsrEvent 回来，见 Asr）
 
-        /** App 里有没有识别模型 */
+        /** 这台设备能不能语音背诵（64 位） */
         @JavascriptInterface
         public boolean asrAvailable(String token) {
             if (!gate.check(token, "asrAvailable", now())) return false;
             return asr != null && asr.available();
+        }
+
+        /** 语音模型下载了没有、下载进度（JSON） */
+        @JavascriptInterface
+        public String asrModel(String token) {
+            if (!gate.check(token, "asrModel", now())) return "";
+            return asr == null ? "" : asr.modelState();
+        }
+
+        /** 下载语音模型（约 24 MB），进度经 __kmAsrEvent 的 dl / dl-done / error 回来 */
+        @JavascriptInterface
+        public void asrDownload(String token) {
+            if (!gate.check(token, "asrDownload", now())) return;
+            if (asr != null) asr.download();
         }
 
         /** 开始听：hotwords 是原文各句（/ 分隔）；第一次会请求麦克风权限 */
