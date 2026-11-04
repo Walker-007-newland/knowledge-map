@@ -8,6 +8,8 @@
     <!-- 设备同步·局域网直连（需求 #1 第二期）：判断是不是连着 Wi-Fi、NSD 发现同一个 Wi-Fi 下的组员。都是普通权限，安装时自动给，不要定位权限 -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- 语文背诵：麦克风录音给 App 内的离线语音识别（不上传），第一次背诵时才弹窗请求 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- 要用系统的语音朗读引擎（Android 11+ 需要声明） -->
     <queries>

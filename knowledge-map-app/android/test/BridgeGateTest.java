@@ -204,6 +204,23 @@ public class BridgeGateTest {
             for (String m : TB_METHODS) ok(!g.check(k, m, tb + 1), pg + " 调 " + m + " 被拒");
         }
 
+        System.out.println("11. 语文背诵：麦克风、语音识别只在 chinese-map/beisong.html");
+        g = new BridgeGate();
+        String BS = BridgeGate.WWW + "chinese-map/beisong.html";
+        String[] BS_METHODS = { "asrAvailable", "asrStart", "asrStop" };
+        long bs = t + 1900000;
+        String bsk = g.issue(BS + "#run", bs);
+        for (String m : BS_METHODS) ok(g.check(bsk, m, bs + 1), "beisong.html 调 " + m + " 通过");
+        for (String m : BS_METHODS) ok(!g.check(null, m, bs + 1), "不带令牌调 " + m + " 被拒");
+        for (String m : new String[]{"syncTake", "tbDownload", "acctLogin"}) ok(!g.check(bsk, m, bs + 1), "beisong.html 调 " + m + " 被拒（不越权）");
+        String[] notBs = { BridgeGate.WWW + "index.html", MAP, BridgeGate.WWW + "chinese-map/moxie.html", BridgeGate.WWW + "chinese-map/beisong.html.evil",
+            BridgeGate.WWW + "x/../chinese-map/beisong.html", BridgeGate.ASSETS + "chinese-map/beisong.html", DICT, BILI, "file:///sdcard/chinese-map/beisong.html" };
+        for (String pg : notBs) {
+            bs += 20000;
+            String k = g.issue(pg, bs);
+            for (String m : BS_METHODS) ok(!g.check(k, m, bs + 1), pg + " 调 " + m + " 被拒");
+        }
+
         System.out.println();
         System.out.println("通过 " + pass + "，失败 " + fail);
         System.exit(fail == 0 ? 0 : 1);

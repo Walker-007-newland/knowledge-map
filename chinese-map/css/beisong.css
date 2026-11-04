@@ -1,0 +1,35 @@
+/* 古诗词背诵页：在 tingxie.css（选课列表、卡片、按钮）基础上补充 */
+.bs-row { width: 100%; text-align: left; border: 0; background: none; cursor: pointer; grid-template-columns: minmax(0, 1fr) auto 18px; font: inherit; color: inherit; }
+.bs-row .l-name small { color: var(--muted); font-size: 13px; }
+.bs-row .bs-ok { color: var(--st-mastered); }
+.bs-card { text-align: left; padding: 22px 22px 18px; }
+.bs-poem { font-size: 22px; font-weight: 600; font-family: var(--kai); text-align: center; margin-bottom: 12px; }
+.bs-poem small { margin-left: 8px; font-size: 15px; font-weight: 400; color: var(--muted); font-family: inherit; }
+.bs-text { font-family: var(--kai); font-size: 26px; line-height: 2; text-align: center; letter-spacing: .04em; }
+.bs-c { border-radius: 6px; padding: 0 2px; transition: background .2s, color .2s; }
+.bs-mask { display: inline-block; width: .9em; height: .9em; margin: 0 1px; border-bottom: 2px solid var(--line); vertical-align: -2px; }
+.bs-peek { color: var(--accent); font-weight: 400; }
+.bs-c.st-todo { color: var(--muted); }
+.bs-c.st-cur { color: var(--muted); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.bs-c.st-ok { color: var(--st-mastered); }
+.bs-c.st-wrong { color: #fff; background: var(--st-weak); }
+.bs-c.st-skip { color: var(--st-weak); text-decoration: underline wavy; }
+.bs-c.st-hint, .bs-c.hinted.st-ok { color: var(--st-learning); }
+.beisong #vRun .bs-c[data-i] { cursor: default; }
+.bs-hint { margin: 14px auto 0; max-width: 560px; padding: 10px 14px; border-radius: 12px; font-size: 18px; text-align: center; }
+.bs-hint[hidden] { display: none; }
+.bs-hint.tip { background: var(--warn-bg); color: var(--st-learning); }
+.bs-hint.bad { background: var(--bad-bg); color: var(--st-weak); }
+.bs-status { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; color: var(--muted); font-size: 15px; }
+.bs-status[hidden] { display: none; }
+/* 麦克风音量：圆点随音量变大 */
+.bs-mic { --lv: 0; width: 14px; height: 14px; border-radius: 50%; background: var(--st-weak); box-shadow: 0 0 0 calc(var(--lv) * 10px) color-mix(in srgb, var(--st-weak) 25%, transparent); transition: box-shadow .12s; }
+.bs-actions .btn[hidden] { display: none; }
+.hint.center { text-align: center; }
+.bs-report { font-size: 22px; }
+.bs-h { font-size: 17px; margin: 18px 0 6px; }
+.bs-issue { padding: 8px 4px; border-top: 1px solid var(--line); font-family: var(--kai); font-size: 20px; }
+.bs-issue b { font-family: system-ui, sans-serif; font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 99px; margin-right: 8px; vertical-align: 2px; }
+.bs-issue.st-wrong b, .bs-issue.st-skip b { background: var(--bad-bg); color: var(--st-weak); }
+.bs-issue.st-hint b { background: var(--warn-bg); color: var(--st-learning); }
+.bs-issue small { display: block; font-size: 14px; color: var(--muted); font-family: system-ui, sans-serif; margin-top: 2px; }

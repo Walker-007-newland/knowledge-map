@@ -82,6 +82,7 @@ public class MainActivity extends Activity {
     String pendingOpen;    // 总入口加载完后要接着打开的页面
     final BridgeGate gate = new BridgeGate();
     Textbooks textbooks;   // 电子教材（平台登录凭据、下载）
+    Asr asr;               // 语文背诵的离线语音识别（事件只送背诵页）
     SyncService sync;      // 设备同步（需求 #1），事件只送主页面；建不出来时为 null，各接口返回空（不影响学习）
     /** #12 账号状态（files/kmsync/account.json 的 state，启动时读文件，之后跟着 account 事件更新）："in" = 已登录 */
     volatile String acctState = "";
@@ -195,6 +196,20 @@ public class MainActivity extends Activity {
                 });
             }
         };
+        asr = new Asr(this);
+        asr.sink = new Asr.Sink() {
+            public void event(final String json) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        String u = web == null ? null : web.getUrl();
+                        // 离开背诵页了：停止录音
+                        if (u == null || !BridgeGate.page(u).equals(BridgeGate.BEISONG[0])) { new Thread(new Runnable() { public void run() { asr.stop(); } }).start(); return; }
+                        try { web.evaluateJavascript("window.__kmAsrEvent&&__kmAsrEvent(" + SyncJson.quote(json) + ")", null); }
+                        catch (Throwable e) { Log.w(Asr.TAG, "asr event"); }
+                    }
+                });
+            }
+        };
         web.addJavascriptInterface(new Bridge(), "KMBridge");
         // 真机自检包（build.ps1 -SelfTest）才有 selftest/ 页面和 KMSelfTest；正式包里两者都没有
         if (hasAsset("www/selftest/bridge.html")) web.addJavascriptInterface(new SelfTest(), "KMSelfTest");
@@ -253,6 +268,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         if (tts != null) tts.stop();
+        if (asr != null) asr.stop();          // 切到后台就不再录音
         try { if (sync != null) sync.onPause(); } catch (Throwable e) { Log.w(SyncAndroid.TAG, "onPause", e); }
     }
 
@@ -271,6 +287,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (tts != null) tts.shutdown();
+        if (asr != null) { asr.sink = null; asr.stop(); }
         if (textbooks != null) textbooks.sink = null;   // 下载线程照常跑完，事件不再送给这个已关闭的页面
         updater.destroy();
         web.destroy();
@@ -322,6 +339,11 @@ public class MainActivity extends Activity {
         if (fullView != null) exitFullscreen();
         else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
+        if (req == Asr.REQ_MIC && asr != null) asr.onPermission(res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED);
     }
 
     @Override
@@ -894,6 +916,28 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 public void run() { TbLoginActivity.logout(MainActivity.this); }
             });
+        }
+
+        // ---------------- 语文背诵：离线语音识别（只有背诵页能调，结果经 window.__kmAsrEvent 回来，见 Asr）
+
+        /** App 里有没有识别模型 */
+        @JavascriptInterface
+        public boolean asrAvailable(String token) {
+            if (!gate.check(token, "asrAvailable", now())) return false;
+            return asr != null && asr.available();
+        }
+
+        /** 开始听：hotwords 是原文各句（/ 分隔）；第一次会请求麦克风权限 */
+        @JavascriptInterface
+        public void asrStart(String token, final String hotwords) {
+            if (!gate.check(token, "asrStart", now())) return;
+            runOnUiThread(new Runnable() { public void run() { asr.start(hotwords); } });
+        }
+
+        @JavascriptInterface
+        public void asrStop(String token) {
+            if (!gate.check(token, "asrStop", now())) return;
+            new Thread(new Runnable() { public void run() { asr.stop(); } }).start();
         }
 
         // ---------------- 局域网配对（#1 第二期）：可被发现 3 分钟、点附近的设备或手输地址、核对 4 位确认码

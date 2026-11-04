@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>古诗词背诵</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/tingxie.css">
+<link rel="stylesheet" href="css/beisong.css">
+</head>
+<body class="dict tingxie beisong on-home">
+<header class="topbar">
+  <button class="btn" id="btnBack">← 返回</button>
+  <div class="brand">
+    <h1 id="title">古诗词背诵</h1>
+    <span class="sub" id="subtitle">对着平板背，背错、卡住时提示，背完告诉你哪里错了</span>
+  </div>
+</header>
+
+<main>
+  <!-- 选诗 -->
+  <section class="view" id="vHome">
+    <div class="grades" id="grades" role="tablist" aria-label="年级"></div>
+    <div class="book-bar">
+      <div class="seg" id="terms"><button data-t="上">上册</button><button data-t="下">下册</button></div>
+      <span class="book-name">统编版 · 按课本 · 点一首开始背</span>
+    </div>
+    <div class="card units-card"><div id="groups"></div></div>
+    <p class="hint src">诗文取自本图谱「古诗词」里按课本整理的知识点（已对照电子课本逐字核对）。语音识别在平板上离线进行，声音不上传。</p>
+  </section>
+
+  <!-- 背诵中 -->
+  <section class="view" id="vRun" hidden>
+    <div class="run-card bs-card">
+      <div class="bs-poem" id="runPoem"></div>
+      <div class="bs-text" id="runText"></div>
+      <div class="bs-hint" id="runHint" hidden></div>
+      <div class="bs-status" id="runStatus"><span class="bs-mic" id="runMic"></span><span id="runState"></span></div>
+    </div>
+    <div class="row-actions center">
+      <label class="chk"><input type="checkbox" id="chkShow"> 显示原文（先看着读几遍）</label>
+    </div>
+    <div class="row-actions center bs-actions">
+      <button class="btn big primary" id="btnVoice">🎤 开始背诵</button>
+      <button class="btn big" id="btnParent">家长核对</button>
+      <button class="btn big primary" id="btnFinish" hidden>背完了</button>
+    </div>
+    <p class="hint center" id="runTip"></p>
+  </section>
+
+  <!-- 结果 -->
+  <section class="view" id="vResult" hidden>
+    <div class="card result">
+      <div class="score" id="resScore"></div>
+      <div class="score-sub" id="resSub"></div>
+    </div>
+    <div class="card">
+      <div class="bs-text bs-report" id="resText"></div>
+      <div id="resIssues"></div>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnResList">换一首</button>
+      <button class="btn primary big" id="btnResAgain">再背一遍</button>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="data/moxie/poems.js"></script>
+<script src="data/beisong/pinyin.js"></script>
+<script src="js/beisong-match.js"></script>
+<script src="js/beisong.js"></script>
+</body>
+</html>
