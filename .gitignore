@@ -12,3 +12,5 @@ watch-english-app/out/
 watch-english-app/work/
 *.pack.json
 !watch-english-app/www/demo/demo.pack.json
+# 软考架构师：构建产物
+ruankao-app/out/
