@@ -28,7 +28,7 @@
     poem.c.forEach(c => {
       const start = chars.length;
       for (const ch of c.t) if (isHan(ch)) chars.push(ch);
-      clauses.push({ start, end: chars.length, t: c.t, p: c.p });
+      clauses.push({ start, end: chars.length, t: c.t, p: c.p, br: c.br });
     });
     return { chars, clauses };
   }

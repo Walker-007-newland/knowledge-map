@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>古诗词背诵</title>
+<title>课文背诵</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/tingxie.css">
 <link rel="stylesheet" href="css/beisong.css">
@@ -12,7 +12,7 @@
 <header class="topbar">
   <button class="btn" id="btnBack">← 返回</button>
   <div class="brand">
-    <h1 id="title">古诗词背诵</h1>
+    <h1 id="title">课文背诵</h1>
     <span class="sub" id="subtitle">对着平板背，背错、卡住时提示，背完告诉你哪里错了</span>
   </div>
 </header>
@@ -20,19 +20,21 @@
 <main>
   <!-- 选诗 -->
   <section class="view" id="vHome">
+    <div class="seg bs-kind" id="kinds"><button data-k="shi">古诗词</button><button data-k="wen">文言文</button></div>
     <div class="grades" id="grades" role="tablist" aria-label="年级"></div>
     <div class="book-bar">
       <div class="seg" id="terms"><button data-t="上">上册</button><button data-t="下">下册</button></div>
-      <span class="book-name">统编版 · 按课本 · 点一首开始背</span>
+      <span class="book-name" id="bookName">统编版 · 按课本 · 点一首开始背</span>
     </div>
     <div class="card units-card"><div id="groups"></div></div>
-    <p class="hint src">诗文取自本图谱「古诗词」里按课本整理的知识点（已对照电子课本逐字核对）。语音识别在平板上离线进行，声音不上传。</p>
+    <p class="hint src">古诗词取自本图谱「古诗词」里按课本整理的知识点，文言文取自「文言文」各篇目知识点（都已对照电子课本核对）。语音识别在平板上离线进行，声音不上传。</p>
   </section>
 
   <!-- 背诵中 -->
   <section class="view" id="vRun" hidden>
     <div class="run-card bs-card">
       <div class="bs-poem" id="runPoem"></div>
+      <div class="bs-parts" id="runParts" hidden></div>
       <div class="bs-text" id="runText"></div>
       <div class="bs-hint" id="runHint" hidden></div>
       <div class="bs-status" id="runStatus"><span class="bs-mic" id="runMic"></span><span id="runState"></span></div>
@@ -68,6 +70,7 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="data/moxie/poems.js"></script>
+<script src="data/beisong/wenyan.js"></script>
 <script src="data/beisong/pinyin.js"></script>
 <script src="js/beisong-match.js"></script>
 <script src="js/beisong.js"></script>

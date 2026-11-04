@@ -1,4 +1,4 @@
-# 背诵比对用的拼音表：识别模型能输出的字（tokens.txt）+ 古诗词默写诗文里的字 → 不带声调的拼音（多音字列出全部读音）
+# 背诵比对用的拼音表：识别模型能输出的字（tokens.txt）+ 古诗词、文言文原文里的字 → 不带声调的拼音（多音字列出全部读音）
 # 生成 data/beisong/pinyin.js（window.KBP = { "字": "xie|xia", … }），页面按拼音比对，同音、近音字都算背对。
 # 用法：python build_pinyin.py <tokens.txt>（识别模型的字表：https://cdn.jsdelivr.net/gh/Walker-007-newland/knowledge-map@asr-zh14m-v1/tokens.txt）
 import json, os, re, sys
@@ -15,7 +15,8 @@ def main(tokens):
         t = line.rsplit(' ', 1)[0]
         if len(t) == 1 and han(t):
             chars.add(t)
-    chars.update(c for c in open(os.path.join(ROOT, 'data', 'moxie', 'poems.js'), encoding='utf-8').read() if han(c))
+    for f in (('moxie', 'poems.js'), ('beisong', 'wenyan.js')):
+        chars.update(c for c in open(os.path.join(ROOT, 'data', *f), encoding='utf-8').read() if han(c))
     table = {}
     for c in sorted(chars):
         ps = [p for p in pinyin(c, style=Style.NORMAL, heteronym=True)[0] if re.fullmatch(r'[a-zü]+', p)]

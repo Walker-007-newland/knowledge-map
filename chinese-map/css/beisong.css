@@ -33,3 +33,12 @@
 .bs-issue.st-wrong b, .bs-issue.st-skip b { background: var(--bad-bg); color: var(--st-weak); }
 .bs-issue.st-hint b { background: var(--warn-bg); color: var(--st-learning); }
 .bs-issue small { display: block; font-size: 14px; color: var(--muted); font-family: system-ui, sans-serif; margin-top: 2px; }
+.bs-kind { margin: 4px 0 10px; }
+.bs-kind button { min-height: 44px; padding: 0 22px; font-size: 16px; }
+.book-bar .seg[hidden] { display: none; }
+.bs-parts { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin: -4px 0 12px; font-size: 14px; color: var(--muted); }
+.bs-parts[hidden] { display: none; }
+.bs-parts .btn { min-height: 36px; padding: 0 12px; font-size: 14px; }
+.bs-parts .btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* 文言文：按原文分段，左对齐 */
+.beisong .bs-text.wen { text-align: left; font-size: 23px; line-height: 2; }
