@@ -1,8 +1,8 @@
 # 手写听写用的笔画数据：从 hanzi-writer-data（npm 包，字形来自 Make Me a Hanzi，Arphic Public License）
-# 取出各册词表用到的字，按 Unicode 码位分桶写成 data/tingxie/strokes/sNN.js（KT.addStrokes({...})），
+# 取出各册词表和古诗词默写诗文（data/moxie/poems.js）用到的字，按 Unicode 码位分桶写成 data/tingxie/strokes/sNN.js（KT.addStrokes({...})），
 # 页面只载入要听写的字所在的桶，file:// 下可用。
 # 用法：python build_strokes.py <hanzi-writer-data 解包目录>（即含 字.json 的 package 目录）
-# 新增或修改词表后重跑一次。
+# 新增或修改词表、重新生成 poems.js 后重跑一次。
 import glob, json, os, re, shutil, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +15,10 @@ def main(src):
     for f in glob.glob(os.path.join(ROOT, 'data', 'tingxie', 'tb*.js')):
         for w in re.findall(r'"w": "([^"]+)"', open(f, encoding='utf-8').read()):
             chars.update(c for c in w if '㐀' <= c <= '鿿')
+    # 古诗词默写（moxie.html）的诗文也要能手写判分
+    poems = os.path.join(ROOT, 'data', 'moxie', 'poems.js')
+    if os.path.exists(poems):
+        chars.update(c for c in open(poems, encoding='utf-8').read() if '㐀' <= c <= '鿿')
     out_dir = os.path.join(ROOT, 'data', 'tingxie', 'strokes')
     if os.path.isdir(out_dir):
         shutil.rmtree(out_dir)

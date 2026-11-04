@@ -45,7 +45,10 @@
       { key: 'fjzk-en-words-set-v1', name: '单元单词设置', cat: 'pref', merge: 'whole' },
       // 语文生字词听写（chinese-map/tingxie.html）：每个词一条 { r, rt, w, n }，合并同 joinWord
       { key: 'fjzk-zh-tingxie-v1', name: '语文听写', cat: 'words', merge: 'words', items: 'obj' },
-      { key: 'fjzk-zh-tingxie-set-v1', name: '语文听写设置', cat: 'pref', merge: 'whole' }
+      { key: 'fjzk-zh-tingxie-set-v1', name: '语文听写设置', cat: 'pref', merge: 'whole' },
+      // 语文古诗词默写（chinese-map/moxie.html）：每个小句一条 { r, rt, w, n }，合并同 joinWord
+      { key: 'fjzk-zh-moxie-v1', name: '古诗词默写', cat: 'words', merge: 'words', items: 'obj' },
+      { key: 'fjzk-zh-moxie-set-v1', name: '古诗词默写设置', cat: 'pref', merge: 'whole' }
     ]);
   const byKey = {};
   KEYS.forEach(s => { byKey[s.key] = s; });

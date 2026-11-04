@@ -1,0 +1,19 @@
+/* 古诗词默写页：在 tingxie.css（选课列表、设置、田字格、批改）基础上补充题面样式 */
+.mx-poem-row { grid-template-columns: 26px minmax(0, 1fr) auto; }
+.mx-card { padding: 22px 18px 20px; }
+.mx-no { color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+.mx-poem { margin: 6px 0 14px; font-size: 22px; font-weight: 600; font-family: var(--kai); }
+.mx-poem small { margin-left: 8px; font-size: 15px; font-weight: 400; color: var(--muted); font-family: inherit; }
+.mx-prompt { font-family: var(--kai); font-size: 26px; line-height: 2; letter-spacing: .04em; }
+.mx-prompt.whole { font-size: 20px; line-height: 2.1; }
+/* 空格：几个字几个方格 */
+.mx-blank { display: inline-flex; gap: 2px; vertical-align: -4px; margin: 0 2px; }
+.mx-blank i { display: inline-block; width: .95em; height: .95em; border-bottom: 2px solid var(--muted); }
+.mx-blank.cur i { border-bottom-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.mx-ans { color: var(--st-mastered); font-weight: 700; }
+.mx-ctrl { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 520px; margin: 0 auto; }
+.mx-ctitle { font-size: 14px; color: var(--muted); }
+.mx-cprompt { font-family: var(--kai); font-size: 20px; line-height: 1.8; }
+.crow.wrong .mx-ans { color: var(--st-weak); }
+.mx-wrong-list { text-align: left; margin-top: 12px; display: grid; gap: 6px; }
+.mx-wrong-list b { font-family: var(--kai); font-size: 22px; font-weight: 400; color: var(--st-weak); margin-left: 6px; }

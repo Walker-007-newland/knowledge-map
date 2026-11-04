@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>古诗词默写</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/tingxie.css">
+<link rel="stylesheet" href="css/moxie.css">
+</head>
+<body class="dict tingxie moxie on-home">
+<header class="topbar">
+  <button class="btn" id="btnBack">← 返回</button>
+  <div class="brand">
+    <h1 id="title">古诗词默写</h1>
+    <span class="sub" id="subtitle">课本古诗词 · 上下句默写、整首默写</span>
+  </div>
+</header>
+
+<main>
+  <!-- 选诗 -->
+  <section class="view" id="vHome">
+    <div class="grades" id="grades" role="tablist" aria-label="年级"></div>
+    <div class="book-bar">
+      <div class="seg" id="terms"><button data-t="上">上册</button><button data-t="下">下册</button></div>
+      <span class="book-name">统编版 · 按课本</span>
+    </div>
+    <div class="card units-card">
+      <div class="units-head">
+        <label class="chk"><input type="checkbox" id="chkAll"> 全选</label>
+        <span class="units-tip">点课名展开看各首</span>
+      </div>
+      <div id="groups"></div>
+    </div>
+    <p class="hint src">诗文取自本图谱「古诗词」里按课本整理的知识点（已对照国家中小学智慧教育平台电子课本逐字核对）。</p>
+    <div class="bottom-bar">
+      <span class="sel-info" id="selInfo">先勾选要默写的诗</span>
+      <button class="btn big" id="btnWrong">错句本</button>
+      <button class="btn big primary" id="btnGo" disabled>默写</button>
+    </div>
+  </section>
+
+  <!-- 错句本 -->
+  <section class="view" id="vWrong" hidden>
+    <div class="card">
+      <h2>错句本</h2>
+      <p class="hint">默写写错的句子会进错句本，再默写写对一次就移出。</p>
+      <div id="wrongRows"></div>
+      <p class="empty" id="wrongEmpty" hidden>没有错句，真棒！</p>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn primary big" id="btnWrongGo">默写全部错句</button>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <section class="view" id="vSetup" hidden>
+    <div class="card">
+      <h2 id="setupName"></h2>
+      <div class="dopt"><span class="dopt-label">题型</span><div class="seg" data-opt="kind">
+        <button data-v="pair">上下句</button><button data-v="whole">整首默写</button>
+      </div></div>
+      <div class="dopt"><span class="dopt-label">作答方式</span><div class="seg" data-opt="mode">
+        <button data-v="hand">手写</button><button data-v="paper">纸上写</button><button data-v="type">键盘输入</button>
+      </div></div>
+      <div class="dopt hand-only"><span class="dopt-label">手写判分</span><div class="seg" data-opt="handJudge">
+        <button data-v="loose">宽松</button><button data-v="strict">严格</button>
+      </div></div>
+      <div class="dopt"><span class="dopt-label">顺序</span><div class="seg" data-opt="order">
+        <button data-v="list">按课本</button><button data-v="random">打乱</button>
+      </div></div>
+      <div class="dopt pair-only"><span class="dopt-label">题量</span><div class="seg" data-opt="scope">
+        <button data-v="all">全部 <i id="nAll"></i></button><button data-v="some">随机抽</button>
+      </div><label class="some-n" id="someWrap">抽 <input type="number" id="someN" min="1" value="10"> 题</label></div>
+      <p class="hint" id="setupHint"></p>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnSetupBack">返回</button>
+      <button class="btn primary big" id="btnStart">开始默写</button>
+    </div>
+  </section>
+
+  <!-- 默写中 -->
+  <section class="view" id="vRun" hidden>
+    <div class="run-card mx-card">
+      <div class="mx-no"><span id="runIdx">1</span> / <span id="runTotal">1</span></div>
+      <div class="mx-poem" id="runPoem"></div>
+      <div class="mx-prompt" id="runPrompt"></div>
+      <input id="runInput" class="run-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="在这里输入，按回车" hidden>
+      <div class="run-hand" id="runHand" hidden>
+        <div class="hand-boxes" id="handBoxes"></div>
+        <div class="hand-tools"><button class="btn" id="btnHandUndo">↶ 撤销一笔</button><button class="btn" id="btnHandClear">重写这一句</button></div>
+      </div>
+      <p class="hint" id="runHint"></p>
+    </div>
+    <div class="run-ctrl mx-ctrl">
+      <button class="btn big" id="btnPrev">⏮ 上一题</button>
+      <button class="btn big primary" id="btnNext">下一题 ⏭</button>
+    </div>
+    <div class="row-actions center"><button class="btn" id="btnStop">结束默写</button></div>
+  </section>
+
+  <!-- 批改 -->
+  <section class="view" id="vCheck" hidden>
+    <div class="card">
+      <p class="hint" id="checkHint"></p>
+      <div id="checkRows"></div>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn primary big" id="btnCheckDone">批改完成</button>
+    </div>
+  </section>
+
+  <!-- 结果 -->
+  <section class="view" id="vResult" hidden>
+    <div class="card result">
+      <div class="score" id="resScore"></div>
+      <div class="score-sub" id="resSub"></div>
+      <div id="resWrong"></div>
+    </div>
+    <div class="row-actions sticky">
+      <button class="btn" id="btnResList">返回选诗</button>
+      <button class="btn" id="btnResAgain">全部再默一遍</button>
+      <button class="btn primary big" id="btnResWrong">错句再默写</button>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="data/moxie/poems.js"></script>
+<script src="js/vendor/hanzi-writer.min.js"></script>
+<script src="js/hand-judge.js"></script>
+<script src="js/hand-pad.js"></script>
+<script src="js/moxie.js"></script>
+</body>
+</html>
