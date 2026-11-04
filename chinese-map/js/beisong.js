@@ -2,7 +2,7 @@
  * 古诗词：data/moxie/poems.js（window.KMX，按册、按课）；文言文：data/beisong/wenyan.js（window.KWY，按年级，小句带 br 段落结束）。
  * 文言文较长，可以选“全文”或某一段背（记录仍按全文的小句序号记）。比对：js/beisong-match.js（按拼音对齐）。
  * 背的时候：原文先遮住，背对的句子显示出来；背错 / 漏背的句子马上标出并给出原句；停顿 5 秒提示下一句开头两个字，再停 5 秒整句提示。
- * 语音模型（约 24 MB）不在安装包里：第一次点“开始背诵”时问一下再下载（KMApp.asrDownload），之后离线用。
+ * 语音模型和识别程序（共约 34 MB）不在安装包里：第一次点“开始背诵”时问一下再下载（KMApp.asrDownload），之后离线用。
  * 32 位平板、浏览器里（没有 KMApp）只能家长核对；调试用 window.__beisong.feed(text) 模拟识别结果。
  * 存储（纳入「我的数据」导出导入与设备同步，合并规则同语文听写，见 hub/km-data.js）：
  *   fjzk-zh-beisong-v1      逐句记录 { "<诗id>#<小句序号>": { r, rt, w: {设备: 背错次数}, n: {设备: 背诵次数} } }
@@ -186,7 +186,7 @@
     $('#runStatus').hidden = !(run && run.mode === 'voice');
     $('#runTip').textContent = started
       ? (run.mode === 'voice' ? '大声、一句一句背；背完点“背完了”。' : '孩子背，家长看着原文：点一下句子标成背错（再点一下是提示过，再点回到正确）。')
-      : asrOk ? (modelReady ? '点“开始背诵”后对着平板背，第一次会请求使用麦克风。' : '第一次语音背诵要先下载语音模型（约 24 MB，建议连 Wi-Fi），下载后不联网也能用。')
+      : asrOk ? (modelReady ? '点“开始背诵”后对着平板背，第一次会请求使用麦克风。' : '第一次语音背诵要先下载语音模型（约 34 MB，建议连 Wi-Fi），下载后不联网也能用。')
         : (inApp ? '这台平板（32 位）用不了语音背诵，可以请家长核对。' : '在浏览器里没有语音识别，可以请家长核对；平板 App 里能语音背诵。');
   }
   // 原文：每句一段；没背到的句子遮住（显示原文时灰色），背对的绿色，背错 / 漏背的标出来并给原句
@@ -216,7 +216,7 @@
     if (!run || !asrOk || dlBusy) return;
     readModel();
     if (!modelReady) {
-      if (!confirm('语音背诵要先下载语音模型（约 24 MB，只下载一次，建议连 Wi-Fi）。现在下载吗？')) return;
+      if (!confirm('语音背诵要先下载语音模型（约 34 MB，只下载一次，建议连 Wi-Fi）。现在下载吗？')) return;
       dlBusy = true; syncButtons();
       $('#runTip').textContent = '正在下载语音模型…';
       KMApp.asrDownload();

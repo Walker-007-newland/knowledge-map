@@ -84,30 +84,8 @@ if ($SelfTest) {
   $idx = ([regex]'</body>').Replace($idx, "$btn`n</body>", 1)
   [IO.File]::WriteAllText("$work\assets\www\index.html", $idx, (New-Object Text.UTF8Encoding $false))
 }
-# 语文背诵的离线语音识别（sherpa-onnx v2.0.1，Apache-2.0）：原生库（static-link-onnxruntime 版）不进仓库，
-# 按固定地址下载、校验 SHA-256 后缓存在 asr-cache\（已 gitignore），在下面第 4 步放进 assets/asr-lib/arm64-v8a/：只要 64 位，
-# 而且不能放 APK 的 lib/（只有 64 位的库放 lib/，32 位平板整个 App 都装不上），由 Asr.java 复制到私有目录后加载。32 位平板没有语音背诵。
-# 识别模型不打包：App 第一次语音背诵时从仓库 tag asr-zh14m-v1 下载（tools\publish-asr-model.ps1 推上去的，见 Asr.java）
-$asrCache = "$here\asr-cache"
-$asrPkgs = @(
-  @{ dir = 'lib'; sha = 'fe1c9ceffd86770218a1d4bba6b410d6f726b2b8dda6a5488499b05250b53aea'
-     url = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-android-static-link-onnxruntime.tar.bz2' })
-foreach ($p in $asrPkgs) {
-  $d = Join-Path $asrCache $p.dir
-  if (Test-Path "$d\.ok") { continue }
-  New-Item -ItemType Directory -Force $d | Out-Null
-  $tmp = "$asrCache\$($p.dir).tar.bz2"
-  Write-Host "下载 $($p.url)"
-  & curl.exe -sSfL -o $tmp $p.url
-  if ($LASTEXITCODE) { throw "下载失败：$($p.url)" }
-  if ((Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower() -ne $p.sha) { Remove-Item $tmp; throw "SHA-256 不对：$($p.url)" }
-  # Windows 自带的 tar.exe 解 .tar.bz2 会卡住不动，用 Python 的 tarfile 解
-  & python -I -c "import sys, tarfile; tarfile.open(sys.argv[1], 'r:bz2').extractall(sys.argv[2])" $tmp $d
-  if ($LASTEXITCODE) { throw "解压失败：$tmp" }
-  Remove-Item $tmp
-  Set-Content "$d\.ok" $p.sha
-}
-$asrAbis = @('arm64-v8a')
+# 语文背诵的离线语音识别（sherpa-onnx，Apache-2.0）：原生库和识别模型都不打包，App 第一次语音背诵时从仓库 tag 下载
+# （tools\publish-asr-model.ps1 推上去的，见 Asr.java）。APK 必须小于 20 MB：jsDelivr 镜像不给下载超过 20 MB 的文件，平板就更新不了（最后有自检）。
 
 # 宠物狗页面（three.js + 狗模型），模型转换脚本不打包
 $petSrc = "$here\hub\pet"
@@ -160,11 +138,6 @@ Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::Open("$work\base.apk", 'Update')
 try {
   [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, "$work\dex\classes.dex", 'classes.dex', 'Optimal')
-  foreach ($abi in $asrAbis) {
-    $so = Get-ChildItem "$asrCache\lib" -Recurse -Filter libsherpa-onnx-jni.so | Where-Object { $_.Directory.Name -eq $abi } | Select-Object -First 1
-    if (-not $so) { throw "asr-cache 里没有 $abi 的 libsherpa-onnx-jni.so" }
-    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $so.FullName, "assets/asr-lib/$abi/libsherpa-onnx-jni.so", 'Optimal')
-  }
   Get-ChildItem "$work\assets" -Recurse -File | ForEach-Object {
     $name = 'assets/' + $_.FullName.Substring("$work\assets".Length + 1).Replace('\', '/')
     [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $name, 'Optimal')
@@ -199,13 +172,12 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc',
-      'assets/asr-lib/arm64-v8a/libsherpa-onnx-jni.so') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
-  # APK 里不能有 lib/：只有 64 位的库的话，32 位平板会因为没有匹配的 ABI 整个装不上
-  $libs = @($names | Where-Object { $_.StartsWith('lib/') })
-  if ($libs.Count) { throw "APK 里不能有 lib/：$($libs[0])" }
+  # APK 里不能有 lib/：只有 64 位的库的话，32 位平板会因为没有匹配的 ABI 整个装不上（语音识别库是用时下载的）
+  $libs = @($names | Where-Object { $_.StartsWith('lib/') -or $_.StartsWith('assets/asr') })
+  if ($libs.Count) { throw "APK 里不能有 lib/、asr 文件：$($libs[0])" }
   # 自检页只在 -SelfTest 包里（正式包里没有 selftest/，也就不会注入 KMSelfTest）
   $st = @($names | Where-Object { $_.StartsWith('assets/www/selftest/') })
   if ($SelfTest) {
@@ -227,5 +199,7 @@ try {
 } finally { $zip.Dispose() }
 
 Remove-Item $work -Recurse -Force
+# jsDelivr 镜像不给下载超过 20 MB 的文件（返回 403），平板连不上 GitHub 的下载地址，APK 超了就没法更新
+if ((Get-Item $apk).Length -ge 20MB) { throw "APK 有 $([math]::Round((Get-Item $apk).Length / 1MB, 1)) MB，超过 20 MB：jsDelivr 镜像下不了，平板会更新不了" }
 $size = [math]::Round((Get-Item $apk).Length / 1MB, 1)
 Write-Host "完成：$apk （$size MB，versionCode $versionCode）"

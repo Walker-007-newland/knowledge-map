@@ -7,4 +7,4 @@
 - `LibraryLoader.java`：加了 `loadFrom(路径)`（库放在 assets，复制到私有目录后加载），否则 `System.loadLibrary`；去掉 `LibraryUtils.java`（用了 API 26 才有的 java.nio.file）。
 - `OnlineRecognizer.java`：加了 `createStream(String hotwords)`。
 
-原生库 libsherpa-onnx-jni.so（static-link-onnxruntime 版，只要 arm64-v8a）不进仓库，由 build.ps1 按固定地址下载、校验 SHA-256 后缓存到 asr-cache/，打进 assets/asr-lib/；识别模型第一次语音背诵时下载（见 Asr.java）。
+原生库 libsherpa-onnx-jni.so（static-link-onnxruntime 版，只要 arm64-v8a）和识别模型都不进仓库、不打进 APK：tools/publish-asr-model.ps1 把它们推到仓库 tag，App 第一次语音背诵时下载（见 Asr.java）。
