@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>内容自检</title>
+<style>body{font:14px/1.6 system-ui,sans-serif;margin:20px;max-width:900px}li.err{color:#b91c1c}li.warn{color:#b45309}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:2px 8px}</style>
+</head>
+<body>
+<h1>内容自检</h1>
+<p>用法：启动 launch 配置 ruankao（根目录是 ruankao-app），打开 <code>/docs/check.html</code>；App 页面在 <code>/www/</code>。</p>
+<div id="out"></div>
+<script>
+// 按 index.html 的顺序加载内容文件
+(async function () {
+  const base = '../www/';
+  const html = await (await fetch(base + 'index.html')).text();
+  const srcs = [...html.matchAll(/<script src="(data\/[^"]+)"/g)].map(m => m[1]);
+  for (const s of srcs) {
+    await new Promise(r => { const e = document.createElement('script'); e.src = base + s; e.onload = r; e.onerror = () => { probs.push(['err', '加载失败：' + s]); r(); }; document.head.appendChild(e); });
+  }
+  check();
+})();
+const probs = [];
+function check() {
+  const RK = window.RK, mods = new Set(RK.modules.map(m => m.id)), ids = new Set();
+  const P = (lv, m) => probs.push([lv, m]);
+  RK.nodes.forEach(n => {
+    const at = n.id || '(无 id)';
+    if (ids.has(n.id)) P('err', at + '：id 重复'); ids.add(n.id);
+    for (const f of ['id', 'title', 'short', 'module', 'freq', 'tip', 'learn']) if (!n[f]) P('err', at + '：缺 ' + f);
+    if (!mods.has(n.module)) P('err', at + '：模块不存在 ' + n.module);
+    if ((n.examples || []).length < 1) P('warn', at + '：没有例题');
+    if ((n.tests || []).length < 4) P('warn', at + '：测试题少于 4 道');
+    [...(n.examples || []).map(q => ['例', q]), ...(n.tests || []).map(q => ['测', q])].forEach(([k, q], i) => {
+      const w = `${at} ${k}${i + 1}`;
+      if (!q.q) P('err', w + '：缺题干');
+      if (!q.explain) P('warn', w + '：缺解析');
+      if (q.type === 'choice') {
+        if (!Array.isArray(q.options) || q.options.length < 2) P('err', w + '：选项不对');
+        else {
+          if (!(q.answer >= 0 && q.answer < q.options.length)) P('err', w + '：answer 越界');
+          if (new Set(q.options).size !== q.options.length) P('err', w + '：选项重复');
+          if (q.options.some(o => /以上(都|均)/.test(o))) P('err', w + '：有“以上都…”选项');
+        }
+        if (/选\s*[A-D]\b|[A-D]\s*项|第[一二三四]项|最后一项/.test(q.explain || '')) P('err', w + '：解析里写了选项位置');
+      } else if (q.type === 'fill') {
+        if (!Array.isArray(q.answer) || !q.answer.length) P('err', w + '：fill 的 answer 要是数组');
+      } else if (q.type === 'num') {
+        if (typeof q.answer !== 'number') P('err', w + '：num 的 answer 要是数字');
+      } else P('err', w + '：未知题型 ' + q.type);
+    });
+  });
+  RK.nodes.forEach(n => (n.prereqs || []).forEach(p => { if (!ids.has(p)) P('err', n.id + '：前置不存在 ' + p); }));
+  RK.cases.forEach(c => {
+    const t = c.questions.reduce((a, q) => a + q.points.reduce((b, p) => b + p.s, 0), 0);
+    if (t !== 25) P('warn', c.id + '：要点合计 ' + t + ' 分（应为 25）');
+  });
+  const byMod = {};
+  RK.nodes.forEach(n => { const m = byMod[n.module] || (byMod[n.module] = { n: 0, t: 0 }); m.n++; m.t += (n.tests || []).length; });
+  document.getElementById('out').innerHTML =
+    `<p>知识点 ${RK.nodes.length} 个，测试题 ${RK.nodes.reduce((a, n) => a + (n.tests || []).length, 0)} 道，案例 ${RK.cases.length}，论文 ${RK.essays.length}</p>` +
+    `<table><tr><th>模块</th><th>点</th><th>测试题</th></tr>${RK.modules.map(m => `<tr><td>${m.name}</td><td>${byMod[m.id] ? byMod[m.id].n : 0}</td><td>${byMod[m.id] ? byMod[m.id].t : 0}</td></tr>`).join('')}</table>` +
+    (probs.length ? `<h2>问题 ${probs.length}</h2><ul>${probs.map(([l, m]) => `<li class="${l}">${m}</li>`).join('')}</ul>` : '<h2>没有发现问题 ✓</h2>');
+}
+</script>
+</body>
+</html>

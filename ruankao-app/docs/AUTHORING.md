@@ -58,6 +58,7 @@ rubric 共用 essays.js 顶部的 RUBRIC（切合题意 / 应用深度 / 实践�
 
 ## 预览和打包
 
-- 浏览器：launch 配置 `ruankao`（端口 8805），用手机尺寸看
+- 浏览器：launch 配置 `ruankao`（端口 8805，根目录 ruankao-app），App 在 `/www/`，用手机尺寸看
+- 自检：`/docs/check.html` 列出缺字段、answer 越界、解析写了选项位置、案例要点不是 25 分等问题
 - 打包：`powershell -ExecutionPolicy Bypass -File ruankao-app\build.ps1` → `out\ruankao.apk`
 - 发布：`ruankao-app\publish.ps1 -Notes "…"`（Notes 不要用中文弯引号）
