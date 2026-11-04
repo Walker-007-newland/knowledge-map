@@ -310,18 +310,19 @@
   }
 
   function renderTodo(n) {
-    const ready = nodes.filter((m) => L[m.id]).map((m) => m.id);
+    const ready = nodes.filter((m) => L[m.id] && m.d === n.d).map((m) => m.id);
     pBody.innerHTML = `<div class="todo">
       <p><b>这个知识点的动画讲解还在制作中。</b></p>
       <p>现在可以先看看它在地图上的位置：左边连着的是要先学的，右边连着的是学完它以后要学的。</p>
-      <p class="plabel">已经做好的样板</p>
+      <p class="plabel">${n.d === 'olym' ? '已经做好的奥数专题' : '已经做好的样板'}</p>
       <div class="chips-wrap">${ready.map(chip).join('')}</div></div>`;
   }
 
   function renderLearn(n, les) {
     const wrap = document.createElement('div');
     wrap.className = 'learn';
-    wrap.innerHTML = `<div class="goal"><div><span class="plabel">中考要求</span><p>${les.goal}</p></div><div><span class="plabel">福建卷怎么考</span><p>${les.fj}</p></div></div>`;
+    const olym = n.d === 'olym';
+    wrap.innerHTML = `<div class="goal"><div><span class="plabel">${olym ? '学习目标' : '中考要求'}</span><p>${les.goal}</p></div><div><span class="plabel">${olym ? '常见题型' : '福建卷怎么考'}</span><p>${les.fj}</p></div></div>`;
     les.sections.forEach((s, i) => {
       const sec = document.createElement('section');
       sec.className = 'lsec';
@@ -381,6 +382,9 @@
     .replace(/[－—–−]/g, '-').replace(/／/g, '/').replace(/．/g, '.')
     .replace(/[°度%％]/g, '').replace(/^[a-z]=/i, '');
   const numOf = (s) => {
+    // 带分数：10又10/11、-2又1/3
+    const mx = s.match(/^(-?)(\d+)又(\d+)\/(\d+)$/);
+    if (mx) return +mx[4] === 0 ? null : (mx[1] ? -1 : 1) * (+mx[2] + +mx[3] / +mx[4]);
     const m = s.match(/^(-?\d+(?:\.\d+)?)(?:\/(-?\d+(?:\.\d+)?))?$/);
     if (!m) return null;
     const b = m[2] != null ? +m[2] : 1;
@@ -579,7 +583,8 @@
 
   // ── 推荐下一个：按年级顺序，找第一个“还没掌握、但前置都掌握了”的知识点 ──
   function recommend() {
-    const order = nodes.slice().sort((a, b) => a.g - b.g || pos[a.id].y - pos[b.id].y);
+    // 奥数拓展不参与推荐，由学生自己选
+    const order = nodes.filter((n) => n.d !== 'olym').sort((a, b) => a.g - b.g || pos[a.id].y - pos[b.id].y);
     const todo = order.filter((n) => status(n.id) !== 'good');
     return todo.find((n) => n.pre.every((p) => status(p) === 'good')) || todo[0];
   }

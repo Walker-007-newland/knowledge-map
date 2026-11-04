@@ -20,11 +20,12 @@ table { border-collapse: collapse; } td, th { border: 1px solid #ccc; padding: 4
   window.addEventListener('error', (e) => window.__errs.push((e.filename || '').split('/').pop() + ':' + e.lineno + ' ' + e.message));
 </script>
 <script src="js/nodes.js"></script>
+<script src="js/nodes-olym.js"></script>
 <script src="js/lessons.js"></script>
 <script src="js/anims.js"></script>
 <script>
   // 逐个加载各组文件，记录哪些文件不存在或有语法错误
-  const GROUPS = ['pnum1', 'pnum2', 'pgeo1', 'pgeo2', 'pstat', 'jnum1', 'jnum2', 'jgeo1', 'jgeo2', 'jmix', 'jext', 'p4'];
+  const GROUPS = ['pnum1', 'pnum2', 'pgeo1', 'pgeo2', 'pstat', 'jnum1', 'jnum2', 'jgeo1', 'jgeo2', 'jmix', 'jext', 'p4', 'olym1', 'olym2', 'olym3', 'olym4', 'olym5', 'olym6', 'olym7', 'olym8', 'olym9', 'olym10', 'olym11', 'olym12'];
   const files = GROUPS.flatMap((g) => [`js/lessons-${g}.js`, `js/anims-${g}.js`]);
   const loadState = {};
   function load(i) {
