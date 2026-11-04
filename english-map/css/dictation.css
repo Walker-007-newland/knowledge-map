@@ -63,6 +63,7 @@ body.dict main { display: block; flex: none; width: min(860px, 100%); margin: 0 
 .run-zh { font-size: 30px; margin-top: 18px; min-height: 0; }
 .run-zh:empty { display: none; }
 .run-state { margin: 18px 0 12px; color: var(--muted); font-size: 18px; }
+.run-state.hurry { color: var(--st-weak); font-weight: 600; }
 .run-bar { max-width: 520px; margin: 0 auto; height: 10px; }
 .run-bar i { background: var(--st-mastered); transition: none; }
 .run-input { display: block; width: min(520px, 100%); margin: 18px auto 0; height: 56px; font-size: 26px; text-align: center;

@@ -4,6 +4,7 @@
  *   DictRun.mount(容器, 文案)          把四个视图（vSetup / vRun / vCheck / vResult）的 HTML 放进容器
  *   const R = DictRun.create(opts)     绑定按钮，返回 { openSetup, startRun, isRunning, stopRun, last }
  *     opts.settings   设置对象（会被直接修改：scope, mode, read, reps, speed, pace, order, someN）
+ *                     pace = 作答时间：fast / normal / slow 读完后倒计时，到时间自动下一个（键盘输入会自动保存已输入的）；none = 不限时
  *     opts.save()     设置改了以后保存
  *     opts.show(v, push) / opts.current()   页面切换（配合返回键，由页面自己管理 history）
  *     opts.wrongCount(src) / opts.isWrong(src, key)   这份词里有几个错词、某个词是不是错词
@@ -171,8 +172,8 @@
       <div class="dopt"><span class="dopt-label">语速</span><div class="seg" data-opt="speed">
         <button data-v="normal">正常</button><button data-v="slow">慢</button>
       </div></div>
-      <div class="dopt paper-only"><span class="dopt-label">书写时间</span><div class="seg" data-opt="pace">
-        <button data-v="fast">快</button><button data-v="normal">中</button><button data-v="slow">慢</button>
+      <div class="dopt"><span class="dopt-label">作答时间</span><div class="seg" data-opt="pace">
+        <button data-v="fast">快</button><button data-v="normal">中</button><button data-v="slow">慢</button><button data-v="none">不限时</button>
       </div></div>
       <div class="dopt"><span class="dopt-label">顺序</span><div class="seg" data-opt="order">
         <button data-v="random">随机</button><button data-v="list">${T.orderList}</button>
@@ -232,7 +233,15 @@
   }
 
   /* ---------------- 流程 ---------------- */
+  // 作答时间 = 基础 + 每个字母（毫秒），最多 25 秒（纸上写）/ 40 秒（键盘输入，平板上打字比写字慢）
   const PACE = { fast: [3000, 250], normal: [4500, 380], slow: [6500, 520] };
+  const TYPE_PACE = { fast: [4000, 450], normal: [6000, 650], slow: [9000, 900] };
+  function answerMs(mode, pace, en) {
+    const t = mode === 'type' ? TYPE_PACE[pace] : PACE[pace];
+    if (!t) return 0;                                       // 不限时
+    const letters = String(en).replace(/[^A-Za-z]/g, '').length;
+    return Math.min(mode === 'type' ? 40000 : 25000, t[0] + t[1] * letters);
+  }
   // 在当前这条历史记录上换页面：保留页面放在 state 里的其它字段（单元单词页用 d 记录离首页几层）
   const keepState = v => Object.assign({}, history.state || {}, { v });
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -274,15 +283,15 @@
         seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
       });
       $('#someWrap').hidden = S.scope !== 'some';
-      document.querySelector('#vSetup .paper-only').hidden = S.mode !== 'paper';
       const hasZh = setupList && setupList.words.some(w => w.zh);
       const tips = [];
       const rec = setupList && allRecorded(setupList.words);
       if (ttsOk === false && rec) { if (S.read !== 'en') tips.push('这台平板没有语音引擎：英文用录音照常能听，中文读不出来，建议选「读英文」。'); }
       else if (ttsOk === false) tips.push(S.read === 'zh' ? '这台平板读不出声音，中文会显示在屏幕上，看中文写英文。' : '这台平板读不出声音，建议选「读中文写英文」。');
       if (S.read !== 'en' && !hasZh) tips.push('这个' + T.listWord + '没有中文释义，会只读英文。');
-      if (S.mode === 'paper') tips.push('准备好纸和笔，每个词写在对应的序号后面。' + T.act + '完再对照批改。');
-      else tips.push('听到后用键盘输入，按回车进入下一个，结束后自动判分。');
+      const timed = S.pace !== 'none';
+      if (S.mode === 'paper') tips.push('准备好纸和笔，每个词写在对应的序号后面。' + (timed ? '读完后倒计时，时间到自动读下一个。' : '写好后点「下一个」。') + T.act + '完再对照批改。');
+      else tips.push('听到后用键盘输入，按回车进入下一个' + (timed ? '；读完后倒计时，时间到自动进入下一个（已输入的会保存）' : '') + '，结束后自动判分。');
       $('#setupHint').textContent = tips.join(' ');
     }
     document.querySelectorAll('#vSetup .seg[data-opt]').forEach(seg => seg.addEventListener('click', e => {
@@ -323,11 +332,12 @@
       if (!words.length) { alert('没有可以' + T.act + '的单词。'); return; }
       run = {
         list, scope, words, idx: 0, answers: words.map(() => ''), paused: false,
-        mode: S.mode, read: S.read, reps: +S.reps || 2, pace: PACE[S.pace] || PACE.normal
+        mode: S.mode, read: S.read, reps: +S.reps || 2, pace: (PACE[S.pace] || S.pace === 'none') ? S.pace : 'normal'
       };
       $('#runTotal').textContent = words.length;
       $('#runInput').hidden = run.mode !== 'type';
-      $('#btnPause').hidden = run.mode !== 'paper';
+      $('#btnPause').hidden = run.pace === 'none';
+      $('#btnPause').textContent = '⏸ 暂停';
       // 从设置页或结果页（错词再听写 / 全部再听一遍）出发都在当前记录上替换，不再压新记录，
       // 否则「返回词单」的 history.back() 会退回上一轮的结果页（#9 第 2 期测试问题 1）
       const cur = o.current();
@@ -357,15 +367,16 @@
       $('#runZh').textContent = run.read === 'zh' && w.zh ? w.zh : '';
       $('#runBar').style.width = '0%';
       $('#runState').textContent = '请听…';
+      $('#runState').classList.remove('hurry');
       $('#btnPrev').disabled = run.idx === 0;
       $('#btnNext').textContent = run.idx === run.words.length - 1 ? '完成 ✓' : '下一个 ⏭';
       if (run.mode === 'type') { const inp = $('#runInput'); inp.value = run.answers[run.idx] || ''; inp.focus(); }
       say(speechFor(w), () => {
         if (!run || run.words[run.idx] !== w) return;
         run.speaking = false;
-        if (run.mode === 'type') { $('#runState').textContent = '输入后按回车'; return; }
-        const letters = w.en.replace(/[^A-Za-z]/g, '').length;
-        startCountdown(Math.min(25000, run.pace[0] + run.pace[1] * letters));
+        const ms = answerMs(run.mode, run.pace, w.en);
+        if (!ms) { $('#runState').textContent = run.mode === 'type' ? '输入后按回车' : '写好后点「下一个」'; return; }
+        startCountdown(ms);
       });
     }
     function startCountdown(ms) {
@@ -381,8 +392,10 @@
         const used = performance.now() - tickStart;
         tickLeft = Math.max(0, tickLen - used);
         $('#runBar').style.width = (used / tickLen * 100).toFixed(1) + '%';
-        $('#runState').textContent = `写下来… 还有 ${Math.ceil(tickLeft / 1000)} 秒`;
-        if (tickLeft <= 0) { timer = null; next(); return; }
+        const sec = Math.ceil(tickLeft / 1000);
+        $('#runState').textContent = run.mode === 'type' ? `输入后按回车… 还有 ${sec} 秒` : `写下来… 还有 ${sec} 秒`;
+        $('#runState').classList.toggle('hurry', tickLeft <= 3000);
+        if (tickLeft <= 0) { timer = null; $('#runState').classList.remove('hurry'); next(); return; }
         timer = requestAnimationFrame(step);
       };
       timer = requestAnimationFrame(step);
