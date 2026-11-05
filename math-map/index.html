@@ -63,6 +63,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .wtitle { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; margin: 0 0 4px; }
 .wtitle .abtn { font-size: 13px; padding: 4px 10px; }
 .wmeta { font-size: 12px; color: var(--muted); margin: 4px 0 0 32px; }
+.wmeta .due { color: var(--bad); font-weight: 600; }
+.wsec { margin: 22px 0 0; font-size: 15px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; }
+.wfilter { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.wfilter .abtn { font-size: 13px; padding: 4px 12px; }
+.wfilter .abtn.on { outline: 2px solid var(--a1); }
+.wcount.due { background: var(--a1); margin-left: 4px; }
 .wctrl { display: flex; gap: 8px; margin-top: 10px; }
 .next-btn { border: none; background: var(--a2); color: var(--on-accent); border-radius: 10px; padding: 6px 14px; font-size: 14px; font-weight: 600; }
 #progress { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -413,6 +419,7 @@ svg.fig line, svg.fig polyline, svg.fig polygon, svg.fig path, svg.fig rect, svg
 <script src="js/anims-olym11.js"></script>
 <script src="js/lessons-olym12.js"></script>
 <script src="js/anims-olym12.js"></script>
+<script src="../knowledge-map-app/hub/km-review.js"></script>
 <script src="js/app.js"></script>
 
 </body>

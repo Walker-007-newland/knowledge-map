@@ -45,7 +45,7 @@
   <section class="view" id="vWrong" hidden>
     <div class="card">
       <h2>错词本</h2>
-      <p class="hint">听写写错的词会进错词本，再听写写对一次就移出。</p>
+      <p class="hint" id="wrongHint">听写写错的词会进错词本，按 1、2、4、7、15、30 天的间隔复习，6 轮都写对就算掌握。</p>
       <div id="wrongRows"></div>
       <p class="empty" id="wrongEmpty" hidden>没有错词，真棒！</p>
     </div>
@@ -63,6 +63,7 @@
 <script src="data/tingxie/books.js"></script>
 <script src="js/vendor/hanzi-writer.min.js"></script>
 <script src="js/hand-judge.js"></script>
+<script src="../knowledge-map-app/hub/km-review.js"></script>
 <script src="js/tingxie-run.js"></script>
 <script>TingxieRun.mount(document.getElementById('dictRun'));</script>
 <script src="js/tingxie.js"></script>

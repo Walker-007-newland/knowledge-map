@@ -36,7 +36,12 @@
   }
   function devId() { try { return window.KMData ? KMData.device().id : 'web'; } catch (e) { return 'web'; } }
   const known = key => { const r = rec(key); return !!(r && r.k === 1); };
-  const inWrong = key => { const r = rec(key); return !!(r && r.r === 0); };
+  // 错词本 = 间隔复习里的词（knowledge-map-app/hub/km-review.js）：默写写错明天复习，到期写对进入下一轮，第 6 轮写对算掌握；
+  // 升级前 r=0 的错词没有 sr，算今天到期
+  const RV = window.KMReview;
+  const stOf = key => RV ? RV.fromWord(rec(key)) : (rec(key) && rec(key).r === 0 ? { s: 0, d: '' } : null);
+  const inWrong = key => !!stOf(key);
+  const isDue = key => RV ? RV.isDue(stOf(key)) : inWrong(key);
   const wrongTimes = key => { const r = rec(key); return r && isObj(r.w) ? Object.keys(r.w).reduce((s, d) => s + (+r.w[d] || 0), 0) : 0; };
   // 页面回到前台、别的页面写过：丢掉缓存重新读
   window.addEventListener('pageshow', () => { recCache = null; if (current === 'vHome') renderHome(); });
@@ -197,16 +202,19 @@
     const ready = b && KW.words[b.id];
     const mustOnly = S.must && b && b.mustMarked;
     const m = ready ? wordsOf(b, sel, mustOnly).length : 0;      // 同词不同单元按出现次数算
-    const nWrong = ready ? dedupe(wordsOf(b, sel, mustOnly)).filter(w => inWrong(w.key)).length : 0;
+    const ws = ready ? dedupe(wordsOf(b, sel, mustOnly)) : [];
+    const nWrong = ws.filter(w => inWrong(w.key)).length, nDue = ws.filter(w => isDue(w.key)).length;
     $('#selInfo').textContent = sel.length ? `已选 ${sel.length} 个单元共 ${m} 词` : '先勾选要背的单元';
     $('#btnStudy').disabled = $('#btnDict').disabled = !sel.length || !m;
     $('#btnWrong').disabled = !sel.length;
-    $('#btnWrong').textContent = `错词（${nWrong}）`;
+    $('#btnWrong').textContent = `错词（${nWrong}${nDue ? ` · 今天 ${nDue}` : ''}）`;
   }
   // 全部错词数：要把所有册都载入才算得出，后台慢慢载
   function updateAllWrong() {
-    const n = KW.books.every(b => KW.words[b.id]) ? allWrongWords().length : null;
-    $('#btnAllWrong').textContent = n === null ? '全部错词' : `全部错词（${n}）`;
+    const all = KW.books.every(b => KW.words[b.id]) ? allWrongWords() : null, n = all ? all.length : null;
+    const nDue = all ? all.filter(w => isDue(w.key)).length : 0;
+    $('#btnAllWrong').textContent = n === null ? '全部错词' : `全部错词（${n}${nDue ? ` · 今天到期 ${nDue}` : ''}）`;
+    $('#btnAllWrong').classList.toggle('primary', nDue > 0);
     if (n === null) loadAll().then(() => { if (current === 'vHome') updateAllWrong(); }).catch(() => {});
   }
   function allWrongWords() {
@@ -407,15 +415,27 @@
     const seen = new Set();
     groups.forEach(g => { g.words = g.words.filter(w => !seen.has(w.key) && seen.add(w.key)); });
     wrongList = [];
-    $('#wrongRows').innerHTML = groups.filter(g => g.words.length).map(g => {
-      wrongList.push(...g.words);
-      return `<h3 class="w-group">${esc(g.title)}</h3>` + g.words.map(w => `<div class="w-row">
-        <b>${esc(w.en)}</b><span class="w-zh">${esc(w.pos ? w.pos + ' ' : '')}${esc(w.zh)}</span><span class="w-n">错过 ${wrongTimes(w.key)} 次</span>
-        ${window.KWPhonics ? KWPhonics.button(w.en, w.zh) : ''}<button class="btn icon" data-say="${esc(w.en)}" aria-label="读">🔊</button></div>`).join('');
-    }).join('');
+    groups.forEach(g => wrongList.push(...g.words));
+    dueList = RV ? RV.sortByDue(wrongList.filter(w => isDue(w.key)), w => stOf(w.key)) : [];
+    const dueSet = new Set(dueList.map(w => w.key));
+    const day = RV ? RV.today() : '';
+    const row = w => `<div class="w-row">
+        <b>${esc(w.en)}</b><span class="w-zh">${esc(w.pos ? w.pos + ' ' : '')}${esc(w.zh)}</span><span class="w-n">${RV ? `<span class="rv-st${dueSet.has(w.key) ? ' due' : ''}">${RV.label(stOf(w.key), day)}</span><br>` : ''}错过 ${wrongTimes(w.key)} 次</span>
+        ${window.KWPhonics ? KWPhonics.button(w.en, w.zh) : ''}<button class="btn icon" data-say="${esc(w.en)}" aria-label="读">🔊</button></div>`;
+    const later = groups.map(g => ({ title: g.title, words: g.words.filter(w => !dueSet.has(w.key)) })).filter(g => g.words.length);
+    $('#wrongRows').innerHTML = (dueList.length ? `<h3 class="w-group rv-due">📅 今天到期 ${dueList.length} 个</h3>` + dueList.map(row).join('') : '') +
+      (dueList.length && later.length ? '<h3 class="w-group rv-later">还没到复习日的（可以先练：写对不推进，写错明天复习）</h3>' : '') +
+      later.map(g => `<h3 class="w-group">${esc(g.title)}</h3>` + g.words.map(row).join('')).join('');
+    $('#wrongHint').textContent = wrongList.length
+      ? `今天该复习 ${dueList.length} 个${wrongList.length > dueList.length ? `，另有 ${wrongList.length - dueList.length} 个还没到复习日` : ''}。错词按 1、2、4、7、15、30 天的间隔复习：到期默写写对进入下一轮，第 6 轮也写对就算掌握、移出错词本。`
+      : '默写写错的词会进错词本，按 1、2、4、7、15、30 天的间隔复习，6 轮都写对就算掌握。';
     $('#wrongEmpty').hidden = wrongList.length > 0;
     $('#btnWrongStudy').disabled = $('#btnWrongDict').disabled = !wrongList.length;
+    $('#btnWrongDue').hidden = !dueList.length;
+    $('#btnWrongDue').textContent = `默写今天到期的 ${dueList.length} 个`;
   }
+  let dueList = [];
+  $('#btnWrongDue').onclick = () => { if (dueList.length) runner.openSetup({ name: '今天该复习（' + dueList.length + ' 个）', words: dueList.slice() }); };
   $('#wrongRows').addEventListener('click', e => {
     const b = e.target.closest('button[data-say]'); if (b) DictRun.say([{ text: b.dataset.say, lang: 'en-US' }]);
   });
@@ -431,16 +451,23 @@
     text: { act: '默写', listWord: '组词' },
     wrongCount: src => src.words.filter(w => inWrong(keyOf(w.en))).length,
     isWrong: (src, k) => inWrong(k),
+    dueCount: src => src.words.filter(w => isDue(keyOf(w.en))).length,
+    isDue: (src, k) => isDue(k),
     record(src, rows) {
       const now = Date.now(), me = devId();
+      let up = 0, done = 0;
       updateRecs(all => rows.forEach(({ w, wrong }) => {
         const k = keyOf(w.en);
         const e = isObj(all[k]) ? all[k] : {};
-        e.r = wrong ? 0 : 1; e.rt = now;           // r=0 在错词本；写对一次就移出
+        if (RV) {                                   // r、rt 照旧（最近一次对错），sr 按间隔复习规则推进
+          const r = RV.markWord(e, wrong, now);
+          if (!wrong && r.after && r.after !== r.before) { if (r.after.s >= RV.DONE) done++; else up++; }
+        } else { e.r = wrong ? 0 : 1; e.rt = now; }
         e.n = isObj(e.n) ? e.n : {}; e.n[me] = (+e.n[me] || 0) + 1;
         e.w = isObj(e.w) ? e.w : {}; if (wrong) e.w[me] = (+e.w[me] || 0) + 1;
         all[k] = e;
       }));
+      return [up && `${up} 个错词复习过关、进入下一轮`, done && `${done} 个错词已掌握、移出错词本`].filter(Boolean).join('，');
     },
     onBack: goHome
   });
@@ -449,6 +476,13 @@
   if (!KW.books.length) { $('#units').innerHTML = '<p class="empty">词表还在整理。</p>'; }
   renderHome();
   show('vHome', false);
+  // 总入口「今天该复习」进来（?review=1）：打开全部错词，有到期的直接进默写设置（返回回到错词本）
+  if (/[?&]review=1/.test(location.search)) {
+    loadAll().then(() => {
+      wrongCtx = 'all'; renderWrong(); show('vWrong');
+      if (dueList.length) runner.openSetup({ name: '今天该复习（' + dueList.length + ' 个）', words: dueList.slice() });
+    }).catch(err => toast(err.message));
+  }
   // 调试 / 测试用
   window.__words = { S, recs: () => (recCache = null, recs()), loadAll, currentBook };
 })();

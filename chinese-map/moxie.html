@@ -44,7 +44,7 @@
   <section class="view" id="vWrong" hidden>
     <div class="card">
       <h2>错句本</h2>
-      <p class="hint">默写写错的句子会进错句本，再默写写对一次就移出。</p>
+      <p class="hint" id="wrongHint">默写写错的句子会进错句本，按 1、2、4、7、15、30 天的间隔复习，6 轮都写对就算掌握。</p>
       <div id="wrongRows"></div>
       <p class="empty" id="wrongEmpty" hidden>没有错句，真棒！</p>
     </div>
@@ -132,6 +132,7 @@
 <script src="js/vendor/hanzi-writer.min.js"></script>
 <script src="js/hand-judge.js"></script>
 <script src="js/hand-pad.js"></script>
+<script src="../knowledge-map-app/hub/km-review.js"></script>
 <script src="js/moxie.js"></script>
 </body>
 </html>

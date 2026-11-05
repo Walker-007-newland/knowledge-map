@@ -18,16 +18,24 @@
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(prog)); } catch (e) { /* 无法保存时忽略 */ } };
   const status = (id) => { const p = prog[id]; if (!p) return null; return p.best >= 0.8 ? 'good' : p.best >= 0.5 ? 'mid' : 'bad'; };
   const ST_TXT = { good: '已掌握', mid: '再练练', bad: '没掌握' };
-  // 错题本：{ "知识点id#题号": { n: 做错次数, at: 最近一次做错的时间 } }
+  // 错题本：{ "知识点id#题号": { n: 做错次数, at: 最近一次做错的时间, sr: 间隔复习状态 } }
+  // 间隔复习（knowledge-map-app/hub/km-review.js）：做错明天复习；到期做对进入下一轮（间隔 1、2、4、7、15、30 天），
+  // 第 6 轮做对才算掌握、移出错题本；没到期做对不推进。升级前的错题没有 sr，算今天到期
+  const R = window.KMReview;
   const WKEY = 'mathmap-wrong-v1';
   let wrong = {};
   try { wrong = JSON.parse(localStorage.getItem(WKEY) || '{}') || {}; } catch (e) { wrong = {}; }
   const saveWrong = () => { try { localStorage.setItem(WKEY, JSON.stringify(wrong)); } catch (e) { /* 无法保存时忽略 */ } };
-  const wrongList = () => Object.keys(wrong).filter((k) => { const [id, i] = k.split('#'); return L[id] && L[id].quiz[+i]; });
+  const srOf = (k) => (R ? R.fromMath(wrong[k]) : { s: 0, d: '' });
+  const wrongList = () => Object.keys(wrong).filter((k) => { const [id, i] = k.split('#'); return L[id] && L[id].quiz[+i] && srOf(k); });
+  const isDue = (k) => (R ? R.isDue(srOf(k)) : true);
+  // 记一次结果，返回 km-review 的 { before, after }（没有 km-review 时退回旧规则：做对就移出）
   function markWrong(id, i, ok) {
     const k = id + '#' + i;
+    if (R) return R.markMath(wrong, k, !ok, Date.now());
     if (ok) delete wrong[k];
     else wrong[k] = { n: ((wrong[k] && wrong[k].n) || 0) + 1, at: Date.now() };
+    return null;
   }
 
   // ── 布局：横向按年级分列，纵向按领域分带 ──
@@ -112,8 +120,8 @@
     const done = nodes.filter((n) => status(n.id) === 'good').length;
     const tested = nodes.filter((n) => prog[n.id]).length;
     $('#progress').innerHTML = `<b>${done}</b> 个已掌握 · ${tested} 个测过 · 共 ${nodes.length} 个知识点`;
-    const wn = wrongList().length;
-    $('#wrongBtn').innerHTML = `错题本${wn ? ` <span class="wcount">${wn}</span>` : ''}`;
+    const wl = wrongList(), wn = wl.length, dn = wl.filter(isDue).length;
+    $('#wrongBtn').innerHTML = `错题本${wn ? ` <span class="wcount" title="在复习的错题">${wn}</span>` : ''}${dn ? `<span class="wcount due" title="今天该复习">今天 ${dn}</span>` : ''}`;
   }
 
   // ── 高亮学习路径 ──
@@ -495,28 +503,59 @@
   }
 
   // ── 错题本 ──
-  function openWrong() {
+  // dueOnly：只列今天到期的（总入口「今天该复习」进来是 #review）
+  let dueOnly = false;
+  function openWrong(onlyDue) {
     selected = null;
     highlight(null);
     app.classList.add('panel-open');
     panel.hidden = false;
+    dueOnly = onlyDue === true;
     renderWrong();
     panel.scrollTop = 0;
-    try { history.replaceState(null, '', '#wrong'); } catch (e) { /* 忽略 */ }
+    try { history.replaceState(null, '', dueOnly ? '#review' : '#wrong'); } catch (e) { /* 忽略 */ }
   }
-  $('#wrongBtn').addEventListener('click', openWrong);
+  $('#wrongBtn').addEventListener('click', () => openWrong(false));
+  function wrongHead(keys) {
+    const due = keys.filter(isDue).length;
+    if (!keys.length) return '错题本是空的。';
+    return `今天该复习 <b>${due}</b> 道${keys.length > due ? `，还有 ${keys.length - due} 道没到复习日` : ''}。` +
+      '做错的题按 1、2、4、7、15、30 天的间隔复习，到期做对进入下一轮，第 6 轮也做对就算掌握、移出错题本。';
+  }
   function renderWrong() {
-    const keys = wrongList();
+    const all = wrongList();
     const order = (k) => { const n = byId[k.split('#')[0]]; return n.g * 1e4 + pos[n.id].y; };
-    keys.sort((a, b) => order(a) - order(b) || +a.split('#')[1] - +b.split('#')[1]);
+    all.sort((a, b) => order(a) - order(b) || +a.split('#')[1] - +b.split('#')[1]);
+    const dueKeys = all.filter(isDue), laterKeys = all.filter((k) => !isDue(k));
     $('#pHead').innerHTML = `<div class="tags"><span class="tag">我的错题</span></div>
       <h2>错题本</h2>
-      <p class="kid">${keys.length ? `还有 <b>${keys.length}</b> 道错题。重新做一遍，做对了就会从错题本里移走。` : '错题本是空的。'}</p>`;
+      <p class="kid">${wrongHead(all)}</p>
+      ${all.length ? `<div class="wfilter"><button type="button" class="abtn alt${dueOnly ? ' on' : ''}" data-f="due">只练今天到期的（${dueKeys.length}）</button><button type="button" class="abtn alt${dueOnly ? '' : ' on'}" data-f="all">全部（${all.length}）</button></div>` : ''}`;
+    $('#pHead').querySelectorAll('.wfilter .abtn').forEach((b) => b.addEventListener('click', () => {
+      dueOnly = b.dataset.f === 'due';
+      try { history.replaceState(null, '', dueOnly ? '#review' : '#wrong'); } catch (e) { /* 忽略 */ }
+      renderWrong(); panel.scrollTop = 0;
+    }));
     pBody.innerHTML = '';
-    if (!keys.length) {
-      pBody.innerHTML = '<div class="todo"><p>测试里做错的题会自动收进这里。</p><p>在这里重新做对，或者回到知识点的“测一测”里做对，它就会被移走。</p></div>';
+    if (!all.length) {
+      pBody.innerHTML = '<div class="todo"><p>测试里做错的题会自动收进这里。</p><p>到了复习日重新做对，就进入下一轮；连续 6 轮都做对（最后一轮隔 30 天），它就会被移走。</p></div>';
       return;
     }
+    if (dueOnly && !dueKeys.length) {
+      const first = R && laterKeys.length ? R.sortByDue(laterKeys, srOf)[0] : null;
+      pBody.innerHTML = `<div class="todo"><p>今天没有到期的错题，真棒！</p>${first ? `<p>最近一道：${R.label(srOf(first))}。想多练可以点上面的「全部」。</p>` : ''}</div>`;
+      return;
+    }
+    renderWrongKeys(dueKeys);
+    if (!dueOnly && laterKeys.length) {
+      const h = document.createElement('h3');
+      h.className = 'wsec';
+      h.textContent = (dueKeys.length ? '' : '今天没有到期的错题。') + '还没到复习日的（可以先练：做对不推进轮次，做错明天复习）';
+      pBody.appendChild(h);
+      renderWrongKeys(laterKeys);
+    }
+  }
+  function renderWrongKeys(keys) {
     let lastId = null, group = null;
     keys.forEach((k) => {
       const [id, iStr] = k.split('#'), i = +iStr, n = byId[id], q = L[id].quiz[i], w = wrong[k];
@@ -530,7 +569,7 @@
       const box = document.createElement('div');
       box.className = 'q';
       let body = `<div class="q-stem"><span class="qno">${i + 1}</span><div class="rich">${q.q}</div></div>
-        <div class="wmeta">做错 ${w.n} 次 · 最近一次 ${new Date(w.at).toLocaleDateString('zh-CN')}</div>`;
+        <div class="wmeta">${R ? `<span class="${isDue(k) ? 'due' : ''}">${R.label(srOf(k))}</span> · ` : ''}做错 ${w.n} 次 · 最近一次 ${new Date(w.at).toLocaleDateString('zh-CN')}</div>`;
       if (q.type === 'choice') body += `<div class="opts" role="radiogroup">${q.opts.map((o, j) => `<button type="button" role="radio" aria-checked="false" class="opt" data-j="${j}"><span class="ol">${'ABCD'[j]}</span><span class="rich">${o}</span></button>`).join('')}</div>`;
       else body += `<input class="fill" id="w-${id}-${i}" type="text" autocomplete="off" placeholder="在这里填答案" aria-label="答案">`;
       body += '<div class="wctrl"><button type="button" class="abtn wsub">提交这道题</button></div><div class="why" hidden></div>';
@@ -563,14 +602,14 @@
         box.classList.add(ok ? 'ok' : 'no');
         why.hidden = false;
         sub.hidden = true;
-        markWrong(id, i, ok);
+        const res = markWrong(id, i, ok);
         saveWrong(); paintStatus();
-        const left = wrongList().length, kid = $('#pHead .kid');
-        if (kid) kid.innerHTML = left ? `还有 <b>${left}</b> 道错题。重新做一遍，做对了就会从错题本里移走。` : '全部订正完了，真棒！';
+        const left = wrongList(), kid = $('#pHead .kid');
+        if (kid) kid.innerHTML = left.length ? wrongHead(left) : '全部掌握了，真棒！';
         if (ok) {
-          why.innerHTML = `<b>✓ 订正成功，已移出错题本</b>　${q.why}`;
+          why.innerHTML = `<b>✓ 做对了${R ? '，' + R.resultText(res) : '，已移出错题本'}</b>　${q.why}`;
         } else {
-          why.innerHTML = `<b>✗ 还是不对，正确答案：${ansTxt}</b>　${q.why}<br>这道题会留在错题本里。建议先回到知识点看看动画讲解，过一会儿再来做。`;
+          why.innerHTML = `<b>✗ 还是不对，正确答案：${ansTxt}</b>　${q.why}<br>这道题明天再复习。建议先回到知识点看看动画讲解。`;
           const again = document.createElement('button');
           again.type = 'button'; again.className = 'abtn alt'; again.textContent = '刷新错题本';
           again.addEventListener('click', () => { renderWrong(); panel.scrollTop = 0; });
@@ -597,7 +636,7 @@
   paintStatus();
   fit();
   window.addEventListener('resize', () => { if (!selected) fit(); });
-  const fromHash = () => { const h = location.hash.slice(1); if (h === 'wrong') openWrong(); else if (byId[h] && h !== selected) open(h); };
+  const fromHash = () => { const h = location.hash.slice(1); if (h === 'wrong' || h === 'review') openWrong(h === 'review'); else if (byId[h] && h !== selected) open(h); };
   window.addEventListener('hashchange', fromHash);
   fromHash();
 })();

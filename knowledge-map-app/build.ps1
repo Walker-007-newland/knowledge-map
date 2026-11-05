@@ -48,6 +48,9 @@ Copy-Item "$here\hub\data.html" "$work\assets\www\data.html"
 Copy-Item "$here\hub\km-study.js" "$work\assets\www\km-study.js"
 Copy-Item "$here\hub\km-narrate.js" "$work\assets\www\km-narrate.js"
 Copy-Item "$here\hub\km-reward.js" "$work\assets\www\km-reward.js"
+# 错题 / 错词间隔复习（遗忘曲线）：公共规则 km-review.js（各图谱页按需引用，见下面改路径）+ 汇总页「今天该复习」
+Copy-Item "$here\hub\km-review.js" "$work\assets\www\km-review.js"
+Copy-Item "$here\hub\review.html" "$work\assets\www\review.html"
 # #1 设备同步：km-sync.js（发布分区、安全页面合并）、设备同步页、扫码和生成二维码（jsQR Apache-2.0、qrcode-generator MIT，单文件，file:// 可用）
 Copy-Item "$here\hub\km-sync.js" "$work\assets\www\km-sync.js"
 Copy-Item "$here\hub\sync.html" "$work\assets\www\sync.html"
@@ -102,6 +105,9 @@ Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
   $shim = ('../' * $depth) + 'km-shim.js'
   $html = [IO.File]::ReadAllText($_.FullName, $utf8)
   $html = [regex]::Replace($html, '((?:src|href)="[^"?#]+)\?v=[^"]*"', '$1"')
+  # 图谱页开发时引用 ../knowledge-map-app/hub/km-review.js，App 里 hub 的文件都在网页根目录：改成 ../km-review.js
+  $html = [regex]::Replace($html, '((?:src|href)="(?:\.\./)*)knowledge-map-app/hub/', '$1')
+  if ($html -match 'knowledge-map-app/') { throw "$($_.FullName) 里还有指向 knowledge-map-app/ 的路径，App 里找不到" }
   $data = ('../' * $depth) + 'km-data.js'
   $study = ('../' * $depth) + 'km-study.js'
   $narrate = ('../' * $depth) + 'km-narrate.js'
@@ -172,7 +178,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-review.js', 'assets/www/review.html', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   # APK 里不能有 lib/：只有 64 位的库的话，32 位平板会因为没有匹配的 ABI 整个装不上（语音识别库是用时下载的）

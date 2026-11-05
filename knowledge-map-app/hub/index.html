@@ -51,6 +51,16 @@
   .synctag { position: fixed; top: 12px; right: 12px; z-index: 5; padding: 6px 12px; border-radius: 999px; font-size: 14px; text-decoration: none;
     background: var(--surface); border: 1px solid var(--line); color: var(--muted); box-shadow: var(--shadow); }
   .synctag.ok { color: #2f8a4c; } .synctag.error, .synctag.offline { color: #c23f2e; } .synctag.syncing { color: var(--accent); }
+  /* 间隔复习：今天该复习（review.html） */
+  .review { display: flex; align-items: center; gap: 16px; width: 100%; max-width: 980px; margin-top: 16px; padding: 14px 22px; border-radius: 16px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--text); text-decoration: none; box-shadow: var(--shadow);
+    -webkit-tap-highlight-color: transparent; transition: transform .12s, border-color .12s; }
+  .review:active { transform: scale(.98); }
+  .review:hover, .review.due { border-color: #d4553f; }
+  .review .ico { background: #fde7e2; }
+  .review h2 { margin: 0 0 4px; font-size: 20px; }
+  .review p { margin: 0; color: var(--muted); font-size: 14px; }
+  .review .badge { margin-left: auto; flex: none; padding: 6px 12px; border-radius: 999px; background: #d4553f; color: #fff; font-size: 14px; font-weight: 600; }
   .pet .badge { margin-left: auto; flex: none; padding: 6px 12px; border-radius: 999px; background: #e8893b; color: #fff; font-size: 14px; font-weight: 600; }
 </style>
 </head>
@@ -59,6 +69,7 @@
   <h1>知识图谱</h1>
   <p class="muted">福建中考 · 从小学一路走到初三</p>
   <a class="pet" id="petCard" href="pet/index.html"><span class="ico">🐶</span><div><h2>领养一只小狗</h2><p>掌握知识点就能领骨头，喂它长大</p></div></a>
+  <a class="review" id="reviewCard" href="review.html" hidden><span class="ico">📅</span><div><h2>今天该复习</h2><p id="reviewText"></p></div><span class="badge" id="reviewBadge" hidden></span></a>
   <div class="grid">
     <div class="group">主科</div>
     <a class="card" href="math-map/index.html"><span class="ico" style="background:#e3edfc">📐</span><div><h2>数学</h2><p>三年级 → 九年级 · 含奥数拓展</p></div></a>
@@ -79,6 +90,7 @@
 <script src="km-data.js"></script>
 <script src="km-study.js"></script>
 <script src="pet/pet-core.js"></script>
+<script src="km-review.js"></script>
 <script>
   // 小狗卡片：名字、等级、饱食度、待领骨头
   // 只显示、不写回：饱食度按 tick 折算到现在只用来画卡片（宠物页、发骨头时各自会折算），小部件自己按 tick 算。
@@ -114,6 +126,31 @@
   }
   window.addEventListener('km-sync', function (e) { if (e.detail && e.detail.type === 'state') renderSync(); });
   window.addEventListener('pageshow', renderSync);
+  // 今天该复习：各科错题 / 错词按遗忘曲线到期的数量（km-review.js）。听写词单在 App 里存在原生共享存储，要等 KMData.ready 拿到令牌再读
+  function renderReview() {
+    var R = window.KMReview; if (!R) return;
+    var keys = {};
+    R.MODULES.forEach(function (m) {
+      var v;
+      if (m.key === 'fjzk-en-dictation-v1' && window.KMApp && KMApp.sharedGet && window.KMData) { var s = KMData._sharedRead(m.key); v = s ? s.value : undefined; }
+      else { try { v = JSON.parse(localStorage.getItem(m.key) || 'null') || undefined; } catch (e) { v = undefined; } }
+      keys[m.key] = v;
+    });
+    var list = R.summary(keys), bySubj = {}, due = 0, total = 0;
+    list.forEach(function (x) { due += x.due; total += x.total; if (x.due) bySubj[x.subject] = (bySubj[x.subject] || 0) + x.due; });
+    var card = document.getElementById('reviewCard');
+    card.hidden = !total;
+    card.classList.toggle('due', due > 0);
+    document.getElementById('reviewText').textContent = due
+      ? Object.keys(bySubj).map(function (k) { return k + ' ' + bySubj[k]; }).join(' · ') + '　按遗忘曲线安排，到期做对进入下一轮'
+      : '今天没有到期的 · ' + total + ' 个错题、错词还在复习中';
+    var badge = document.getElementById('reviewBadge');
+    badge.hidden = !due;
+    badge.textContent = due + ' 个到期';
+  }
+  (window.KMData ? KMData.ready() : Promise.resolve()).then(renderReview, renderReview);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) renderReview(); });
+  window.addEventListener('km-sync-merged', renderReview);
   if (window.KMApp && KMApp.ready) KMApp.ready().then(renderSync);
 </script>
 <script>

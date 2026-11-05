@@ -89,13 +89,14 @@
   <section class="view" id="vWrong" hidden>
     <div class="card">
       <h2 id="wrongTitle">错词本</h2>
-      <p class="hint" id="wrongHint">默写写错的词会进错词本，再默写写对一次就移出。</p>
+      <p class="hint" id="wrongHint">默写写错的词会进错词本，按 1、2、4、7、15、30 天的间隔复习，6 轮都写对就算掌握。</p>
       <div id="wrongRows"></div>
       <p class="empty" id="wrongEmpty" hidden>没有错词，真棒！</p>
     </div>
     <div class="row-actions sticky">
       <button class="btn big" id="btnWrongStudy">背错词</button>
-      <button class="btn primary big" id="btnWrongDict">默写错词</button>
+      <button class="btn big" id="btnWrongDict">默写全部错词</button>
+      <button class="btn primary big" id="btnWrongDue" hidden>默写今天到期的</button>
     </div>
   </section>
 
@@ -110,6 +111,7 @@
 <script src="audio/syl-index.js"></script>
 <script src="data/phonics-words.js"></script>
 <script src="js/phonics.js"></script>
+<script src="../knowledge-map-app/hub/km-review.js"></script>
 <script src="js/dict-run.js"></script>
 <script>
   DictRun.mount(document.getElementById('dictRun'), {

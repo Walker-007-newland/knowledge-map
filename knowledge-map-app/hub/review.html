@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>今天该复习</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --surface: #ffffff; --text: #1f2328; --muted: #6b6f76; --line: #ddd7cb;
+    --accent: #2f6fde; --due: #d4553f; --ok: #2f8a4c; --shadow: 0 6px 24px rgba(30, 30, 20, .10);
+    --font: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181b; --surface: #212226; --text: #e8e6e1; --muted: #9a9ca3; --line: #36373d;
+      --accent: #6b9bf0; --due: #ef7a68; --ok: #5cbf7a; --shadow: 0 6px 24px rgba(0, 0, 0, .5);
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { min-height: 100vh; padding: 16px 16px 32px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  header h1 { margin: 0; font-size: 26px; }
+  .back { font: inherit; font-size: 15px; color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; text-decoration: none; }
+  .sum { margin: 8px 0 16px; font-size: 17px; }
+  .sum b { color: var(--due); font-size: 22px; }
+  .mod { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 18px; margin: 12px 0; border-radius: 16px;
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .mod.has-due { border-color: var(--due); }
+  .mod .sub { flex: none; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; background: var(--bg); color: #1f2328; }
+  .mod .info { flex: 1; min-width: 180px; }
+  .mod h2 { margin: 0 0 4px; font-size: 19px; }
+  .mod p { margin: 0; color: var(--muted); font-size: 14px; }
+  .mod .due { color: var(--due); font-weight: 700; }
+  .go { flex: none; font: inherit; font-size: 16px; padding: 10px 18px; border-radius: 12px; text-decoration: none; border: 1px solid var(--line); color: var(--accent); background: var(--surface); }
+  .mod.has-due .go { background: var(--due); border-color: var(--due); color: #fff; font-weight: 600; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 16px; }
+  .rule { margin-top: 24px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+  .rule b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><a class="back" href="index.html">‹ 总入口</a><h1>📅 今天该复习</h1></header>
+  <p class="sum" id="sum">正在统计…</p>
+  <div id="mods"></div>
+  <p class="empty" id="empty" hidden>现在没有在复习的错题、错词。做错的题会自动按遗忘曲线安排复习。</p>
+  <div class="rule">
+    <b>怎么安排的：</b>做错的题、写错的词、背错的句子，第二天复习；到了复习日做对，就进入下一轮，间隔依次是 1、2、4、7、15、30 天（越记越牢，隔得越久）；
+    第 6 轮（隔 30 天那次）也做对，就算真正掌握了，移出错题本。复习时又做错，就从第 1 轮重新开始。<br>
+    没到复习日的也可以在各科的错题本里先练：做对不推进轮次，做错就明天复习。
+  </div>
+</div>
+<script src="km-data.js"></script>
+<script src="km-review.js"></script>
+<script>
+  (function () {
+    var R = window.KMReview, inApp = !!(window.KMApp && KMApp.goBack);
+    // 开发时本页在仓库的 App 目录 hub 下（两层），各图谱在仓库根目录；App 里本页就在网页根目录
+    var base = /\/knowledge-map-app\/hub\//.test(location.pathname) ? '../../' : '';
+    var SUBJ_BG = { '数学': '#e3edfc', '英语': '#e6f4ea', '语文': '#fbe9e4' };
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    // 读各模块的存储：听写词单在 App 里存在原生共享存储（要等 KMData.ready 拿到令牌），其余在本页的 localStorage
+    function read(key) {
+      if (key === 'fjzk-en-dictation-v1' && window.KMApp && KMApp.sharedGet && window.KMData) {
+        var s = KMData._sharedRead(key);
+        return s ? s.value : undefined;
+      }
+      try { return JSON.parse(localStorage.getItem(key) || 'null') || undefined; } catch (e) { return undefined; }
+    }
+    function render() {
+      var keys = {};
+      R.MODULES.forEach(function (m) { keys[m.key] = read(m.key); });
+      var list = R.summary(keys), day = R.today();
+      var due = list.reduce(function (s, x) { return s + x.due; }, 0), total = list.reduce(function (s, x) { return s + x.total; }, 0);
+      document.getElementById('sum').innerHTML = !total ? '' : due
+        ? '今天一共有 <b>' + due + '</b> 个到期，做完就能保持记忆。' + (total > due ? '（另有 ' + (total - due) + ' 个还没到复习日）' : '')
+        : '今天没有到期的，真棒！' + total + ' 个还在复习中，到时候会提醒你。';
+      document.getElementById('empty').hidden = total > 0;
+      document.getElementById('mods').innerHTML = list.filter(function (x) { return x.total > 0; })
+        .sort(function (a, b) { return b.due - a.due; })
+        .map(function (x) {
+          var href = inApp && x.app ? x.app : base + x.href;
+          return '<div class="mod' + (x.due ? ' has-due' : '') + '"><span class="sub" style="background:' + (SUBJ_BG[x.subject] || '') + '">' + esc(x.subject) + '</span>' +
+            '<div class="info"><h2>' + esc(x.name) + '</h2><p>' + (x.due ? '<span class="due">今天到期 ' + x.due + ' ' + x.unit + '</span> · ' : '今天没有到期的 · ') +
+            '在复习 ' + x.total + ' ' + x.unit + (x.next && !x.due ? ' · 下次 ' + R.mdOf(x.next) : '') + '</p></div>' +
+            '<a class="go" href="' + esc(href) + '">' + (x.due ? '去复习' : '去看看') + '</a></div>';
+        }).join('');
+    }
+    (window.KMData ? KMData.ready() : Promise.resolve()).then(render, render);
+    window.addEventListener('pageshow', function (e) { if (e.persisted) render(); });
+  })();
+</script>
+</body>
+</html>

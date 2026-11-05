@@ -302,11 +302,15 @@
   const joinProg = (a, b) => joinObj(a, b, { viewed: jMin, best: jMax, attempts: jMax }, [LU, DG]);
   // 数学进度：best 取大；last+at 一起取 at 新的
   const joinMath = (a, b) => joinObj(a, b, { best: jMax }, [MATH_LA]);
-  // 数学错题：n 取大、at 取新
-  const joinWrong = (a, b) => joinObj(a, b, { n: jMax, at: jMax });
+  // 间隔复习状态 sr = { s: 轮次, d: 下次复习日, t: 复习时间 }（见 hub/km-review.js）：整份取 t 较新的，t 相同取 JSON 文本较大的
+  const joinSr = (a, b) => pick(a, b, v => [isObj(v) ? +v.t || 0 : -1, canon(v)]);
+  const srTime = v => isObj(v) && isObj(v.sr) ? +v.sr.t || 0 : 0;
+  // 数学错题：n 取大、at 取新、复习状态 sr 取较新的
+  const joinWrong = (a, b) => joinObj(a, b, { n: jMax, at: jMax, sr: joinSr });
   // 英语单元单词（#9）：每个词 { k, kt, r, rt, w: { 设备: 累计写错次数 }, n: { 设备: 累计默写次数 } }
   //   k+kt（背诵：最近一次标「会了」1 /「不会」0 及时间）一组、r+rt（默写：最近一次对 1 / 错 0 及时间，r=0 即在错词本）一组，
-  //   各取时间较新的那组（时间相同取 JSON 文本较大的）；w、n 按设备取大，显示时各设备相加
+  //   各取时间较新的那组（时间相同取 JSON 文本较大的）；w、n 按设备取大，显示时各设备相加；
+  //   sr（间隔复习状态，语文听写 / 默写 / 背诵同样有）取 sr.t 较新的，见 joinSr
   const KT = { fields: ['k', 'kt'], key: s => [+s.kt || 0, canon(s)] };
   const RT = { fields: ['r', 'rt'], key: s => [+s.rt || 0, canon(s)] };
   function joinCount(a, b) {
@@ -315,22 +319,27 @@
     [a, b].forEach(src => Object.keys(isObj(src) ? src : {}).forEach(d => { r[d] = jMax(r[d], src[d]); }));
     return r;
   }
-  const joinWord = (a, b) => joinObj(a, b, { w: joinCount, n: joinCount }, [KT, RT]);
-  const wordTime = v => isObj(v) ? Math.max(+v.kt || 0, +v.rt || 0) : 0;
+  const joinWord = (a, b) => joinObj(a, b, { w: joinCount, n: joinCount, sr: joinSr }, [KT, RT]);
+  const wordTime = v => isObj(v) ? Math.max(+v.kt || 0, +v.rt || 0, srTime(v)) : 0;
 
-  // 听写词单：名称、单词表等取修改记录较新的；错词取并集、次数取大；history 按 at 去重、保留最近 50 条；created 取早
+  // 听写词单：名称、单词表等取修改记录较新的；错词取并集、次数取大；复习状态 sr 按词取较新的（joinSr）；history 按 at 去重、保留最近 50 条；created 取早
   function joinList(a, b, ea, eb) {
     if (a === undefined && b === undefined) return undefined;
     if (a === undefined) return joinList(b, b, eb, eb);     // 只一边有：和自己合并一次，同样去重排序，输出和两边都有时一样规范
     if (b === undefined) return joinList(a, a, ea, ea);
     if (!isObj(a) || !isObj(b)) return clone(jCanon(a, b));
-    const SPECIAL = ['wrong', 'history', 'created'];
+    const SPECIAL = ['wrong', 'history', 'created', 'sr'];
     const rest = o => { const r = Object.assign({}, o); SPECIAL.forEach(f => delete r[f]); return r; };
     const w = pick({ g: rest(a), e: ea }, { g: rest(b), e: eb }, o => [o.e.t, o.e.by, canon(o.g)]);
     const r = clone(w.g);
     const wrong = {};
     [a.wrong, b.wrong].forEach(src => Object.keys(isObj(src) ? src : {}).forEach(k => { wrong[k] = jMax(wrong[k], src[k]); }));
     r.wrong = wrong;
+    if (hasOwn(a, 'sr') || hasOwn(b, 'sr')) {
+      const sr = {};
+      [a.sr, b.sr].forEach(src => Object.keys(isObj(src) ? src : {}).forEach(k => { const v = joinSr(sr[k], src[k]); if (v !== undefined) sr[k] = clone(v); }));
+      r.sr = sr;
+    }
     const hist = new Map();
     (Array.isArray(a.history) ? a.history : []).concat(Array.isArray(b.history) ? b.history : []).forEach(h => {
       if (!isObj(h)) return;
@@ -412,7 +421,7 @@
        这台设备是在看到这些之后才删的（两台设备时钟不准时可能出现 x 比 t / at 早）；
        没有删除时间也没有修改时间的“删除前内容”不算数（不是我们写出来的数据）。
        这样已删除的一边永远不会让条目“复活”，合并结果写回后再读也是同一个状态，所以满足交换、结合、幂等 */
-  const itemHint = (kind, v) => kind === 'list' ? listHint(v) : kind === 'mathWrong' && isObj(v) ? +v.at || 0 : kind === 'words' ? wordTime(v) : 0;
+  const itemHint = (kind, v) => kind === 'list' ? listHint(v) : kind === 'mathWrong' && isObj(v) ? Math.max(+v.at || 0, srTime(v)) : kind === 'words' ? wordTime(v) : 0;
   function deadSide(kind, e) {
     const x = Math.max(e.x, e.t, itemHint(kind, e.v));
     const r = Object.assign({}, e, { x });
@@ -900,8 +909,15 @@
     const dict = k[DICT];
     out.lists = isObj(dict) && Array.isArray(dict.lists) ? dict.lists.length : 0;
     out.words = countIf(k[WORDS], w => w.k === 1);          // 英语单元单词：会了的词数
-    out.wordsWrong = countIf(k[WORDS], w => w.r === 0);     // 在错词本里的词数
+    out.wordsWrong = countIf(k[WORDS], inReview);          // 在错词本里（间隔复习中）的词数
     return out;
+  }
+
+  // 逐词记录在不在错词本（间隔复习）里：和 hub/km-review.js fromWord 一致
+  function inReview(w) {
+    const sr = isObj(w.sr) ? w.sr : null;
+    if (w.r === 0 && (!sr || (+w.rt || 0) > (+sr.t || 0))) return true;
+    return !!sr && (+sr.s || 0) < 6;
   }
 
   function stamp(withTime) {
@@ -922,8 +938,8 @@
     petBones, normPet, normStudy, ownedPrice, uniqClaimed,
     // 草稿正文的算法（同步层显示用）
     computeDraft,
-    // 单元单词一个词的合并（测试用）
-    joinWord,
+    // 单元单词一个词的合并、复习状态的合并（测试用）
+    joinWord, joinSr,
     // 测试和调试用
     _flush: flush, _canon: canon, _resetDevice: () => { dev = null; }, _itemsOf: (key, v) => itemsOf(byKey[key], v), _sharedRead: sharedRead
   };

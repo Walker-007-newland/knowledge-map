@@ -22,6 +22,13 @@
     <div class="row-actions">
       <button class="btn primary big" id="btnNewManual">✍️ 新建词单</button>
     </div>
+    <div class="card review-card" id="review" hidden>
+      <div class="rv-head"><span id="reviewHead"></span>
+        <button class="btn small" id="btnReviewList">看看有哪些</button>
+        <button class="btn primary" id="btnReview" hidden>复习</button></div>
+      <p class="hint">错词按 1、2、4、7、15、30 天的间隔复习：到期写对进入下一轮，第 6 轮也写对就算掌握。没到期的也可以在词单里选「只听错词」练，写对不推进，写错明天复习。</p>
+      <div id="reviewRows" class="rv-rows" hidden></div>
+    </div>
     <div id="lists"></div>
     <p class="empty" id="listsEmpty">还没有词单。点「新建词单」，把要听写的单词输进去吧。</p>
   </section>
@@ -54,6 +61,7 @@
 <script src="audio/syl-index.js"></script>
 <script src="data/phonics-words.js"></script>
 <script src="js/phonics.js"></script>
+<script src="../knowledge-map-app/hub/km-review.js"></script>
 <script src="js/dict-run.js"></script>
 <script>DictRun.mount(document.getElementById('dictRun'));</script>
 <script src="js/dictation.js"></script>

@@ -19,6 +19,55 @@
   const findList = id => db.lists.find(l => l.id === id);
   const keyOf = en => en.toLowerCase().replace(/\s+/g, ' ').trim();
 
+  /* ---------------- 错词的间隔复习（knowledge-map-app/hub/km-review.js） ----------------
+     每个词单里 wrong = { 词: 累计写错次数 }（不再因为写对删掉），sr = { 词: { s 轮次, d 下次复习日, t } }。
+     做错明天复习；到期写对进入下一轮（1、2、4、7、15、30 天）；第 6 轮写对算掌握。升级前的错词没有 sr，算今天到期 */
+  const R = window.KMReview;
+  const stOf = (l, k) => R ? R.fromDict(l, k) : ((l.wrong || {})[k] ? { s: 0, d: '' } : null);
+  const dueOf = (l, k) => R ? R.isDue(stOf(l, k)) : !!stOf(l, k);
+  // 「今天该复习」：所有词单里今天到期的词（同一个词在几个词单里只算一次），记下它在哪些词单里
+  function dueWords() {
+    const map = new Map();
+    db.lists.forEach(l => (l.words || []).forEach(w => {
+      const k = keyOf(w.en);
+      if (!dueOf(l, k)) return;
+      if (!map.has(k)) map.set(k, Object.assign({}, w, { lists: [] }));
+      map.get(k).lists.push(l.id);
+    }));
+    return Array.from(map.values());
+  }
+  // 所有在复习里的词（显示轮次、下次复习日用），按到期先后排
+  function reviewWords() {
+    const map = new Map();
+    db.lists.forEach(l => (l.words || []).forEach(w => {
+      const k = keyOf(w.en), st = stOf(l, k);
+      if (!st) return;
+      const cur = map.get(k);
+      if (!cur || (R && R.cmp(st, cur.st) < 0)) map.set(k, { w, st, list: l.name });
+    }));
+    const arr = Array.from(map.values());
+    return R ? R.sortByDue(arr, x => x.st) : arr;
+  }
+  function renderReview() {
+    const box = $('#review');
+    const all = reviewWords(), due = dueWords();
+    box.hidden = !all.length;
+    if (!all.length) return;
+    const day = R ? R.today() : '';
+    $('#reviewHead').innerHTML = due.length
+      ? `📅 今天该复习 <b>${due.length}</b> 个错词` + (all.length > due.length ? `<small>（另有 ${all.length - due.length} 个还没到复习日）</small>` : '')
+      : `📅 今天没有到期的错词<small>（${all.length} 个在复习，最近一个${R ? R.label(all[0].st, day).replace(/^第 \d+ 轮 · /, '') : ''}）</small>`;
+    $('#btnReview').hidden = !due.length;
+    $('#btnReview').textContent = `复习到期的 ${due.length} 个`;
+    $('#reviewRows').innerHTML = all.map(x => `<div class="rv-row${R && R.isDue(x.st, day) ? ' due' : ''}"><b>${esc(x.w.en)}</b><span class="rv-zh">${esc(x.w.zh || '')}</span><span class="rv-st">${R ? R.label(x.st, day) : '错词'}</span><span class="rv-list">${esc(x.list)}</span></div>`).join('');
+  }
+  function openReview(replace) {
+    const words = dueWords();
+    if (!words.length) return false;
+    runner.openSetup({ name: '今天该复习（' + words.length + ' 个）', words, review: true }, replace);
+    return true;
+  }
+
   /* ---------------- 页面切换（配合返回键） ---------------- */
   const VIEWS = ['vList', 'vEdit', 'vSetup', 'vRun', 'vCheck', 'vResult'];
   const TITLES = { vList: '单词听写', vEdit: '编辑词单', vSetup: '听写设置', vRun: '听写中', vCheck: '批改', vResult: '听写结果' };
@@ -63,13 +112,14 @@
   function renderLists() {
     const box = $('#lists');
     $('#listsEmpty').hidden = db.lists.length > 0;
+    renderReview();
     box.innerHTML = db.lists.map(l => {
-      const nWrong = Object.keys(l.wrong || {}).length;
+      const nWrong = wrongIn(l), nDue = dueIn(l);
       const last = (l.history || [])[l.history.length - 1];
       const lastTxt = last ? `上次 ${last.correct}/${last.total}（${new Date(last.at).toLocaleDateString()}）` : '还没听写过';
       return `<div class="card list-card" data-id="${l.id}">
         <div class="info"><div class="name">${esc(l.name)}</div>
-          <div class="meta">${l.words.length} 个词 · ${lastTxt}${nWrong ? ` · <span class="bad">错词 ${nWrong} 个</span>` : ''}</div></div>
+          <div class="meta">${l.words.length} 个词 · ${lastTxt}${nWrong ? ` · <span class="bad">错词 ${nWrong} 个${nDue ? `，今天到期 ${nDue} 个` : ''}</span>` : ''}</div></div>
         <button class="btn" data-act="del">删除</button>
         <button class="btn" data-act="edit">编辑</button>
         <button class="btn primary" data-act="go">开始听写</button>
@@ -88,6 +138,14 @@
     }
   });
   $('#btnNewManual').onclick = () => { openEdit(null); addRow({ en: '', zh: '', on: true }, true); };
+  $('#btnReview').onclick = () => openReview();
+  $('#btnReviewList').onclick = () => {
+    const rows = $('#reviewRows');
+    rows.hidden = !rows.hidden;
+    $('#btnReviewList').textContent = rows.hidden ? '看看有哪些' : '收起';
+  };
+  const wrongIn = l => (l.words || []).filter(w => stOf(l, keyOf(w.en))).length;
+  const dueIn = l => (l.words || []).filter(w => dueOf(l, keyOf(w.en))).length;
 
   /* ---------------- 编辑词单 ---------------- */
   let editing = null, rows = [], editDirty = false;
@@ -159,6 +217,7 @@
       editing.name = name; editing.words = words;
       const keep = new Set(words.map(w => keyOf(w.en)));
       Object.keys(editing.wrong || {}).forEach(k => { if (!keep.has(k)) delete editing.wrong[k]; });
+      Object.keys(editing.sr || {}).forEach(k => { if (!keep.has(k)) delete editing.sr[k]; });
     } else {
       editing = { id: 'L' + Date.now().toString(36), name, words, wrong: {}, history: [], created: Date.now() };
       db.lists.unshift(editing);
@@ -174,20 +233,36 @@
     save,
     show: (v, push) => show(v, push),
     current: () => current,
-    wrongCount: l => Object.keys(l.wrong || {}).length,
-    isWrong: (l, k) => !!(l.wrong || {})[k],
+    // 「今天该复习」那组词（src.review）分散在几个词单里：按词找回所在的词单
+    wrongCount: l => l.review ? l.words.length : wrongIn(l),
+    isWrong: (l, k) => l.review ? true : !!stOf(l, k),
+    dueCount: l => l.review ? l.words.length : dueIn(l),
+    isDue: (l, k) => l.review ? true : dueOf(l, k),
     record(l, rows, scope) {
-      l.wrong = l.wrong || {};
-      l.history = l.history || [];
-      let correct = 0;
-      rows.forEach(({ w, wrong }) => {
-        const k = keyOf(w.en);
-        if (wrong) l.wrong[k] = (l.wrong[k] || 0) + 1;
-        else { correct++; delete l.wrong[k]; }       // 这次写对了就移出错词本
-      });
-      l.history.push({ at: Date.now(), total: rows.length, correct, scope });
-      if (l.history.length > 50) l.history.splice(0, l.history.length - 50);
+      const now = Date.now();
+      let correct = 0, up = 0, done = 0;
+      const mark = (list, k, wrong) => {
+        if (R) {
+          const r = R.markDict(list, k, wrong, now);
+          if (!wrong && r.after && r.after !== r.before) { if (r.after.s >= R.DONE) done++; else up++; }
+        } else {
+          list.wrong = list.wrong || {};
+          if (wrong) list.wrong[k] = (list.wrong[k] || 0) + 1; else delete list.wrong[k];
+        }
+      };
+      if (l.review) {
+        rows.forEach(({ w, wrong }) => {
+          if (!wrong) correct++;
+          (w.lists || []).forEach(id => { const list = findList(id); if (list) mark(list, keyOf(w.en), wrong); });
+        });
+      } else {
+        l.history = l.history || [];
+        rows.forEach(({ w, wrong }) => { if (!wrong) correct++; mark(l, keyOf(w.en), wrong); });
+        l.history.push({ at: now, total: rows.length, correct, scope });
+        if (l.history.length > 50) l.history.splice(0, l.history.length - 50);
+      }
       save();
+      return [up && `${up} 个错词复习过关、进入下一轮`, done && `${done} 个错词已掌握、移出错词本`].filter(Boolean).join('，');
     },
     // 结果页在设置页那条历史记录上（设置 → 听写中 → 批改 → 结果都是 replaceState），退一步就是词单；
     // 不再压新记录，免得词单页按返回先回到旧的结果页（#9 真机确认问题 1，和单元单词页一致）
@@ -198,4 +273,6 @@
   /* ---------------- 启动 ---------------- */
   renderLists();
   show('vList', false);
+  // 总入口「今天该复习」进来（?review=1）：直接打开到期错词的听写设置
+  if (/[?&]review=1/.test(location.search)) openReview();
 })();

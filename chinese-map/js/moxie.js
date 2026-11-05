@@ -2,7 +2,8 @@
  * 诗文：data/moxie/poems.js（window.KMX，docs/moxie/build_poems.py 从 data/gushi-kb-*.js 生成），每首按标点切成小句 c[i] = { t, p }
  * 题目：{ key, poem, hide: 要默写的小句序号（整首纸上写为 'all'）, show: 题面显示的小句序号, kind: 'pair' | 'whole' }
  * 存储（纳入「我的数据」导出导入与设备同步，合并规则同语文听写，见 hub/km-data.js）：
- *   fjzk-zh-moxie-v1      逐句记录 { "<诗id>#<小句序号|all>": { r, rt, w: {设备: 写错次数}, n: {设备: 默写次数} } }，r=0 即在错句本
+ *   fjzk-zh-moxie-v1      逐句记录 { "<诗id>#<小句序号|all>": { r, rt, sr, w: {设备: 写错次数}, n: {设备: 默写次数} } }
+ *                         错句本 = 间隔复习里的句子（sr，见 knowledge-map-app/hub/km-review.js）：写错明天复习，到期写对进入下一轮，第 6 轮写对算掌握
  *   fjzk-zh-moxie-set-v1  年级、册、勾选的诗、默写设置 */
 (function () {
   'use strict';
@@ -31,7 +32,10 @@
   function recs() { if (!recCache) recCache = readJSON(STORE) || {}; return recCache; }
   function updateRecs(fn) { recCache = null; const all = recs(); fn(all); writeJSON(STORE, all); }
   function devId() { try { return window.KMData ? KMData.device().id : 'web'; } catch (e) { return 'web'; } }
-  const inWrong = key => { const r = recs()[key]; return !!(isObj(r) && r.r === 0); };
+  const RV = window.KMReview;
+  const stOf = key => { const r = recs()[key]; return RV ? RV.fromWord(r) : (isObj(r) && r.r === 0 ? { s: 0, d: '' } : null); };
+  const inWrong = key => !!stOf(key);
+  const isDue = key => RV ? RV.isDue(stOf(key)) : inWrong(key);
   const wrongKeysOf = p => Object.keys(recs()).filter(k => k.startsWith(p.id + '#') && inWrong(k));
   window.addEventListener('pageshow', () => { recCache = null; if (current === 'vHome') renderHome(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { recCache = null; if (current === 'vHome') renderHome(); } });
@@ -116,8 +120,9 @@
     const picked = [...sel];
     $('#selInfo').textContent = picked.length ? `已选 ${picked.length} 首` + (picked.length > nIn ? `（其中别的册 ${picked.length - nIn} 首）` : '') : '先勾选要默写的诗';
     $('#btnGo').disabled = !picked.length;
-    const nWrong = Object.keys(recs()).filter(k => inWrong(k) && POEMS[k.split('#')[0]]).length;
-    $('#btnWrong').textContent = nWrong ? `错句本（${nWrong}）` : '错句本';
+    const wk = Object.keys(recs()).filter(k => inWrong(k) && POEMS[k.split('#')[0]]), nWrong = wk.length, nDue = wk.filter(isDue).length;
+    $('#btnWrong').textContent = nWrong ? `错句本（${nWrong}${nDue ? ` · 今天到期 ${nDue}` : ''}）` : '错句本';
+    $('#btnWrong').classList.toggle('primary', nDue > 0);
   }
   function setSel(ids, on) {
     const sel = selSet();
@@ -157,10 +162,12 @@
   $('#btnWrong').onclick = () => { renderWrong(); show('vWrong'); };
 
   /* ---------------- 错句本 ---------------- */
-  let wrongTargets = [];
+  let wrongTargets = [], dueTargets = [];
   const clauseText = (p, i) => i === 'all' ? '（整首）' : p.c[i].t;
+  const stLabel = (key, day) => RV ? `<span class="rv-st${isDue(key) ? ' due' : ''}">${RV.label(stOf(key), day)}</span>` : '';
   function renderWrong() {
     wrongTargets = [];
+    const day = RV ? RV.today() : '';
     const html = BOOKS.map(b => {
       const rows = bookPoems(b).map(p => {
         const ks = wrongKeysOf(p);
@@ -169,14 +176,25 @@
         hides.sort((x, y) => (x === 'all' ? -1 : x) - (y === 'all' ? -1 : y));
         hides.forEach(h => wrongTargets.push({ poem: p, hide: h }));
         return `<h4 class="w-lesson">${esc(p.group.name)} · 《${esc(p.title)}》</h4>` + hides.map(h =>
-          `<div class="w-row"><b>${esc(clauseText(p, h))}</b><span class="w-n">错过 ${wrongTimes(p.id + '#' + h)} 次</span><span></span></div>`).join('');
+          `<div class="w-row"><b>${esc(clauseText(p, h))}</b><span class="w-n">${stLabel(p.id + '#' + h, day)} 错过 ${wrongTimes(p.id + '#' + h)} 次</span><span></span></div>`).join('');
       }).join('');
       return rows ? `<div class="w-book"><div class="w-book-head"><h3>${esc(b.name)}册</h3></div>${rows}</div>` : '';
     }).join('');
-    $('#wrongRows').innerHTML = html;
+    // 今天到期的放最上面一组（按到期先后）
+    const keyOfT = t => t.poem.id + '#' + t.hide;
+    dueTargets = RV ? RV.sortByDue(wrongTargets.filter(t => isDue(keyOfT(t))), t => stOf(keyOfT(t))) : [];
+    const dueHtml = dueTargets.length ? `<div class="w-book rv-due"><div class="w-book-head"><h3>📅 今天到期 <small>${dueTargets.length} 句</small></h3>
+        <button class="btn primary" data-due="1">默写今天到期的</button></div>` + dueTargets.map(t =>
+        `<div class="w-row"><b>${esc(clauseText(t.poem, t.hide))}<small class="rv-poem">《${esc(t.poem.title)}》</small></b><span class="w-n">${stLabel(keyOfT(t), day)} 错过 ${wrongTimes(keyOfT(t))} 次</span><span></span></div>`).join('') + '</div>' : '';
+    $('#wrongRows').innerHTML = dueHtml + (dueTargets.length && html ? '<h3 class="rv-later">全部错句（没到复习日的也可以先练：写对不推进，写错明天复习）</h3>' : '') + html;
+    $('#wrongHint').textContent = wrongTargets.length
+      ? `今天该复习 ${dueTargets.length} 句${wrongTargets.length > dueTargets.length ? `，另有 ${wrongTargets.length - dueTargets.length} 句还没到复习日` : ''}。错句按 1、2、4、7、15、30 天的间隔复习：到期写对进入下一轮，第 6 轮也写对就算掌握、移出错句本。`
+      : '默写写错的句子会进错句本，按 1、2、4、7、15、30 天的间隔复习，6 轮都写对就算掌握。';
     $('#wrongEmpty').hidden = wrongTargets.length > 0;
     $('#btnWrongGo').disabled = !wrongTargets.length;
   }
+  const openDue = () => { if (dueTargets.length) openSetup({ name: '今天该复习（' + dueTargets.length + ' 句）', targets: dueTargets.slice() }); };
+  $('#wrongRows').addEventListener('click', e => { if (e.target.closest('button[data-due]')) openDue(); });
   function wrongTimes(key) { const r = recs()[key]; return isObj(r) && isObj(r.w) ? Object.keys(r.w).reduce((s, d) => s + (+r.w[d] || 0), 0) : 0; }
   $('#btnWrongGo').onclick = () => { if (wrongTargets.length) openSetup({ name: '错句（' + wrongTargets.length + ' 句）', targets: wrongTargets.slice() }); };
 
@@ -381,24 +399,28 @@
   $('#btnCheckDone').onclick = () => {
     const c = checking; if (!c) return;
     const now = Date.now(), me = devId();
+    let up = 0, done = 0;
     updateRecs(all => c.items.forEach((it, i) => {
       const e = isObj(all[it.key]) ? all[it.key] : {};
-      e.r = c.wrong[i] ? 0 : 1; e.rt = now;
+      if (RV) {                                   // r、rt 照旧（最近一次对错），sr 按间隔复习规则推进
+        const r = RV.markWord(e, !!c.wrong[i], now);
+        if (!c.wrong[i] && r.after && r.after !== r.before) { if (r.after.s >= RV.DONE) done++; else up++; }
+      } else { e.r = c.wrong[i] ? 0 : 1; e.rt = now; }
       e.n = isObj(e.n) ? e.n : {}; e.n[me] = (+e.n[me] || 0) + 1;
       e.w = isObj(e.w) ? e.w : {}; if (c.wrong[i]) e.w[me] = (+e.w[me] || 0) + 1;
       all[it.key] = e;
     }));
-    showResult(c);
+    showResult(c, [up && `${up} 句错句复习过关、进入下一轮`, done && `${done} 句已掌握、移出错句本`].filter(Boolean).join('，'));
   };
 
   /* ---------------- 结果 ---------------- */
   let lastWrong = [];
-  function showResult(c) {
+  function showResult(c, note) {
     lastWrong = c.items.filter((it, i) => c.wrong[i]);
     const total = c.items.length, correct = total - lastWrong.length, pct = Math.round(correct / total * 100);
     $('#resScore').textContent = `${correct} / ${total}`;
     $('#resScore').classList.toggle('low', pct < 80);
-    $('#resSub').textContent = pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (lastWrong.length ? `，错了 ${lastWrong.length} 题，已记进错句本` : '');
+    $('#resSub').textContent = (pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (lastWrong.length ? `，错了 ${lastWrong.length} 题，已记进错句本（明天复习）` : '')) + (note ? ' ' + note : '');
     $('#resWrong').innerHTML = lastWrong.length
       ? '<div class="mx-wrong-list">' + lastWrong.map(it => `<div>《${esc(it.poem.title)}》<b>${esc(it.hide === 'all' ? '整首' : it.poem.c[it.hide].t)}</b></div>`).join('') + '</div>' : '';
     $('#btnResWrong').hidden = !lastWrong.length;
@@ -415,5 +437,7 @@
   /* ---------------- 启动 ---------------- */
   renderHome();
   show('vHome', false);
+  // 总入口「今天该复习」进来（?review=1）：打开错句本，有到期的直接进默写设置（返回回到错句本）
+  if (/[?&]review=1/.test(location.search)) { renderWrong(); show('vWrong'); openDue(); }
   window.__moxie = { S, recs: () => (recCache = null, recs()), POEMS, run: () => run, answerOf };
 })();

@@ -7,7 +7,8 @@
  *                     pace = 作答时间：fast / normal / slow 读完后倒计时，到时间自动下一个（键盘输入会自动保存已输入的）；none = 不限时
  *     opts.save()     设置改了以后保存
  *     opts.show(v, push) / opts.current()   页面切换（配合返回键，由页面自己管理 history）
- *     opts.wrongCount(src) / opts.isWrong(src, key)   这份词里有几个错词、某个词是不是错词
+ *     opts.wrongCount(src) / opts.isWrong(src, key)   这份词里有几个错词（在间隔复习里的）、某个词是不是错词
+ *     opts.dueCount(src) / opts.isDue(src, key)       可选：今天到期的错词数、某个词今天到期没有（有这两个才显示「今天到期」范围）
  *     opts.record(src, rows, scope)   批改完成：rows = [{ w, wrong }]，页面自己写进存储
  *     opts.onBack()   结果页「返回词单 / 返回单元」
  *   src = { name, words: [{ en, zh }] }（单词听写传的就是词单对象本身）
@@ -157,6 +158,7 @@
       <h2 id="setupName"></h2>
       <div class="dopt"><span class="dopt-label">${T.act}范围</span><div class="seg" data-opt="scope">
         <button data-v="all">全部 <i id="nAll"></i></button>
+        <button data-v="due" hidden>今天到期 <i id="nDue"></i></button>
         <button data-v="wrong">${T.scopeWrong} <i id="nWrong"></i></button>
         <button data-v="some">随机抽</button>
       </div><label class="some-n" id="someWrap">抽 <input type="number" id="someN" min="1" value="10"> 个</label></div>
@@ -268,6 +270,14 @@
       $('#nWrong').textContent = nWrong;
       document.querySelector('[data-opt=scope] [data-v=wrong]').disabled = !nWrong;
       if (S.scope === 'wrong' && !nWrong) S.scope = 'all';
+      // 间隔复习：今天到期的错词（list.review = 总的「今天该复习」，词已经都是到期的，不用再选范围）
+      const dueBtn = document.querySelector('[data-opt=scope] [data-v=due]');
+      const nDue = o.dueCount && !list.review ? o.dueCount(list) : 0;
+      dueBtn.hidden = !o.dueCount || !!list.review;
+      dueBtn.disabled = !nDue;
+      $('#nDue').textContent = nDue;
+      if (S.scope === 'due' && !nDue) S.scope = nWrong ? 'wrong' : 'all';
+      if (list.review) S.scope = 'all';
       // 这台设备没有语音引擎、词又不是全有录音：默认改成「读中文写英文」（中文显示在屏幕上，不用听也能默）
       if (ttsOk === false && !allRecorded(list.words) && S.read !== 'zh' && list.words.some(w => w.zh)) S.read = 'zh';
       showVoiceInfo(list);
@@ -327,6 +337,7 @@
       let words = list.words.slice();
       if (onlyKeys) words = words.filter(w => onlyKeys.has(keyOf(w.en)));
       else if (scope === 'wrong') words = words.filter(w => o.isWrong(list, keyOf(w.en)));
+      else if (scope === 'due' && o.isDue) words = words.filter(w => o.isDue(list, keyOf(w.en)));
       if (S.order === 'random' || scope === 'some') shuffle(words);
       if (scope === 'some' && !onlyKeys) words = words.slice(0, Math.max(1, Math.min(+S.someN || 10, words.length)));
       if (!words.length) { alert('没有可以' + T.act + '的单词。'); return; }
@@ -473,19 +484,19 @@
       if (!c || c.done) return;
       c.done = true;
       const rows = c.words.map((w, i) => ({ w, wrong: !!c.wrong[i] }));
-      o.record(c.list, rows, c.scope);
+      const note = o.record(c.list, rows, c.scope);
       const wrongWords = rows.filter(x => x.wrong).map(x => x.w);
-      showResult(c, rows.length - wrongWords.length, wrongWords);
+      showResult(c, rows.length - wrongWords.length, wrongWords, typeof note === 'string' ? note : '');
     };
 
     /* 结果 */
     let lastWrong = [];
-    function showResult(c, correct, wrongWords) {
+    function showResult(c, correct, wrongWords, note) {
       lastWrong = wrongWords;
       const total = c.words.length, pct = Math.round(correct / total * 100);
       $('#resScore').textContent = `${correct} / ${total}`;
       $('#resScore').classList.toggle('low', pct < 80);
-      $('#resSub').textContent = pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (wrongWords.length ? `，错了 ${wrongWords.length} 个，已记进错词本` : '');
+      $('#resSub').textContent = (pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (wrongWords.length ? `，错了 ${wrongWords.length} 个，已记进错词本（明天复习）` : '')) + (note ? ' ' + note : '');
       $('#resWrong').innerHTML = wrongWords.length
         ? '<div class="wrong-list">' + wrongWords.map(w => `<div><b>${esc(w.en)}</b>${esc(w.zh || '')}${phonicsBtn(w)}</div>`).join('') + '</div>' : '';
       $('#btnResWrong').hidden = !wrongWords.length;

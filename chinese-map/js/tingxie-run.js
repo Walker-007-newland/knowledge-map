@@ -7,7 +7,7 @@
  *     opts.save()     设置改了以后保存
  *     opts.show(v, push) / opts.current()   页面切换（配合返回键，由页面自己管理 history）
  *     opts.wrongCount(src) / opts.isWrong(key)   这份词里有几个错词、某个词是不是错词
- *     opts.record(src, rows)   批改完成：rows = [{ w, wrong }]，页面自己写进存储
+ *     opts.record(src, rows)   批改完成：rows = [{ w, wrong }]，页面自己写进存储；可返回一句说明（如复习过关几个），显示在结果页
  *     opts.onBack()   结果页「返回单元」
  *   src = { name, words: [{ key, w, say?, k }] }
  *
@@ -464,19 +464,19 @@
     $('#btnCheckDone').onclick = () => {
       const c = checking; if (!c) return;
       const rows = c.words.map((w, i) => ({ w, wrong: !!c.wrong[i] }));
-      o.record(c.list, rows);
+      const note = o.record(c.list, rows);
       const wrongWords = rows.filter(x => x.wrong).map(x => x.w);
-      showResult(c, rows.length - wrongWords.length, wrongWords);
+      showResult(c, rows.length - wrongWords.length, wrongWords, typeof note === 'string' ? note : '');
     };
 
     /* 结果 */
     let lastWrong = [];
-    function showResult(c, correct, wrongWords) {
+    function showResult(c, correct, wrongWords, note) {
       lastWrong = wrongWords;
       const total = c.words.length, pct = Math.round(correct / total * 100);
       $('#resScore').textContent = `${correct} / ${total}`;
       $('#resScore').classList.toggle('low', pct < 80);
-      $('#resSub').textContent = pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (wrongWords.length ? `，错了 ${wrongWords.length} 个，已记进错词本` : '');
+      $('#resSub').textContent = (pct === 100 ? '全对，太棒了！' : `正确率 ${pct}%` + (wrongWords.length ? `，错了 ${wrongWords.length} 个，已记进错词本（明天复习）` : '')) + (note ? ' ' + note : '');
       $('#resWrong').innerHTML = wrongWords.length
         ? '<div class="wrong-list">' + wrongWords.map(w => `<div><b>${esc(w.w)}</b></div>`).join('') + '</div>' : '';
       $('#btnResWrong').hidden = !wrongWords.length;

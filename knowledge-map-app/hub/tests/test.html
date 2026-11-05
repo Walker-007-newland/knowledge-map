@@ -22,6 +22,7 @@
 <script src="../km-data.js"></script>
 <script src="../km-study.js"></script>
 <script src="../pet/pet-core.js"></script>
+<script src="../km-review.js"></script>
 <script>
 (async function () {
   const D = KMData, P = KMPet, S = KMStudy;
@@ -70,13 +71,15 @@
     const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
     const pickOne = arr => arr[rnd(arr.length)];
     const devs = ['A', 'B', 'C'];
+    // 间隔复习状态：时间故意取得很窄，常常相同（相同时取 JSON 文本较大的）
+    const srGen = () => ({ s: rnd(7), d: '2026-11-0' + (1 + rnd(9)), t: rnd(40) });
     function gen(dev) {
       const keys = {}, meta = {};
       const put = (k, id, e) => { (meta[k] = meta[k] || {})[id] = e; };
       // 进度 / 数学进度 / 错题：每条随机是“有 / 删了 / 没有”
       [['fjzk-zh-progress-v1', () => ({ viewed: rnd(50), best: pickOne([null, rnd(100)]), last: pickOne([null, rnd(100)]), attempts: rnd(5), updated: rnd(30), ...(rnd(2) ? { diag: pickOne(['pass', 'fail']), diagInferred: !!rnd(2), diagAt: rnd(30) } : {}) })],
        ['mathmap-progress-v1', () => ({ best: rnd(10) / 10, last: rnd(10) / 10, at: rnd(30) })],
-       ['mathmap-wrong-v1', () => ({ n: 1 + rnd(4), at: rnd(40) })]].forEach(([k, mk]) => {
+       ['mathmap-wrong-v1', () => ({ n: 1 + rnd(4), at: rnd(40), ...(rnd(2) ? { sr: srGen() } : {}) })]].forEach(([k, mk]) => {
         const o = {};
         ['i1', 'i2', 'i3', 'i4'].forEach(id => {
           const s = rnd(3);
@@ -107,7 +110,8 @@
       const lists = [];
       ['L1', 'L2'].forEach(id => {
         const s = rnd(3);
-        const mk = () => ({ id, name: pickOne(['一', '二']), words: [{ en: pickOne(['cat', 'dog']) }], wrong: { cat: rnd(3) }, history: [{ at: rnd(5), c: rnd(2) }], created: rnd(3) });
+        const mk = () => ({ id, name: pickOne(['一', '二']), words: [{ en: pickOne(['cat', 'dog']) }], wrong: { cat: rnd(3) }, history: [{ at: rnd(5), c: rnd(2) }], created: rnd(3),
+          ...(rnd(2) ? { sr: { cat: srGen(), ...(rnd(2) ? { dog: srGen() } : {}) } } : {}) });
         if (s === 0) { lists.push(mk()); if (rnd(2)) put('fjzk-en-dictation-v1', id, { t: 10 + rnd(20), by: dev }); }
         else if (s === 1) put('fjzk-en-dictation-v1', id, { t: rnd(5), x: 10 + rnd(30), v: mk() });
       });
@@ -117,7 +121,7 @@
       const WK = 'fjzk-en-words-v1', wo = {};
       ['apple', 'look after', 'cat'].forEach(id => {
         const s = rnd(4);
-        const mk = () => ({ ...(rnd(3) ? { k: rnd(2), kt: rnd(30) } : {}), ...(rnd(3) ? { r: rnd(2), rt: rnd(30) } : {}),
+        const mk = () => ({ ...(rnd(3) ? { k: rnd(2), kt: rnd(30) } : {}), ...(rnd(3) ? { r: rnd(2), rt: rnd(30) } : {}), ...(rnd(2) ? { sr: srGen() } : {}),
           w: { [dev]: rnd(4), ...(rnd(2) ? { [pickOne(devs)]: rnd(4) } : {}) }, n: { [dev]: 1 + rnd(5) } });
         if (s <= 1) { wo[id] = mk(); if (rnd(2)) put(WK, id, { t: 10 + rnd(40), by: dev }); }
         else if (s === 2 && !rnd(3)) put(WK, id, { t: rnd(5), by: dev, x: 20 + rnd(30), v: mk() });
@@ -194,7 +198,11 @@
     ['fjzk-zh-progress-v1', at => ({ viewed: at, best: 50 + at % 7, last: 50, attempts: 1, updated: at })],
     ['fjzk-zh-drafts-v1', at => ({ 0: { text: '作文' + at } })],
     ['fjzk-en-dictation-v1', at => ({ id: 'L1', name: '单元' + at % 2, words: [{ en: 'cat' }], wrong: { cat: at % 3 }, history: [{ at, c: 1 }], created: 1 })],
-    ['fjzk-en-words-v1', at => ({ k: at % 2, kt: at, r: (at + 1) % 2, rt: at - 1, w: { A: at % 3 }, n: { A: 1 + at % 4 } })]
+    ['fjzk-en-words-v1', at => ({ k: at % 2, kt: at, r: (at + 1) % 2, rt: at - 1, w: { A: at % 3 }, n: { A: 1 + at % 4 } })],
+    // 间隔复习：带 sr 的错题 / 逐句记录 / 词单（复习时间 sr.t 也算条目自带时间；掌握的数学错题会被删除）
+    ['mathmap-wrong-v1', at => ({ n: 1, at: at - 2, sr: { s: at % 7, d: '2026-11-0' + (1 + at % 9), t: at } })],
+    ['fjzk-zh-moxie-v1', at => ({ r: 1, rt: at, sr: { s: at % 7, d: '2026-11-0' + (1 + at % 9), t: at }, w: {}, n: { A: 1 } })],
+    ['fjzk-en-dictation-v1', at => ({ id: 'L1', name: '单元', words: [{ en: 'cat' }], wrong: { cat: 1 }, sr: { cat: { s: at % 7, d: '2026-11-0' + (1 + at % 9), t: at } }, history: [{ at, c: 1 }], created: 1 })]
   ];
   // 状态：[说明, 条目内容的时间 at 或 null（这一边没有这一条）, 这一条的修改记录或 null]
   const TOMB_STATES = [
@@ -618,6 +626,148 @@
       const u1 = pk('P', { [K]: { red: { k: 1, kt: 5, r: 1, rt: 6, w: {}, n: { P: 1 } } } }), u2 = pk('Q', { [K]: { pencil: { k: 0, kt: 7, r: 0, rt: 8, w: { Q: 1 }, n: { Q: 1 } } } });
       const s1 = M(u1, u2).result, s2 = M(u2, u1).result;
       eq(s1, s2, '两台设备各背默不同单元：互相导入后两边完全一致');
+    });
+
+    await test('间隔复习规则（km-review.js）', () => {
+      const R = KMReview;
+      const T = (mo, d, h, mi) => new Date(2026, mo - 1, d, h, mi || 0).getTime();     // 本地时间
+      eq(R.INTERVALS, [1, 2, 4, 7, 15, 30], '间隔表 1、2、4、7、15、30 天');
+      eq([R.today(T(11, 5, 23, 50)), R.today(T(11, 6, 0, 10))], ['2026-11-05', '2026-11-06'], '按本地日期算今天');
+      eq([R.addDays('2026-11-28', 4), R.addDays('2026-12-30', 4), R.addDays('2028-02-28', 1), R.daysBetween('2026-12-30', '2027-01-03')], ['2026-12-02', '2027-01-03', '2028-02-29', 4], '加天数跨月、跨年、闰年');
+      // 做错：23:50 做错，明天（11-06）就到期，不是 24 小时后
+      const w = T(11, 5, 23, 50);
+      let st = R.advance(null, false, w);
+      eq(st, { s: 0, d: '2026-11-06', t: w }, '做错 → 第 1 轮（s=0），due = 明天');
+      ok(!R.isDue(st, '2026-11-05') && R.isDue(st, '2026-11-06') && R.isDue(st, '2026-11-09'), '当天不到期，第二天 0 点起到期，过期也算到期');
+      ok(R.advance(st, true, T(11, 5, 23, 55)) === st, '没到期做对：不推进（原样返回）');
+      eq(R.label(st, '2026-11-05'), '第 1 轮 · 下次 11 月 6 日', '显示「第 k 轮 · 下次 X 月 X 日」');
+      eq(R.label(st, '2026-11-06'), '第 1 轮 · 今天到期', '到期显示「今天到期」');
+      eq(R.label(st, '2026-11-08'), '第 1 轮 · 今天到期（拖了 2 天）', '过期显示拖了几天');
+      // 一路做对：每次到期当天中午复习
+      const want = [[1, '2026-11-08'], [2, '2026-11-12'], [3, '2026-11-19'], [4, '2026-12-04'], [5, '2027-01-03']];
+      const got = [];
+      let day = st.d;
+      want.forEach(() => {
+        const m = /^(\d+)-(\d+)-(\d+)$/.exec(day);
+        st = R.advance(st, true, new Date(+m[1], +m[2] - 1, +m[3], 12).getTime());
+        got.push([st.s, st.d]); day = st.d;
+      });
+      eq(got, want, '到期做对：stage+1，due = 今天 + 间隔[stage]（2、4、7、15、30 天）');
+      const last = R.advance(st, true, new Date(2027, 0, 3, 12).getTime());
+      ok(last.s === R.DONE && !R.active(last) && !R.isDue(last, '2030-01-01'), '第 6 轮（30 天那轮）做对 → 已掌握，不再到期');
+      eq(R.label(last), '已掌握', '已掌握的标签');
+      // 过期才复习：从复习那天起算
+      const late = R.advance({ s: 2, d: '2026-11-10', t: 1 }, true, T(11, 14, 9));
+      eq([late.s, late.d], [3, '2026-11-21'], '过期 4 天才复习做对：从复习当天 + 7 天');
+      // 高轮次做错：从头来
+      eq(R.advance({ s: 4, d: '2026-11-20', t: 1 }, false, T(11, 9, 8)), { s: 0, d: '2026-11-10', t: T(11, 9, 8) }, '没到期做错也从第 1 轮重来、明天复习');
+      ok(R.advance(null, true, w) === null && R.advance(last, true, w) === last, '不在复习里 / 已掌握的做对：不变');
+
+      // 迁移：升级前的错题、错词没有 sr → 第 1 轮、今天到期；不写存储
+      const lw = R.fromWord({ r: 0, rt: 5, w: { A: 1 } }), lm = R.fromMath({ n: 2, at: 5 }), ld = R.fromDict({ wrong: { cat: 1 } }, 'cat');
+      ok([lw, lm, ld].every(x => x && x.s === 0 && R.isDue(x, '2026-11-05')), '升级前的错词 / 错题 / 词单错词：第 1 轮、今天到期');
+      ok(R.fromWord({ r: 1, rt: 5 }) === null && R.fromDict({ wrong: {} }, 'cat') === null && R.fromWord(null) === null, '写对过（不在错词本）的不进复习');
+      eq(R.fromWord({ r: 1, rt: 5, sr: { s: 6, d: '2026-11-01', t: 5 } }), null, '已掌握的不在复习里');
+      // 旧版本 App 在有复习记录之后又记了一次做错
+      eq(R.fromWord({ r: 0, rt: T(11, 7, 8), sr: { s: 3, d: '2026-11-20', t: T(11, 5, 8) } }), { s: 0, d: '2026-11-08', t: T(11, 7, 8) }, 'rt 比 sr.t 新且 r=0：按那次做错算，第二天复习');
+      eq(R.fromMath({ n: 3, at: T(11, 7, 8), sr: { s: 3, d: '2026-11-20', t: T(11, 5, 8) } }).d, '2026-11-08', '数学错题 at 比 sr.t 新：同上');
+
+      // 记录：逐词
+      const e = { r: 0, rt: 5, w: { A: 1 }, n: { A: 1 } };
+      const r1 = R.markWord(e, false, T(11, 5, 10));
+      eq([e.r, e.rt, e.sr], [1, T(11, 5, 10), { s: 1, d: '2026-11-07', t: T(11, 5, 10) }], '升级前的错词今天写对：进入第 2 轮，2 天后复习');
+      eq(R.resultText(r1), '进入第 2 轮，下次 11 月 7 日', '复习结果说明');
+      const r2 = R.markWord(e, false, T(11, 5, 11));
+      ok(r2.after === r2.before && e.sr.s === 1 && e.rt === T(11, 5, 11), '当天再写对：r/rt 更新，轮次不推进');
+      eq(R.resultText(r2), '还没到复习日，这次不算（下次 11 月 7 日）', '没到期的说明');
+      R.markWord(e, true, T(11, 5, 12));
+      eq([e.r, e.sr], [0, { s: 0, d: '2026-11-06', t: T(11, 5, 12) }], '再写错：r=0，从第 1 轮重来');
+      const fresh = {}; R.markWord(fresh, false, 7);
+      eq(fresh, { r: 1, rt: 7 }, '从没错过的词写对：不加复习状态');
+      // 数学：掌握后删除
+      const book = { 'a#1': { n: 2, at: 1, sr: { s: 5, d: '2026-11-05', t: 2 } }, 'b#0': { n: 1, at: 1, sr: { s: 2, d: '2026-11-09', t: 2 } } };
+      const g = R.markMath(book, 'a#1', false, T(11, 5, 9));
+      ok(!book['a#1'] && g.after.s === R.DONE, '数学错题第 6 轮做对：移出错题本');
+      R.markMath(book, 'b#0', false, T(11, 5, 9));
+      eq(book['b#0'].sr, { s: 2, d: '2026-11-09', t: 2 }, '没到期做对：不变');
+      R.markMath(book, 'b#0', true, T(11, 5, 9));
+      eq([book['b#0'].n, book['b#0'].at, book['b#0'].sr.s, book['b#0'].sr.d], [2, T(11, 5, 9), 0, '2026-11-06'], '做错：次数 +1、明天复习');
+      R.markMath(book, 'c#3', false, 9);
+      ok(!book['c#3'], '不在错题本里的题做对：不加进来');
+      // 听写词单：写对不再删错词计数
+      const l = { words: [{ en: 'cat' }, { en: 'dog' }], wrong: { cat: 2 } };
+      R.markDict(l, 'cat', false, T(11, 5, 9));
+      eq([l.wrong.cat, l.sr.cat.s], [2, 1], '词单错词写对：错词次数保留，进入第 2 轮');
+      R.markDict(l, 'dog', true, T(11, 5, 9));
+      eq([l.wrong.dog, l.sr.dog.s, l.sr.dog.d], [1, 0, '2026-11-06'], '词单新错词');
+      // 汇总、排序
+      const sum = R.summary({
+        'mathmap-wrong-v1': { 'x#1': { n: 1, at: 3 }, 'y#2': { n: 1, at: 3, sr: { s: 1, d: '2026-11-07', t: 4 } } },
+        'fjzk-en-dictation-v1': { lists: [l, { words: [{ en: 'Cat' }], wrong: { cat: 1 } }] },
+        'fjzk-zh-tingxie-v1': { 一: { r: 0, rt: 1 }, 二: { r: 1, rt: 1 }, 三: { r: 1, rt: 1, sr: { s: 6, d: '2026-11-01', t: 1 } } }
+      }, '2026-11-06');
+      const byId = {}; sum.forEach(x => { byId[x.id] = [x.total, x.due, x.next]; });
+      eq([byId.math, byId['en-dict'], byId['zh-tingxie'], byId['zh-moxie']], [[2, 1, '2026-11-07'], [2, 1, '2026-11-07'], [1, 1, ''], [0, 0, '']], '各模块在复习 / 今天到期的数量（同一个词在几个词单里只算一次）');
+      eq(R.sortByDue([{ s: 2, d: '2026-11-09' }, { s: 0, d: '' }, { s: 1, d: '2026-11-07' }, { s: 0, d: '2026-11-07' }], x => x).map(x => x.d + '/' + x.s), ['/0', '2026-11-07/0', '2026-11-07/1', '2026-11-09/2'], '按到期先后排（马上到期的在前，同一天按轮次）');
+    });
+
+    await test('间隔复习状态的合并与同步', () => {
+      const J = D.joinSr;
+      // 三方合并的结果（law 只返回 A合B；这里先检查定律，再返回 (A合B)合C）
+      const law3 = (name, A, B, C) => { const ab = law(name, A, B, C); return M(pk('X', ab.keys, ab.meta), C).result; };
+      const vals = [undefined, { s: 1, d: '2026-11-07', t: 100 }, { s: 3, d: '2026-11-19', t: 100 }, { s: 0, d: '2026-11-06', t: 200 }, { s: 6, d: '2026-11-05', t: 50 }, 7];
+      let bad = 0;
+      vals.forEach(x => vals.forEach(y => {
+        if (canon(J(x, y)) !== canon(J(y, x)) || canon(J(x, x)) !== canon(x)) bad++;
+        vals.forEach(z => { if (canon(J(J(x, y), z)) !== canon(J(x, J(y, z)))) bad++; });
+      }));
+      ok(!bad, 'joinSr 对称、幂等、结合律（含时间相同、不是对象的值）' + (bad ? '；失败 ' + bad + ' 次' : ''));
+      eq(J({ s: 5, d: '2026-12-01', t: 300 }, { s: 0, d: '2026-11-06', t: 400 }), { s: 0, d: '2026-11-06', t: 400 }, '同一条取较新的复习记录（后做错的 400 胜过先复习过关的 300）');
+      eq(J({ s: 1, d: '2026-11-07', t: 100 }, { s: 3, d: '2026-11-19', t: 100 }), J({ s: 3, d: '2026-11-19', t: 100 }, { s: 1, d: '2026-11-07', t: 100 }), '时间相同按确定次序（JSON 文本）决出，两边一样');
+
+      // 逐词记录（单元单词 / 语文听写 / 默写 / 背诵同一套）：三台设备复习同一个词
+      ['fjzk-en-words-v1', 'fjzk-zh-tingxie-v1', 'fjzk-zh-moxie-v1', 'fjzk-zh-beisong-v1'].forEach(K => {
+        const A = pk('A', { [K]: { x: { r: 1, rt: 500, sr: { s: 2, d: '2026-11-09', t: 500 }, w: { A: 1 }, n: { A: 3 } }, y: { r: 0, rt: 10, w: { A: 1 }, n: { A: 1 } } } }, { [K]: { x: { t: 500, by: 'A' }, y: { t: 10, by: 'A' } } });
+        const B = pk('B', { [K]: { x: { r: 0, rt: 600, sr: { s: 0, d: '2026-11-08', t: 600 }, w: { B: 1 }, n: { B: 1 } } } }, { [K]: { x: { t: 600, by: 'B' } } });
+        const C = pk('C', { [K]: { x: { r: 1, rt: 400, sr: { s: 6, d: '2026-11-05', t: 400 }, w: {}, n: { C: 6 } }, y: { r: 1, rt: 20, sr: { s: 1, d: '2026-11-08', t: 20 }, w: {}, n: { C: 1 } } } }, { [K]: { x: { t: 400, by: 'C' }, y: { t: 20, by: 'C' } } });
+        const r = law3(K + ' 复习状态', A, B, C).keys[K];
+        eq([r.x.r, r.x.sr], [0, { s: 0, d: '2026-11-08', t: 600 }], K + '：B 最后（600）写错 → 第 1 轮，胜过 A 的第 3 轮、C 的已掌握');
+        eq(r.y.sr, { s: 1, d: '2026-11-08', t: 20 }, K + '：A 升级前的错词 + C 复习过关 → 取 C 的复习记录');
+        ok(KMReview.fromWord(r.y).s === 1, K + '：合并后仍在复习，一条不丢');
+      });
+
+      // 数学错题：掌握后删除（墓碑）与复习记录
+      const W = 'mathmap-wrong-v1';
+      const gA = pk('A', { [W]: {} }, { [W]: { 'q#1': { t: 900, by: 'A', x: 900, v: { n: 1, at: 100, sr: { s: 5, d: '2026-11-05', t: 800 } } } } });
+      const gB = pk('B', { [W]: { 'q#1': { n: 1, at: 100, sr: { s: 5, d: '2026-11-05', t: 800 } } } }, { [W]: { 'q#1': { t: 800, by: 'B' } } });
+      ok(!law('数学错题掌握后删除', gA, gB).keys[W]['q#1'], 'A 掌握删除（900），B 停在旧的复习记录（800）→ 删除');
+      const gC = pk('C', { [W]: { 'q#1': { n: 2, at: 1000, sr: { s: 0, d: '2026-11-06', t: 1000 } } } }, { [W]: { 'q#1': { t: 1000, by: 'C' } } });
+      const rc = law3('掌握后另一台又做错', gA, gB, gC).keys[W]['q#1'];
+      eq(rc, { n: 2, at: 1000, sr: { s: 0, d: '2026-11-06', t: 1000 } }, '删除之后另一台设备又做错（1000）→ 保留，从第 1 轮开始');
+      const gD = pk('D', { [W]: { 'q#1': { n: 1, at: 100, sr: { s: 4, d: '2026-11-20', t: 950 } } } });
+      ok(M(gA, gD).result.keys[W]['q#1'], '没有修改记录的老数据：复习时间 sr.t（950）晚于删除也算数（和错题自带 at 一样）');
+
+      // 听写词单：sr 按词取较新的，错词次数取大
+      const K = 'fjzk-en-dictation-v1';
+      const L = (sr, wrong, at) => ({ lists: [{ id: 'L1', name: '一', words: [{ en: 'cat' }, { en: 'dog' }], wrong, ...(sr ? { sr } : {}), history: [{ at, total: 2, correct: 1 }], created: 1 }], settings: {} });
+      const dA = pk('A', { [K]: L({ cat: { s: 2, d: '2026-11-09', t: 300 } }, { cat: 2 }, 300) }, { [K]: { L1: { t: 300, by: 'A' } } });
+      const dB = pk('B', { [K]: L({ cat: { s: 0, d: '2026-11-08', t: 200 }, dog: { s: 0, d: '2026-11-08', t: 200 } }, { cat: 3, dog: 1 }, 200) }, { [K]: { L1: { t: 200, by: 'B' } } });
+      const dC = pk('C', { [K]: L(undefined, { dog: 1 }, 100) }, { [K]: { L1: { t: 100, by: 'C' } } });
+      const l1 = law3('听写词单复习状态', dA, dB, dC).keys[K].lists[0];
+      eq([l1.sr, l1.wrong], [{ cat: { s: 2, d: '2026-11-09', t: 300 }, dog: { s: 0, d: '2026-11-08', t: 200 } }, { cat: 3, dog: 1 }], '每个词取较新的复习状态；错词次数取大');
+
+      // 迁移：升级前的数据（没有 sr）和空数据合并、再导出导入，一条不少、一字不改
+      const old = pk('O', {
+        [W]: { 'a#1': { n: 2, at: 5 }, 'b#2': { n: 1, at: 9 } },
+        'fjzk-en-words-v1': { apple: { r: 0, rt: 4, w: { O: 1 }, n: { O: 1 } } },
+        'fjzk-zh-tingxie-v1': { 春天: { r: 0, rt: 4, w: { O: 1 }, n: { O: 1 } } },
+        [K]: { lists: [{ id: 'L1', name: '一', words: [{ en: 'cat' }], wrong: { cat: 1 }, history: [{ at: 3, total: 1, correct: 0 }], created: 1 }], settings: {} }
+      });
+      const mo = law('升级前的数据', old, pk('E', {})).keys;
+      eq([mo[W], mo['fjzk-en-words-v1'], mo['fjzk-zh-tingxie-v1'], mo[K].lists[0].wrong], [old.keys[W], old.keys['fjzk-en-words-v1'], old.keys['fjzk-zh-tingxie-v1'], { cat: 1 }], '合并不改升级前的数据');
+      const due = KMReview.summary(mo, '2026-11-05').filter(x => x.due).map(x => x.id + ':' + x.due);
+      eq(due, ['math:2', 'en-dict:1', 'en-words:1', 'zh-tingxie:1'], '升级后全部按第 1 轮、今天到期统计');
+      eq(D.summary(pk('X', { 'fjzk-en-words-v1': { a: { r: 0, rt: 1 }, b: { r: 1, rt: 2, sr: { s: 2, d: '2026-11-09', t: 2 } }, c: { r: 1, rt: 2, sr: { s: 6, d: '2026-11-05', t: 2 } } } })).wordsWrong, 2, '「我的数据」概览：错词本 = 在复习里的词（不含已掌握）');
     });
 
     await test('综合：一大份数据的对称与幂等', () => {

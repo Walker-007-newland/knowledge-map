@@ -5,7 +5,9 @@
  * 语音模型和识别程序（共约 34 MB）不在安装包里：第一次点“开始背诵”时问一下再下载（KMApp.asrDownload），之后离线用。
  * 32 位平板、浏览器里（没有 KMApp）只能家长核对；调试用 window.__beisong.feed(text) 模拟识别结果。
  * 存储（纳入「我的数据」导出导入与设备同步，合并规则同语文听写，见 hub/km-data.js）：
- *   fjzk-zh-beisong-v1      逐句记录 { "<诗id>#<小句序号>": { r, rt, w: {设备: 背错次数}, n: {设备: 背诵次数} } }
+ *   fjzk-zh-beisong-v1      逐句记录 { "<诗id>#<小句序号>": { r, rt, sr, w: {设备: 背错次数}, n: {设备: 背诵次数} } }
+ *                           背错 / 漏背 / 提示后才背出的句子进间隔复习（sr，见 knowledge-map-app/hub/km-review.js）：明天复习，
+ *                           到期整篇再背时这句背对就进入下一轮（1、2、4、7、15、30 天），第 6 轮背对算掌握；首页顶部列出今天该复习的篇目
  *   fjzk-zh-beisong-set-v1  古诗词 / 文言文、年级、册、是否显示原文 */
 (function () {
   'use strict';
@@ -33,11 +35,48 @@
   function recs() { if (!recCache) recCache = readJSON(STORE) || {}; return recCache; }
   function updateRecs(fn) { recCache = null; const all = recs(); fn(all); writeJSON(STORE, all); }
   function devId() { try { return window.KMData ? KMData.device().id : 'web'; } catch (e) { return 'web'; } }
-  // 一首诗的状态：没背过 / 全对 / 有几句没背好
+  // 间隔复习：这一句在不在复习里、今天到期没有
+  const RV = window.KMReview;
+  const stOf = key => { const r = recs()[key]; return RV ? RV.fromWord(r) : (isObj(r) && r.r === 0 ? { s: 0, d: '' } : null); };
+  const isDue = key => RV ? RV.isDue(stOf(key)) : !!stOf(key);
+  // 一首诗的状态：没背过 / 全对 / 有几句在复习（今天到期几句）
   function poemState(p) {
-    let seen = 0, bad = 0;
-    p.c.forEach((x, i) => { const r = recs()[p.id + '#' + i]; if (isObj(r)) { seen++; if (r.r === 0) bad++; } });
-    return seen ? (bad ? { cls: 'bad', txt: bad + ' 句没背好' } : { cls: 'ok', txt: '背过 ✓' }) : { cls: '', txt: '' };
+    let seen = 0, bad = 0, due = 0;
+    p.c.forEach((x, i) => { const k = p.id + '#' + i, r = recs()[k]; if (isObj(r)) { seen++; if (stOf(k)) { bad++; if (isDue(k)) due++; } } });
+    return seen ? (bad ? { cls: 'bad', txt: due ? `今天复习 ${due} 句` : bad + ' 句在复习', due, bad } : { cls: 'ok', txt: '背过 ✓', due: 0, bad: 0 }) : { cls: '', txt: '', due: 0, bad: 0 };
+  }
+  // 今天该复习的篇目（按最早到期的那句排）：[{ p, due: 到期句数, first: 第一句到期的序号, st }]
+  function duePoems() {
+    const out = [];
+    Object.keys(POEMS).forEach(id => {
+      const p = POEMS[id];
+      let due = 0, first = -1, best = null;
+      p.c.forEach((x, i) => {
+        const k = id + '#' + i;
+        if (!isDue(k)) return;
+        due++;
+        if (first < 0) first = i;
+        const st = stOf(k);
+        if (!best || (RV && RV.cmp(st, best) < 0)) best = st;
+      });
+      if (due) out.push({ p, due, first, st: best });
+    });
+    return RV ? RV.sortByDue(out, x => x.st) : out;
+  }
+  function renderReview() {
+    const list = duePoems(), box = $('#rvBanner');
+    box.hidden = !list.length;
+    if (!list.length) return;
+    const n = list.reduce((s, x) => s + x.due, 0);
+    $('#rvHead').innerHTML = `📅 今天该复习 <b>${n}</b> 句（${list.length} 篇）<small>上次背错、漏背或提示后才背出的句子，按 1、2、4、7、15、30 天的间隔复习，到期再背对就进入下一轮</small>`;
+    $('#rvList').innerHTML = list.map(x => `<button class="lesson bs-row" data-rv="${esc(x.p.id)}"><span class="l-name">${esc(x.p.title)}<small>　${esc(x.p.wen ? '文言文' : author(x.p))}</small></span><span class="l-wrong bad">${x.due} 句 · ${RV ? RV.label(x.st).replace(/^第 \d+ 轮 · /, '') : '今天到期'}</span><span class="u-arrow">›</span></button>`).join('');
+  }
+  // 复习时打开的段落：长文章从第一句到期的句子所在的那段开始
+  function partForReview(p, first) {
+    const parts = partsOf(p);
+    if (!parts.length || LEN(p) <= 400) return undefined;
+    const i = parts.findIndex(x => first >= x.from && first < x.to);
+    return i < 0 ? undefined : i;
   }
   window.addEventListener('pageshow', () => { recCache = null; if (current === 'vHome') renderHome(); });
 
@@ -82,6 +121,7 @@
   const currentBook = () => BOOKS.find(b => b.grade === S.grade && b.term === S.term) || BOOKS.find(b => b.grade === S.grade) || BOOKS[0];
   const author = p => p.author.replace(/^［(.*)］/, '$1·');
   function renderHome() {
+    renderReview();
     const wen = S.kind === 'wen';
     $('#kinds').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.k === S.kind));
     let groups;
@@ -112,6 +152,11 @@
       </div>`;
     }).join('');
   }
+  $('#rvList').addEventListener('click', e => {
+    const row = e.target.closest('[data-rv]'); if (!row) return;
+    const x = duePoems().find(y => y.p.id === row.dataset.rv);
+    if (x) openPoem(x.p, partForReview(x.p, x.first));
+  });
   $('#kinds').addEventListener('click', e => {
     const btn = e.target.closest('button[data-k]'); if (!btn) return;
     S.kind = btn.dataset.k; saveSet(); renderHome();
@@ -328,10 +373,14 @@
     // todo（结束时还没背到）算漏背
     res.forEach(x => { if (x.st === 'todo' || x.st === 'cur') x.st = 'skip'; });
     const now = Date.now(), me = devId();
+    let up = 0, done = 0;
     updateRecs(all => res.forEach((x, i) => {
       const key = r.poem.id + '#' + (r.off + i), bad = x.st !== 'ok';
       const e = isObj(all[key]) ? all[key] : {};
-      e.r = bad ? 0 : 1; e.rt = now;
+      if (RV) {                                   // r、rt 照旧（最近一次对错），sr 按间隔复习规则推进
+        const m = RV.markWord(e, bad, now);
+        if (!bad && m.after && m.after !== m.before) { if (m.after.s >= RV.DONE) done++; else up++; }
+      } else { e.r = bad ? 0 : 1; e.rt = now; }
       e.n = isObj(e.n) ? e.n : {}; e.n[me] = (+e.n[me] || 0) + 1;
       e.w = isObj(e.w) ? e.w : {}; if (bad) e.w[me] = (+e.w[me] || 0) + 1;
       all[key] = e;
@@ -342,7 +391,9 @@
     $('#resScore').textContent = `${ok} / ${total}`;
     $('#resScore').classList.toggle('low', ok < total);
     $('#resSub').textContent = ok === total ? '一句不差，背得真熟！'
-      : [cnt('wrong') && `背错 ${cnt('wrong')} 句`, cnt('skip') && `漏背 ${cnt('skip')} 句`, cnt('hint') && `提示后背出 ${cnt('hint')} 句`].filter(Boolean).join('，');
+      : [cnt('wrong') && `背错 ${cnt('wrong')} 句`, cnt('skip') && `漏背 ${cnt('skip')} 句`, cnt('hint') && `提示后背出 ${cnt('hint')} 句`].filter(Boolean).join('，') + '（这些句子明天复习）';
+    const note = [up && `${up} 句复习过关、进入下一轮`, done && `${done} 句已掌握`].filter(Boolean).join('，');
+    if (note) $('#resSub').textContent += ' ' + note;
     $('#resText').innerHTML = `<div class="bs-poem">《${esc(r.poem.title)}》<small>${esc(r.poem.author || '')}${r.part >= 0 ? `第 ${r.part + 1} 段` : ''}</small></div>` + P.clauses.map((c, i) =>
       `<span class="bs-c st-${res[i].st}">${esc(c.t)}</span>${esc(c.p)}${lineEnd(r.poem, c)}`).join('');
     $('#resText').classList.toggle('wen', !!r.poem.wen);
@@ -359,6 +410,8 @@
   /* ---------------- 启动 ---------------- */
   renderHome();
   show('vHome', false);
+  // 总入口「今天该复习」进来（?review=1）：首页顶部就是今天该复习的篇目
+  if (/[?&]review=1/.test(location.search)) window.scrollTo(0, 0);
   // 调试 / 测试：模拟语音识别（浏览器里没有 KMApp）
   window.__beisong = {
     S, POEMS, recs: () => (recCache = null, recs()),

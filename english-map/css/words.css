@@ -89,3 +89,9 @@ body:not(.on-home) .bottom-bar { display: none; }
   .w-row { grid-template-columns: minmax(0, 1fr) auto 44px; }
   .w-zh { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* 错词间隔复习：轮次和下次复习日 */
+.w-n .rv-st { color: var(--muted); }
+.w-n .rv-st.due { color: var(--st-weak); font-weight: 600; }
+.w-group.rv-due { color: var(--st-weak); font-weight: 600; }
+.w-group.rv-later { border-top: 1px dashed var(--line); padding-top: 12px; }
