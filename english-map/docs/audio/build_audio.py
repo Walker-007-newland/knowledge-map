@@ -1,16 +1,17 @@
 """英文录音：用 Kokoro（Apache-2.0 神经网络语音，离线）生成 MP3。
   1. 课本单元单词整词录音（美式），听写、默写、拼读「连读」时放
-  2. 音节拼读录音（英式）：多音节词用英式声音整词读一遍，按每个音的时间点切成一节一节
+  2. 音节拼读录音（英式）：多音节词的每个音节按音标单独读一遍（像老师拼读那样一节一节读清楚）
 
 输出：
   audio/en/<文件名>.mp3      课本词条整词，单声道 32kbps
   audio/index.js             window.KW_AUDIO = { 课本里的写法: 文件名 }，按原样（区分大小写）再按小写查
-  audio/syl/<词>-<序号>.mp3  多音节词的每个音节
+  audio/syl/<词>-<序号>.mp3  多音节词的每个音节（各节音标记在 docs/audio/syl-sig.json，用来判断要不要重做）
   audio/syl-index.js         window.KW_SYL_AUDIO = { 小写单词: 文件名前缀 }，第 n 节是 <前缀>-<n>.mp3
 
 注意：kokoro-onnx 给的每个音的时间点整体比实际声音晚 0.15 秒左右（两头都偏），直接按它剪会把每个词的开头剪掉。
-所以整词只按音量找声音的起止；音节先按音量定出整词的起止，再把时间点线性对到这一段上，在边界附近最安静处切。
-音节要用带 duration 输出的模型。所有录音统一放大到峰值 0.9。
+所以整词只按音量找声音的起止。所有录音统一放大到峰值 0.9。
+音节以前是整词读一遍再切（syllable_audio_sliced，留作对照），切出来每节只有 0.2 秒左右、带着前后音，听着不准；
+2026-11-05 起每节单独合成，docs/audio/syl-sig.json 记着每节音标，音标没变的不重做。
 
 用法（模型文件很大，不放仓库；在 english-map 目录下运行；先跑 build_phonics.py）：
   python -m venv venv && venv/Scripts/pip install kokoro-onnx==0.6.1 onnxruntime==1.20.1 lameenc
@@ -26,7 +27,7 @@ import numpy as np
 from kokoro_onnx import Kokoro
 
 VOICE, SPEED = 'af_heart', 0.9          # 整词：美式女声，略慢一点，听写更清楚
-SYL_VOICE, SYL_SPEED = 'bf_emma', 0.85  # 音节：英式（和卡片上的英式音标一致）
+SYL_VOICE, SYL_SPEED, SYL_LANG = 'af_heart', 0.85, 'en-us'  # 音节：美式，和整词同一个声音（2026-11-05 用户要美式；原来 bf_emma 英式）
 KBPS = 32
 
 # 不能照字面读的写法：缩写读字母、称谓读全称
@@ -174,8 +175,99 @@ def word_audio(k, redo):
     print(f'整词 {len(index)} 条，新生成 {made} 条，共 {size / 1024 / 1024:.1f} MB')
 
 
+_UNITS = ('aɪə', 'aʊə', 'tʃ', 'dʒ', 'aɪ', 'eɪ', 'ɔɪ', 'aʊ', 'əʊ', 'ɪə', 'eə', 'ʊə', 'iː', 'ɑː', 'ɔː', 'uː', 'ɜː')
+_V = {'æ', 'e', 'ɪ', 'ɒ', 'ʌ', 'ʊ', 'ə', 'i', 'iː', 'ɑː', 'ɔː', 'uː', 'ɜː', 'eɪ', 'aɪ', 'ɔɪ', 'aʊ', 'əʊ', 'ɪə', 'eə', 'ʊə',
+      'aɪə', 'aʊə'}
+# 英式 → 美式（元音后的 r 读出来时）
+_R = {'ɑː': 'ɑːɹ', 'ɔː': 'ɔːɹ', 'ɜː': 'ɜːɹ', 'ə': 'ɚ', 'eə': 'ɛɹ', 'ɪə': 'ɪɹ', 'ʊə': 'ʊɹ', 'aɪə': 'aɪɚ', 'aʊə': 'aʊɚ',
+      'e': 'ɛɹ', 'ɪ': 'ɪɹ', 'ʌ': 'ɜːɹ', 'ɒ': 'ɔːɹ', 'æ': 'ɛɹ'}
+_PLAIN = {'əʊ': 'oʊ', 'ɒ': 'ɑː', 'e': 'ɛ', 'eə': 'ɛ', 'ɪə': 'ɪə', 'ʊə': 'ʊ'}
+
+
+# 英美读音不按规则变的词：整词每节的美式音标
+US_WORD = {'banana': 'bə næ nə', 'tomato': 'tə meɪ toʊ', 'tomatoes': 'tə meɪ toʊz'}
+
+
+def to_us(p, g):
+    """课本的英式音节音标 + 这一节的字母 → 给美式声音读的音标：
+    元音后不读的 r 读出来（teach·er、car、bird），əʊ→oʊ，hot 的 ɒ→ɑː，bas·ket、af·ter 的 ɑː→æ，
+    t/d/n/s/l/θ 后面的 juː 去掉 j（stu·dent、new）"""
+    p = p.lstrip('ˈ')
+    us, i = [], 0
+    while i < len(p):
+        u = next((u for u in _UNITS if p.startswith(u, i)), p[i])
+        us.append(u); i += len(u)
+    vi = [n for n, u in enumerate(us) if u in _V]
+    # 字母里元音后面跟 r，且 r 后面不是元音字母（或者只剩词尾 e）：英式不读这个 r，美式要读
+    r_col = bool(re.search(r'[aeiouy]r+(?:[^aeiouy]|e?s?$)', g)) and not any(
+        us[n + 1:n + 2] == ['r'] for n in vi)
+    for n in vi:
+        u = us[n]
+        if r_col and n == vi[-1]:
+            us[n] = _R.get(u, u + 'ɹ')
+        elif u == 'ɑː' and 'a' in g and not re.search('al|au|aw', g) and n < len(us) - 1:   # 闭音节：bas、af、glass
+            us[n] = 'æ'
+        else:
+            us[n] = _PLAIN.get(u, u)
+    out = ''.join(us)
+    out = re.sub(r'(?<=[tdnslθ])juː', 'uː', out)
+    return out.replace('g', 'ɡ').replace('r', 'ɹ').replace('ɹɹ', 'ɹ')
+
+
+def one_syllable(k, p):
+    """一个音节单独读（像老师拼读时一节一节读清楚）：按音标合成，每节都按重读读，去掉开头多余的浊音。
+    p 已经是给声音读的音标（美式见 to_us）"""
+    p = p.lstrip('ˈ')
+    x, sr = k.create('ˈ' + p, voice=SYL_VOICE, speed=SYL_SPEED,
+                     lang=SYL_LANG, is_phonemes=True, trim=False)
+    t0, t1 = speech_span(x, sr)
+    c = lead_cut(x, sr, t0, p)
+    seg = clip(x, sr, c, t1, pre=0.02 if c == t0 else 0, post=0.06)
+    return seg * (PEAK / max(np.abs(seg).max(), 1e-6)), sr
+
+
 def syllable_audio(k, redo):
-    """多音节词：音节音标拼成整词（双写辅音两节共用的音只读一次），英式读一遍，按音的时间点切开"""
+    """多音节词：每个音节按它的音标单独合成一遍（2026-11-05 起；以前是整词读一遍再切，切出来太短、带着前后音，听着不准）"""
+    src = open('data/phonics-words.js', encoding='utf-8').read()
+    data = json.loads(src[src.index('{'):src.rindex('}') + 1])
+    os.makedirs('audio/syl', exist_ok=True)
+    index, made, keep, memo = {}, 0, set(), {}
+    sig_path = 'docs/audio/syl-sig.json'                        # 每个词各节的音标：音标没变的录音不重做
+    old_sig = json.load(open(sig_path, encoding='utf-8')) if os.path.exists(sig_path) else {}
+    new_sig = {}
+    for w, v in sorted(data.items()):
+        syls = [t.split('=', 1) for t in v.split('|')[1].split(' ')]
+        if len(syls) < 2:
+            continue
+        stem = re.sub(r'[^a-z0-9]+', '-', w)
+        paths = [f'audio/syl/{stem}-{n}.mp3' for n in range(len(syls))]
+        said = US_WORD[w].split(' ') if SYL_LANG == 'en-us' and w in US_WORD else [to_us(p, g) if SYL_LANG == 'en-us' else p.lstrip('ˈ').replace('g', 'ɡ').replace('r', 'ɹ') for g, p in syls]
+        sig = new_sig[w] = SYL_VOICE + ' ' + ' '.join(said)
+        if not redo and all(os.path.exists(p) for p in paths) and old_sig.get(w) == sig:
+            index[w] = stem; keep.update(paths); continue
+        for q, path in zip(said, paths):
+            if q not in memo:
+                memo[q] = one_syllable(k, q)
+            to_mp3(memo[q][0], memo[q][1], path)
+        index[w] = stem; keep.update(paths); made += 1
+        if made % 100 == 0:
+            print('音节', made, w, flush=True)
+    open(sig_path, 'w', encoding='utf-8', newline='\n').write(
+        '{\n' + ',\n'.join(json.dumps(w, ensure_ascii=False) + ':' + json.dumps(new_sig[w], ensure_ascii=False)
+                           for w in sorted(new_sig)) + '\n}\n')
+    for f in glob.glob('audio/syl/*'):                            # 不再用到的音节录音删掉
+        if f.replace('\\', '/') not in keep:
+            os.remove(f)
+    js = ('// 音节拼读录音索引：由 docs/audio/build_audio.py 生成，不要手改\n'
+          f'// 声音 Kokoro {SYL_VOICE}（{"美式" if SYL_LANG == "en-us" else "英式"}），每个音节单独读；第 n 节是 audio/syl/<前缀>-<n>.mp3\n'
+          'window.KW_SYL_AUDIO = ' + json.dumps(index, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + ';\n')
+    open('audio/syl-index.js', 'w', encoding='utf-8', newline='\n').write(js)
+    size = sum(os.path.getsize(f) for f in glob.glob('audio/syl/*.mp3'))
+    print(f'音节录音 {len(index)} 个词，新生成 {made} 个，不同的音节 {len(memo)} 个，共 {size / 1024 / 1024:.1f} MB')
+
+
+def syllable_audio_sliced(k, redo):
+    """旧做法（留作对照，不再调用）：音节音标拼成整词，英式读一遍，按音的时间点切开"""
     src = open('data/phonics-words.js', encoding='utf-8').read()
     data = json.loads(src[src.index('{'):src.rindex('}') + 1])
     os.makedirs('audio/syl', exist_ok=True)
