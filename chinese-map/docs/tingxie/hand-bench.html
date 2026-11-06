@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>手写判分测试</title>
+<style>#tBoxes{display:flex;gap:10px;flex-wrap:wrap}#tBoxes canvas{border:2px solid #c99;background:#fffdf8;touch-action:none;background-image:linear-gradient(#e8caca 1px,transparent 1px),linear-gradient(90deg,#e8caca 1px,transparent 1px);background-size:50% 50%;background-position:center}body{font:14px system-ui;margin:16px}pre{white-space:pre-wrap}.s{display:inline-block;margin:2px;border:1px solid #ccc;color:#333}.s.bad{border-color:#d33}</style>
+</head><body>
+<h1>手写判分测试（开发用）</h1>
+<p>用标准字的笔画中线模拟小孩手写（大小比例、位置、歪斜、抖动、钩写没了、折笔分两笔写、笔顺、写反方向），统计通过率；
+再拿形近字互判，统计误判为对的比例。<code>?n=300&amp;seed=1</code></p>
+<section id="try">
+  <h2>手写试判</h2>
+  <p>要写的字：<input id="tChars" value="刘凯" size="10"> <button id="tReset">换字/清空</button>
+    <button id="tJudge">判分</button> <button id="tSave">保存为样本</button> <span id="tInfo"></span></p>
+  <div id="tBoxes"></div>
+  <pre id="tOut"></pre>
+</section>
+<p><button id="bench">运行模拟测试</button>（约一分钟）</p>
+<pre id="out"></pre>
+<div id="gal"></div>
+<script>window.KT = {};</script>
+<script src="../../data/tingxie/books.js"></script>
+<script>for (let i = 0; i < 16; i++) document.write('<script src="../../data/tingxie/strokes/s' + String(i).padStart(2, '0') + '.js"><\/script>');</script>
+<script src="../../js/hand-judge.js"></script>
+<script>
+'use strict';
+const Q = new URLSearchParams(location.search);
+let seed = +(Q.get('seed') || 1);
+const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+const gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += rnd(); return (u - 3) / Math.sqrt(0.5); };
+const P = (x, y) => ({ x, y });
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function dense(pts, step) {
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], n = Math.max(1, Math.round(dist(a, b) / step));
+    for (let k = 1; k <= n; k++) out.push(P(a.x + (b.x - a.x) * k / n, a.y + (b.y - a.y) * k / n));
+  }
+  return out;
+}
+const turnAt = (m, i) => { const a = m[i - 1], b = m[i], c = m[i + 1];
+  const t = Math.abs(Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x)); return Math.min(t, 2 * Math.PI - t); };
+// 小孩手写模拟。lv：1 一般，1.6 写得比较乱
+function kid(medians, lv) {
+  const g = { sx: 1 + 0.12 * lv * gauss(), sy: 1 + 0.12 * lv * gauss(), rot: 0.06 * lv * gauss(), sh: 0.07 * lv * gauss() };
+  let strokes = [];
+  for (const raw of medians) {
+    let m = raw.map(([x, y]) => P(x, y));
+    // 钩：最后一段很短又急转，小孩常写没了
+    if (m.length >= 3) { const L = m.length; if (dist(m[L - 2], m[L - 1]) < 110 && turnAt(m, L - 2) > 1.2 && rnd() < 0.35) m = m.slice(0, -1); }
+    const c = m[0], ang = 0.1 * lv * gauss(), ks = 1 + 0.2 * lv * gauss(), off = P(40 * lv * gauss(), 40 * lv * gauss());
+    m = m.map(p => { const dx = (p.x - c.x) * ks, dy = (p.y - c.y) * ks;
+      return P(c.x + off.x + Math.cos(ang) * dx - Math.sin(ang) * dy, c.y + off.y + Math.sin(ang) * dx + Math.cos(ang) * dy); });
+    // 折：有时在拐角抬一下笔，分成两笔
+    const corner = m.findIndex((p, i) => i > 0 && i < m.length - 1 && turnAt(m, i) > 1.2);
+    let parts = corner > 0 && rnd() < 0.15 * lv ? [m.slice(0, corner + 1), m.slice(corner)] : [m];
+    for (let s of parts) {
+      s = dense(s, 18);
+      const ph = rnd() * 6, amp = 10 * lv;
+      s = s.map((p, i) => P(p.x + amp * Math.sin(ph + i / 5) + 3 * gauss(), p.y + amp * Math.cos(ph + i / 7) + 3 * gauss()));
+      if (rnd() < 0.03 * lv) s.reverse();
+      strokes.push(s);
+    }
+  }
+  if (rnd() < 0.3) { const i = Math.floor(rnd() * (strokes.length - 1)); if (i >= 0 && strokes[i + 1]) [strokes[i], strokes[i + 1]] = [strokes[i + 1], strokes[i]]; }
+  return strokes.map(s => s.map(p => { const x = p.x - 512, y = p.y - 388;
+    const X = (Math.cos(g.rot) * x - Math.sin(g.rot) * y + g.sh * y) * g.sx, Y = (Math.sin(g.rot) * x + Math.cos(g.rot) * y) * g.sy;
+    return P(Math.round(512 + X), Math.round(388 + Y)); }));
+}
+const PAIRS = ['土士', '未末', '人入', '日曰', '己已', '天夫', '甲申', '由田', '刀力', '八人', '干千', '午牛', '今令', '戊戌', '准淮', '拔拨', '大犬', '王主', '木术', '问间', '贝见', '休体', '折拆', '辨辩', '侯候', '晴睛', '清请', '旦旧', '目且', '儿几', '万方', '巳己', '东车', '设没', '历厉'];
+function run() {
+  seed = +(Q.get('seed') || 1);
+  const all = Object.keys(KT.strokes), n = +(Q.get('n') || 300), out = [];
+  const pick = []; for (let i = 0; i < n; i++) pick.push(all[Math.floor(rnd() * all.length)]);
+  const gal = [];
+  for (const mode of ['loose', 'strict']) for (const lv of [0.6, 1, 1.6]) {
+    let ok = 0; const why = {};
+    for (const c of pick) {
+      const s = kid(KT.strokes[c].medians, lv);
+      if (HandJudge.judge(s, KT.strokes[c].medians, mode === 'strict')) ok++;
+      else { const w = HandJudge.why(); why[w] = (why[w] || 0) + 1; if (mode === 'loose' && lv === 1 && gal.length < 60) gal.push([c, s, w]); }
+    }
+    out.push(`${mode} lv${lv}: 通过 ${ok}/${pick.length} = ${(100 * ok / pick.length).toFixed(1)}%  失败原因 ${JSON.stringify(why)}`);
+  }
+  // 形近字：写 A（干净/一般），按 B 判，判对的就是误判
+  for (const mode of ['loose', 'strict']) {
+    let fa = 0, tot = 0; const bad = [];
+    for (const pr of PAIRS) { const [a, b] = [...pr];
+      if (!KT.strokes[a] || !KT.strokes[b]) continue;
+      for (const [x, y] of [[a, b], [b, a]]) for (let k = 0; k < 10; k++) {
+        tot++; if (HandJudge.judge(kid(KT.strokes[x].medians, k < 5 ? 0.3 : 0.8), KT.strokes[y].medians, mode === 'strict')) { fa++; bad.push(x + '→' + y); }
+      } }
+    out.push(`${mode} 形近字误判为对：${fa}/${tot}  ${[...new Set(bad)].join(' ')}`);
+  }
+  // 随机不同字（同笔画数）
+  { let fa = 0, tot = 0; const bad = [];
+    const byN = {}; for (const c of all) (byN[KT.strokes[c].medians.length] ||= []).push(c);
+    for (const c of pick) { const g = byN[KT.strokes[c].medians.length]; const d = g[Math.floor(rnd() * g.length)]; if (d === c) continue;
+      tot++; if (HandJudge.judge(kid(KT.strokes[c].medians, 0.6), KT.strokes[d].medians, false)) { fa++; bad.push(c + '→' + d); } }
+    out.push(`loose 随机同笔画数异字误判为对：${fa}/${tot}  ${bad.join(' ')}`); }
+  document.getElementById('out').textContent = out.join('\n');
+  window.RESULT = out;
+  document.getElementById('gal').innerHTML = gal.map(([c, s, w]) => `<span class="s bad" title="${w}">${c} ${w}<br>${HandJudge.svg(s, 80)}</span>`).join('');
+}
+// ?set=loose.affine=1;strict.len=1.6 临时改阈值
+for (const kv of (Q.get('set') || '').split(';').filter(Boolean)) { const [k, v] = kv.split('='), [lv, f] = k.split('.'); HandJudge.LEVELS[lv][f] = +v; }
+if (Q.get('run')) setTimeout(run, 50);
+document.getElementById('bench').onclick = () => { document.getElementById('out').textContent = '运行中…'; setTimeout(run, 50); };
+
+/* 手写试判：鼠标、手写笔、手指都行；样本存在本机 localStorage（hand-bench-samples），开发时从控制台取出来做回归测试 */
+const SIZE = 260, $ = id => document.getElementById(id);
+let pads = [];
+function makePads() {
+  const chars = [...$('tChars').value.trim()].filter(c => KT.strokes[c]);
+  $('tBoxes').innerHTML = ''; $('tOut').textContent = '';
+  pads = chars.map(c => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = SIZE; $('tBoxes').appendChild(cv);
+    const ctx = cv.getContext('2d'), pad = { c, ink: [] }; let cur = null;
+    ctx.lineWidth = 6; ctx.lineCap = ctx.lineJoin = 'round'; ctx.strokeStyle = '#222';
+    const at = e => { const r = cv.getBoundingClientRect(); return HandJudge.toChar(e.clientX - r.left - 2, e.clientY - r.top - 2, SIZE); };
+    cv.addEventListener('pointerdown', e => { cur = [at(e)]; try { cv.setPointerCapture(e.pointerId); } catch (x) {} });
+    cv.addEventListener('pointermove', e => {
+      if (!cur) return; const p = at(e), q = cur[cur.length - 1];
+      if (Math.abs(p.x - q.x) + Math.abs(p.y - q.y) < 6) return;
+      cur.push(p); const A = HandJudge.fromChar(q, SIZE), B = HandJudge.fromChar(p, SIZE);
+      ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+    });
+    const end = () => { if (!cur) return; if (cur.length === 1) cur.push({ x: cur[0].x + 25, y: cur[0].y - 25 }); pad.ink.push(cur); cur = null; };
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    return pad;
+  });
+  $('tInfo').textContent = chars.length ? '' : '没有这个字的笔画数据';
+}
+function judgeOne(c, ink) {
+  const m = KT.strokes[c].medians, r = {};
+  for (const k of ['loose', 'strict']) r[k] = HandJudge.judge(ink, m, k === 'strict') ? '对' : '错(' + HandJudge.why() + ')';
+  return `${c}：标准 ${m.length} 笔，写了 ${ink.length} 笔　宽松 ${r.loose}　严格 ${r.strict}`;
+}
+$('tReset').onclick = makePads;
+$('tJudge').onclick = () => { $('tOut').textContent = pads.map(p => judgeOne(p.c, p.ink)).join('\n'); };
+$('tSave').onclick = () => {
+  let all = []; try { all = JSON.parse(localStorage.getItem('hand-bench-samples') || '[]'); } catch (x) {}
+  for (const p of pads) if (p.ink.length) all.push({ c: p.c, ink: p.ink, t: Date.now() });
+  try { localStorage.setItem('hand-bench-samples', JSON.stringify(all)); } catch (x) {}
+  $('tInfo').textContent = `已保存，共 ${all.length} 个样本`;
+};
+makePads();
+</script>
+</body></html>

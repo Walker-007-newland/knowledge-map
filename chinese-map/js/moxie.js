@@ -261,7 +261,7 @@
     document.querySelector('#vSetup .hand-only').hidden = T.mode !== 'hand';
     document.querySelector('#vSetup .pair-only').hidden = fixed || T.kind !== 'pair';
     $('#someWrap').hidden = T.scope !== 'some';
-    const how = T.mode === 'hand' ? '在田字格里写，写的时候不提示对错，全部写完再一起判分（' + (T.handJudge === 'strict' ? '严格：字形和笔顺都要对' : '宽松：只看字形，笔顺不对也算对') + '）。'
+    const how = T.mode === 'hand' ? '在田字格里写，写的时候不提示对错，全部写完再一起判分（' + (T.handJudge === 'strict' ? '严格：笔顺要对，笔画长短、位置也要写规整' : '宽松：笔画都写对就算对，不管笔顺，长短比例写得不太准也算对') + '）。'
       : T.mode === 'paper' ? '准备好纸和笔，写在纸上，写完对照答案自己批改。' : '用键盘（拼音或手写输入法）输入，按回车进入下一题，结束后自动判分（标点不用写）。';
     $('#setupHint').textContent = (fixed ? '' : T.kind === 'pair' ? '上下句：给出上句写下句，或给出下句写上句。' : '整首默写：看题目和作者，按顺序默写全诗' + (T.mode === 'paper' ? '。' : '，一句一句写。')) + how;
   }
