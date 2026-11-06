@@ -81,7 +81,7 @@ RK.ai.nodes.push(
 {
   id: 'ai-python', stage: 'ai1', title: 'Python 与工程化基础', short: 'Python基础',
   keywords: 'Python venv 虚拟环境 pip requirements.txt pyproject 依赖 类型提示 type hints mypy json pathlib requests httpx asyncio async await 异步 pytest 测试 fixture tmp_path',
-  prereqs: ['ai-why'],
+  prereqs: ['py-module'],
   tip: '大模型应用的主流语言是 Python：每个项目一个虚拟环境、依赖写进文件、函数加类型提示、改代码先有测试。',
   learn: [
     { h: '虚拟环境与依赖', html: `

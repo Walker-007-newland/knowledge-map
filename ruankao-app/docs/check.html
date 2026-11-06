@@ -17,7 +17,33 @@
     await new Promise(r => { const e = document.createElement('script'); e.src = base + s + '?t=' + Date.now(); e.onload = r; e.onerror = () => { probs.push(['err', '加载失败：' + s]); r(); }; document.head.appendChild(e); });
   }
   check();
+  await checkExercises();
 })();
+// 代码练习：用 App 里同一个 Brython 运行参考答案，输出必须等于 expect；起始代码不能直接通过
+async function checkExercises() {
+  const AI = RK.ai || { nodes: [] };
+  const list = [];
+  AI.nodes.forEach(n => (n.exercises || []).forEach((x, i) => list.push([n, x, i])));
+  const box = document.createElement('div');
+  document.getElementById('out').appendChild(box);
+  if (!list.length) { box.innerHTML = '<p>代码练习：0 道</p>'; return; }
+  box.innerHTML = `<p>代码练习：${list.length} 道，正在用 Brython 运行参考答案…</p>`;
+  await new Promise(r => { const e = document.createElement('script'); e.src = '../www/js/pyrun.js?t=' + Date.now(); e.onload = r; document.head.appendChild(e); });
+  PyRun.base = '../www/';
+  const bad = [];
+  for (const [n, x, i] of list) {
+    const at = `${n.id} 练习${i + 1}`;
+    if (!x.q || x.starter == null || !x.answer || x.expect == null) { bad.push(at + '：缺 q / starter / answer / expect'); continue; }
+    if (/\t/.test(x.answer + x.starter)) bad.push(at + '：代码里有制表符');
+    if (/input\(/.test(x.answer)) bad.push(at + '：用了 input()');
+    const r = await PyRun.run(x.answer);
+    if (r.err || !PyRun.same(r.out, x.expect)) bad.push(at + '：参考答案在 Brython 里的输出和 expect 不同<pre>' + esc2(r.out) + '</pre>期望<pre>' + esc2(x.expect) + '</pre>');
+    const r2 = await PyRun.run(x.starter);
+    if (!r2.err && PyRun.same(r2.out, x.expect)) bad.push(at + '：起始代码直接就能通过');
+  }
+  box.innerHTML = `<p>代码练习：${list.length} 道</p>` + (bad.length ? `<h2>代码练习问题 ${bad.length}</h2><ul>${bad.map(b => `<li class="err">${b}</li>`).join('')}</ul>` : '<p>代码练习全部通过 ✓</p>');
+}
+function esc2(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 const probs = [];
 function check() {
   const RK = window.RK, mods = new Set(RK.modules.map(m => m.id)), ids = new Set();
@@ -61,7 +87,8 @@ function check() {
   RK.nodes.concat(AI.nodes).forEach(n => (n.prereqs || []).forEach(p => { if (!ids.has(p)) P('err', n.id + '：前置不存在 ' + p); }));
   AI.projects.forEach(p => { if (!stages.has(p.stage)) P('err', p.id + '：阶段不存在'); });
   const want = ['ai-why', 'ai-python', 'ai-git', 'ai-http', 'ai-copilot', 'ai-workflow', 'ai-review', 'ai-ml', 'ai-metrics', 'ai-nn', 'ai-transformer', 'ai-llm',
-    'ai-api', 'ai-prompt', 'ai-tools', 'ai-rag', 'ai-agent', 'ai-mcp', 'ai-multimodal', 'ai-eval', 'ai-ops', 'ai-security', 'ai-finetune', 'ai-arch', 'ai-quality', 'ai-governance'];
+    'ai-api', 'ai-prompt', 'ai-tools', 'ai-rag', 'ai-agent', 'ai-mcp', 'ai-multimodal', 'ai-eval', 'ai-ops', 'ai-security', 'ai-finetune', 'ai-arch', 'ai-quality', 'ai-governance',
+    'py-start', 'py-control', 'py-str', 'py-list', 'py-dict', 'py-func', 'py-comp', 'py-oop', 'py-error', 'py-module', 'py-advanced', 'py-data'];
   want.forEach(id => { if (!ids.has(id)) P('warn', 'AI 路线缺节点 ' + id); });
   RK.cases.forEach(c => {
     const t = c.questions.reduce((a, q) => a + q.points.reduce((b, p) => b + p.s, 0), 0);

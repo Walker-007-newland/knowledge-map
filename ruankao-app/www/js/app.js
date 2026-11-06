@@ -57,7 +57,7 @@
     for (const k of ['projects', 'mocks']) if (!Array.isArray(D[k])) D[k] = [];
     if (!D.stats) D.stats = { ans: 0, ok: 0 };
     if (!D.ai || typeof D.ai !== 'object') D.ai = {};
-    for (const k of ['proj', 'hands']) if (!D.ai[k] || typeof D.ai[k] !== 'object') D.ai[k] = {};
+    for (const k of ['proj', 'hands', 'code']) if (!D.ai[k] || typeof D.ai[k] !== 'object') D.ai[k] = {};
   }
   fix();
   function save() {
@@ -227,6 +227,7 @@
     const n = byId[v.id], t = v.t || 'learn';
     if (!D.nodes[n.id]) { D.nodes[n.id] = {}; save(); }
     const tabs = [['learn', '讲解'], ['ex', `例题 ${(n.examples || []).length}`], ['test', `测试 ${(n.tests || []).length}`]];
+    if (n.exercises && n.exercises.length) tabs.splice(2, 0, ['code', `练习 ${n.exercises.length}`]);
     let body = '';
     if (t === 'learn') {
       body = (n.tip ? `<p class="tip"><b>${n.track ? '要点' : '考点'}</b>${n.tip}</p>` : '') + n.learn.map(s => `<h3>${s.h}</h3><div class="rich">${s.html}</div>`).join('') +
@@ -238,6 +239,11 @@
       body = (n.examples || []).map((q, i) => `<div class="card q"><div class="qno">例 ${i + 1}</div>${qStem(q)}
         ${q.type === 'choice' ? `<ol class="opts static">${shuffle(q.options.slice()).map(o => `<li>${o}</li>`).join('')}</ol>` : ''}
         <details><summary>看答案和解析</summary><p class="ans">答案：${answerText(q)}</p><div class="rich">${q.explain || ''}</div></details></div>`).join('') +
+        `<button class="btn primary wide" data-act="nodeTab" data-arg="${n.exercises && n.exercises.length ? 'code' : 'test'}">${n.exercises && n.exercises.length ? '去写代码' : '去测试'} ›</button>`;
+    } else if (t === 'code') {
+      const st = D.ai.code[n.id] || {};
+      body = `<p class="muted small">改代码 → 运行 → 和期望输出比对。第一次运行要加载 Python（约 2 秒）。手机上跑的是浏览器版 Python（Brython），个别细节和电脑上的 Python 不同，以电脑为准；有死循环会卡住，只能退出 App 重开。</p>` +
+        n.exercises.map((x, i) => codeBox('ex' + i, x.q, (st[i] && st[i].src != null) ? st[i].src : x.starter, i, st[i] && st[i].pass)).join('') +
         `<button class="btn primary wide" data-act="nodeTab" data-arg="test">去测试 ›</button>`;
     } else {
       const p = D.nodes[n.id];
@@ -251,10 +257,68 @@
 
   VIEWS.node.after = v => {
     const n = byId[v.id];
+    bindCodeBoxes((k, val) => {
+      const i = +k.slice(2), st = D.ai.code[n.id] || (D.ai.code[n.id] = {});
+      (st[i] || (st[i] = {})).src = val; saveSoon();
+    });
     main.querySelectorAll('[data-hand]').forEach(cb => {
       cb.onchange = () => { (D.ai.hands[n.id] || (D.ai.hands[n.id] = {}))[cb.dataset.hand] = cb.checked; save(); };
     });
   };
+
+  /* ---------- 写 Python：代码框（练习、草稿本共用） ---------- */
+  const KEYS = ['⇥', ':', '(', ')', '[', ']', '{', '}', '"', "'", '=', '_', '#', '.', ','];
+  function codeBox(key, q, src, i, pass) {
+    const rows = Math.min(18, Math.max(5, String(src || '').split('\n').length + 1));
+    return `<div class="card ex" data-box="${key}">
+      ${q != null ? `<div class="qno">练习 ${i + 1}${pass ? ' <span class="okmark">✓ 已通过</span>' : ''}</div><div class="rich">${q}</div>` : ''}
+      <div class="kbd">${KEYS.map(k => `<button type="button" data-ins="${esc(k)}">${esc(k)}</button>`).join('')}</div>
+      <textarea class="code" rows="${rows}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off">${esc(src || '')}</textarea>
+      <div class="row"><button class="btn primary small" data-act="pyRun" data-arg="${key}">▶ 运行</button>
+        ${q != null ? `<button class="btn small" data-act="pyReset" data-arg="${i}">重置</button><button class="btn small" data-act="pyAnswer" data-arg="${i}">参考答案</button>` : '<button class="btn small" data-act="pyClear">清空</button>'}</div>
+      <div class="pyres" hidden></div></div>`;
+  }
+  // 符号按钮、回车自动缩进；改动随手存
+  function bindCodeBoxes(onInput) {
+    main.querySelectorAll('[data-box]').forEach(box => {
+      const ta = box.querySelector('textarea');
+      const insert = text => {
+        const a = ta.selectionStart, b = ta.selectionEnd;
+        ta.setRangeText(text, a, b, 'end');
+        ta.focus();
+        onInput(box.dataset.box, ta.value);
+      };
+      box.querySelector('.kbd').addEventListener('mousedown', e => e.preventDefault());   // 不让按钮抢走焦点
+      box.querySelector('.kbd').onclick = e => {
+        const b = e.target.closest('[data-ins]');
+        if (b) insert(b.dataset.ins === '⇥' ? '    ' : b.dataset.ins);
+      };
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Tab') { e.preventDefault(); insert('    '); }
+        else if (e.key === 'Enter' && !e.isComposing) {
+          const line = ta.value.slice(0, ta.selectionStart).split('\n').pop();
+          const ind = (line.match(/^ */) || [''])[0] + (/:\s*$/.test(line) ? '    ' : '');
+          e.preventDefault(); insert('\n' + ind);
+        }
+      });
+      ta.oninput = () => onInput(box.dataset.box, ta.value);
+    });
+  }
+  function showResult(box, r, x) {
+    const el = box.querySelector('.pyres');
+    let html = `<pre class="pyout ${r.err ? 'bad' : ''}">${esc(r.out || '（没有输出）')}</pre>`;
+    let pass = null;
+    if (x && x.expect != null) {
+      pass = !r.err && PyRun.same(r.out, x.expect);
+      html = (pass ? '<p class="okmark">✓ 输出正确</p>' : `<p class="nomark">✗ 和期望输出不一致</p>`) + html +
+        (pass ? '' : `<details><summary>看期望输出</summary><pre class="pyout">${esc(x.expect)}</pre></details>`);
+    }
+    el.innerHTML = html; el.hidden = false;
+    return pass;
+  }
+  VIEWS.pyplay = () => header('Python 草稿本', '随手写、随手跑；内容只存在本机') +
+    `<article class="body">${codeBox('play', null, D.ai.code._play != null ? D.ai.code._play : '# 在这里写 Python，点「运行」\nnames = ["张三", "李四"]\nfor i, n in enumerate(names, 1):\n    print(i, n)\n', 0)}</article>`;
+  VIEWS.pyplay.after = () => bindCodeBoxes((k, v) => { D.ai.code._play = v; saveSoon(); });
 
   /* ---------- AI 学习路线 ---------- */
   const stageNodes = id => aiNodes.filter(n => n.stage === id);
@@ -288,6 +352,7 @@
     const s = stageById[v.id], ns = stageNodes(s.id), ps = AI.projects.filter(p => p.stage === s.id);
     return header(esc(s.name), `第 ${s.order} 阶段 · 约 ${s.weeks} 周`) +
       `<p class="tip"><b>目标</b>${esc(s.goal)}</p>
+      ${s.id === 'py' ? `<section class="list" style="margin-bottom:10px"><button class="item" data-act="pyPlay"><span class="ico">▶</span><span class="grow"><b>Python 草稿本</b><small>手机上随手写、随手运行</small></span><span class="go">›</span></button></section>` : ''}
       <section class="list">${ns.map(nodeRow).join('') || '<div class="item muted">内容准备中</div>'}</section>
       ${ps.length ? `<h2 class="sec">实战项目</h2><section class="list">${ps.map(p => `<button class="item" data-act="openProj" data-arg="${p.id}"><span class="ico">${projDone(p) ? '✓' : '⚒'}</span><span class="grow"><b>${esc(p.title)}</b><small>${esc(p.goal)}</small></span><span class="go">›</span></button>`).join('')}</section>` : ''}`;
   };
@@ -588,6 +653,36 @@
     tab: t => switchTab(t),
     openMod: id => go({ v: 'mod', id }),
     openStage: id => go({ v: 'aistage', id }),
+    pyPlay: () => go({ v: 'pyplay' }),
+    pyRun: (key, btn) => {
+      const box = btn.closest('[data-box]'), code = box.querySelector('textarea').value;
+      const v = cur(), n = v.v === 'node' ? byId[v.id] : null;
+      const i = key.startsWith('ex') ? +key.slice(2) : -1, x = n && i >= 0 ? n.exercises[i] : null;
+      btn.disabled = true; btn.textContent = PyRun.loaded() ? '运行中…' : '加载 Python…';
+      setTimeout(() => PyRun.run(code).then(r => {
+        const pass = showResult(box, r, x);
+        if (x) {
+          const st = D.ai.code[n.id] || (D.ai.code[n.id] = {}), it = st[i] || (st[i] = {});
+          it.src = code;
+          if (pass) { it.pass = true; const q = box.querySelector('.qno'); if (q && !q.querySelector('.okmark')) q.insertAdjacentHTML('beforeend', ' <span class="okmark">✓ 已通过</span>'); }
+          save();
+        } else { D.ai.code._play = code; save(); }
+      }, e => { box.querySelector('.pyres').hidden = false; box.querySelector('.pyres').innerHTML = `<p class="nomark">Python 加载失败：${esc(e.message)}</p>`; })
+        .then(() => { btn.disabled = false; btn.textContent = '▶ 运行'; }), 30);
+    },
+    pyReset: i => {
+      const n = byId[cur().id];
+      modal('<p>恢复成起始代码？你改的内容会丢掉。</p>', [{ label: '取消' }, { label: '恢复', cls: 'danger', fn: () => {
+        const st = D.ai.code[n.id] || {};
+        if (st[i]) delete st[i].src;
+        save(); render();
+      } }]);
+    },
+    pyAnswer: i => {
+      const x = byId[cur().id].exercises[+i];
+      modal(`<h3>参考答案</h3><pre class="pyout">${esc(x.answer)}</pre>${x.expect != null ? `<h4>输出</h4><pre class="pyout">${esc(x.expect)}</pre>` : ''}<p class="muted small">写法不止一种，输出对就算通过。</p>`, [{ label: '关闭' }]);
+    },
+    pyClear: () => { D.ai.code._play = ''; save(); render(); },
     openProj: id => go({ v: 'aiproj', id }),
     openNode: id => {
       const want = byId[id].track ? 'ai' : 'know';

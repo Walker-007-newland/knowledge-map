@@ -20,6 +20,10 @@
 
 第 6 个标签「AI 路线」：7 个阶段约 24 周、26 个学习节点（216 道测试题、动手任务、延伸阅读）、5 个实战项目（勾选进度 + 记录）。规划见 ai-roadmap.md，写作说明 WRITER-BRIEF-AI.md；AI 节点不计入备考统计、刷题、模拟卷和错题本。
 
+## Python 编程阶段（2026-11-06）✅
+
+AI 路线加了「Python 编程」阶段（stage py，12 个节点、105 道测试题、56 道代码练习），App 内置 Brython 3.13（www/vendor/brython，BSD-3-Clause）离线运行 Python：节点的「练习」页签和「Python 草稿本」。check.html 会在 Brython 里实跑每道练习的参考答案。说明见 python-track.md。
+
 ## 原计划（存档）
 
 | 阶段 | 内容 | 规模（估） |
