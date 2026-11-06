@@ -43,7 +43,7 @@
     const el = document.createElement('div');
     el.id = 'ttsWarn'; el.className = 'tts-warn'; el.setAttribute('role', 'alert');
     el.innerHTML = '<div><b>这台平板没有语音朗读功能，课本以外的词和中文读不出来。</b>' +
-      '课本单元单词有录音，照常能听。请在系统设置里搜索「文字转语音」，安装或开启语音引擎。没装好之前，自建词单请选「读中文写英文」：中文会显示在屏幕上。</div>' +
+      '课本单词和课标词汇有录音，照常能听。请在系统设置里搜索「文字转语音」，安装或开启语音引擎。没装好之前，自建词单请选「读中文写英文」：中文会显示在屏幕上。</div>' +
       '<button class="btn" type="button">知道了</button>';
     el.querySelector('button').onclick = () => { warnClosed = true; el.remove(); };
     main.insertBefore(el, main.firstChild);
@@ -53,7 +53,7 @@
   function cancelSpeech() { cancelling = true; try { speechSynthesis.cancel(); } finally { cancelling = false; } }
 
   // 课本单元单词有提前生成的英文录音（audio/index.js + audio/en/*.mp3，见 docs/audio/build_audio.py），
-  // 比平板自带的语音引擎清楚得多：有录音就放录音，没有（自建词单里课本以外的词、中文）才用语音引擎。
+  // 比平板自带的语音引擎清楚得多：有录音就放录音，没有（词表以外的词、短语、中文）才用语音引擎。
   const AUDIO_BASE = new URL('../audio/en/', document.currentScript.src).href;
   // 语速：录音生成时已经略慢（0.9），「慢」再放慢一些；语音引擎 0.8 以下有的会发糊，所以「正常」用 0.9
   const RATE = { normal: { rec: 1, en: 0.9, zh: 0.95 }, slow: { rec: 0.82, en: 0.75, zh: 0.85 } };
@@ -61,8 +61,9 @@
   const rates = () => RATE[speed] || RATE.normal;
   function recFor(text, lang) {
     if (lang !== 'en-US' || !window.KW_AUDIO) return null;
-    const t = String(text).replace(/\s+/g, ' ').trim();
-    return KW_AUDIO[t] || KW_AUDIO[t.toLowerCase()] || null;
+    const t = String(text).replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
+    const u = t.replace(/^[\s"'“”(（]+|[\s"'“”.,!?;:，。！？；：)）]+$/g, '');   // 词单里手打的 apple. / "apple"
+    return KW_AUDIO[t] || KW_AUDIO[t.toLowerCase()] || KW_AUDIO[u] || KW_AUDIO[u.toLowerCase()] || null;
   }
   let audioEl = null;
   function stopAudio() { if (audioEl) { audioEl.onended = audioEl.onerror = null; audioEl.pause(); } }
@@ -315,7 +316,7 @@
       const n = list.words.filter(w => recFor(w.en, 'en-US')).length;
       const parts = [];
       if (n === list.words.length) parts.push('发音：全部单词都用录音朗读。');
-      else if (n) parts.push(`发音：${n} 个课本单词用录音，其余 ${list.words.length - n} 个用平板的语音引擎。`);
+      else if (n) parts.push(`发音：${n} 个单词用录音，其余 ${list.words.length - n} 个用平板的语音引擎。`);
       else parts.push('发音：用平板的语音引擎朗读。');
       let info = null;
       try { info = inApp && KMApp.ttsInfo ? JSON.parse(KMApp.ttsInfo() || 'null') : null; } catch (e) { info = null; }
@@ -326,6 +327,47 @@
       }
       el.textContent = parts.join(' ');
       el.hidden = false;
+      showPack(list);
+    }
+    // 英语录音包（App 里：单词录音不在安装包里，要单独下载一次，见 knowledge-map-app/android/.../AudioPack.java）
+    let packTimer = 0;
+    function packState() {
+      try { return inApp && KMApp.audioPackState ? JSON.parse(KMApp.audioPackState() || 'null') : null; } catch (e) { return null; }
+    }
+    function showPack(list) {
+      clearTimeout(packTimer);
+      const el = $('#voiceInfo');
+      const old = el.querySelector('.pack'); if (old) old.remove();
+      const st = packState();
+      if (st && el.dataset.dl && st.status !== 'downloading') {      // 刚下载完：重新加载录音索引，不用重开页面
+        delete el.dataset.dl;
+        if (st.have) { reloadAudioIndex(() => showVoiceInfo(list)); return; }
+      }
+      if (!st || (st.have && st.upToDate)) return;
+      const mb = st.size ? `（约 ${Math.round(st.size / 1048576)} MB）` : '';
+      const box = document.createElement('span');
+      box.className = 'pack';
+      if (st.status === 'downloading') {
+        box.textContent = ` 正在下载单词录音包… ${st.pct || 0}%`;
+        packTimer = setTimeout(() => showPack(list), 800);
+      } else {
+        const msg = st.status === 'error' ? `单词录音包没下载成功（${st.error || '网络问题'}），` :
+          st.have ? '单词录音包有更新，' : `单词录音包还没下载${mb}，下载前用平板的语音引擎读，`;
+        box.innerHTML = ' ' + msg + '连上网络后点这里：<button class="btn small" type="button">下载录音</button>';
+        box.querySelector('button').onclick = () => { if (KMApp.audioPackDownload) KMApp.audioPackDownload(); setTimeout(() => showPack(list), 300); };
+      }
+      el.appendChild(box);
+      if (st.status === 'downloading') el.dataset.dl = '1';
+    }
+    function reloadAudioIndex(done) {
+      const base = new URL('../', AUDIO_BASE).href;            // english-map/audio/
+      let left = 2;
+      ['index.js', 'syl-index.js'].forEach(f => {
+        const s = document.createElement('script');
+        s.src = base + f + '?t=' + Date.now();
+        s.onload = s.onerror = () => { if (--left === 0) done(); };
+        document.head.appendChild(s);
+      });
     }
     $('#someN').oninput = () => { S.someN = Math.max(1, +$('#someN').value || 1); o.save(); };
     $('#btnSetupBack').onclick = () => history.back();

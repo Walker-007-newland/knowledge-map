@@ -55,7 +55,8 @@
       if (token) call(m, args); else queue.push([m, args]);
     };
   });
-  var empty = { pinWidget: false, deviceName: '', ttsInfo: '', sharedGet: '', syncState: '', syncTake: '', joinState: '',
+  var empty = { pinWidget: false, deviceName: '', ttsInfo: '', audioPackState: '', audioPackDownload: false,   // 英语录音包
+    sharedGet: '', syncState: '', syncTake: '', joinState: '',
     acctState: '', acctOffline: false, saveBackup: '',      // #12
     tbState: '', tbDownload: false, tbDelete: false,        // 电子教材
     asrAvailable: false, asrModel: '' };                     // 语文背诵

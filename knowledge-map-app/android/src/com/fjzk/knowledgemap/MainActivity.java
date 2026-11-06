@@ -79,6 +79,7 @@ public class MainActivity extends Activity {
     TextToSpeech tts;
     boolean ttsReady;
     Updater updater;
+    AudioPack audioPack;   // 英语录音包（files/audiopack/，见 AudioPack）
     String pendingOpen;    // 总入口加载完后要接着打开的页面
     final BridgeGate gate = new BridgeGate();
     Textbooks textbooks;   // 电子教材（平台登录凭据、下载）
@@ -143,6 +144,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         readAcctState();
+        audioPack = new AudioPack(this);      // 要在网页加载前建好（serveAudioPack 用）
         web = new WebView(this);
         root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -234,6 +236,10 @@ public class MainActivity extends Activity {
         if (state == null) web.postDelayed(new Runnable() {
             public void run() { updater.check(false); }
         }, 2000);
+        // 英语录音包：缺包且连着 Wi-Fi 就在后台下载
+        if (state == null) web.postDelayed(new Runnable() {
+            public void run() { audioPack.auto(updater.currentVersion()); }
+        }, 5000);
     }
 
     /** 从桌面小部件点进来：直接打开指定页面（如宠物页）；返回键还能回到总入口 */
@@ -370,6 +376,27 @@ public class MainActivity extends Activity {
         return list.isEmpty() ? null : list.toArray(new Uri[0]);
     }
 
+    /** english-map/audio/ 下的录音和索引：录音包里有就用录音包的（file:// 页面和听写页的虚拟地址都走这里） */
+    WebResourceResponse serveAudioPack(Uri u) {
+        if (audioPack == null) return null;
+        String path = u.getPath();
+        boolean ours = "file".equals(u.getScheme()) ? path != null && path.startsWith("/android_asset/www/")
+            : ASSET_HOST.equals(u.getHost());
+        if (!ours) return null;
+        int i = path.indexOf("/english-map/audio/");
+        if (i < 0) return null;
+        File f = audioPack.file(path.substring(i + "/english-map/audio/".length()));
+        if (f == null) return null;
+        String ext = path.substring(path.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Cache-Control", "no-cache");
+        try {
+            return new WebResourceResponse(MIME.containsKey(ext) ? MIME.get(ext) : "application/octet-stream", "utf-8",
+                200, "OK", headers, new java.io.FileInputStream(f));
+        } catch (IOException e) { return null; }
+    }
+
     /** 虚拟 https 地址 → assets/www 里的文件 */
     WebResourceResponse serveAsset(Uri u) {
         String path = u.getPath();
@@ -408,6 +435,8 @@ public class MainActivity extends Activity {
 
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+            WebResourceResponse r = serveAudioPack(req.getUrl());
+            if (r != null) return r;
             return ASSET_HOST.equals(req.getUrl().getHost()) ? serveAsset(req.getUrl()) : null;
         }
 
@@ -668,6 +697,20 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 return "";
             }
+        }
+
+        /** 英语录音包情况（听写设置页显示）：{ have, upToDate, status: idle/downloading/error, pct, size, error } */
+        @JavascriptInterface
+        public String audioPackState(String token) {
+            if (!gate.check(token, "audioPackState", now())) return "";
+            return audioPack.state();
+        }
+
+        /** 手动下载录音包（不管是不是 Wi-Fi）；进度用 audioPackState 查 */
+        @JavascriptInterface
+        public boolean audioPackDownload(String token) {
+            if (!gate.check(token, "audioPackDownload", now())) return false;
+            return audioPack.download(updater.currentVersion());
         }
 
         @JavascriptInterface

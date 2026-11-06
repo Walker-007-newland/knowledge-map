@@ -152,6 +152,17 @@ def word_audio(k, redo):
             en = m.group(1).strip()
             if en not in words:
                 words.append(en)
+    # 2026-11-06：自建听写词单里的词多半不在课本单元词表里，原来全走平板的系统语音，音质差一截。
+    # 把课标小学 + 初中词表（docs/wordlists/wordlists.js）、不规则变化形式（went、children）、拼读词也录好
+    have = {w.lower() for w in words}
+    wl = open('docs/wordlists/wordlists.js', encoding='utf-8').read()
+    WL = json.loads(wl[wl.index('{'):wl.rindex('}') + 1])
+    ph = open('data/phonics-words.js', encoding='utf-8').read()
+    extra = sorted(set(WL['primary']) | set(WL['junior']) | set(WL['irr'])
+                   | set(json.loads(ph[ph.index('{'):ph.rindex('}') + 1])))
+    for en in extra:
+        if re.fullmatch(r"[a-z]+(?:[-' ][a-z]+)*", en) and en not in have:
+            words.append(en); have.add(en)
     os.makedirs('audio/en', exist_ok=True)
     used, index, made = {}, {}, 0
     for en in words:
@@ -167,7 +178,7 @@ def word_audio(k, redo):
         made += 1
         if made % 100 == 0:
             print('整词', made, en, flush=True)
-    js = ('// 课本单元单词的英文录音索引：由 docs/audio/build_audio.py 生成，不要手改\n'
+    js = ('// 英文单词录音索引（课本单元单词 + 课标小学/初中词表 + 不规则变化形式 + 拼读词）：由 docs/audio/build_audio.py 生成，不要手改\n'
           f'// 声音 Kokoro {VOICE}（Apache-2.0），语速 {SPEED}\n'
           'window.KW_AUDIO = ' + json.dumps(index, ensure_ascii=False, separators=(',', ':'), sort_keys=True) + ';\n')
     open('audio/index.js', 'w', encoding='utf-8', newline='\n').write(js)

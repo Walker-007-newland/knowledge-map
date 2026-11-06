@@ -35,11 +35,48 @@ foreach ($m in $maps) {
     -not ($skipDirs -contains $rel.Split('\')[0]) -and -not ($skipFiles | Where-Object { $name -like $_ })
   } | ForEach-Object {
     $rel = $_.FullName.Substring($src.Length + 1)
+    if ($m -eq 'english-map' -and $rel -match '^audio\\(en\\|syl\\|index\.js$|syl-index\.js$)') { return }   # 放进录音包，见下
     $dst = Join-Path "$work\assets\www\$m" $rel
     New-Item -ItemType Directory -Force (Split-Path $dst) | Out-Null
     Copy-Item $_.FullName $dst
   }
 }
+
+# 1b. 英语单词 / 音节录音单独打成录音包 out\audio-pack.zip（2026-11-06：录音一多 APK 就超过 20 MB，jsDelivr 下不了）。
+#     publish.ps1 把它和 APK 一起发到 Release 和 apk 分支；App 第一次联网（Wi-Fi）时下载，解压到 files/audiopack/，
+#     之后 english-map/audio/ 下的请求先找那里（MainActivity.serveAudioPack）。APK 里只放空索引：没下载录音包时全走语音引擎。
+#     录音没变时包的版本号（内容哈希）不变，App 不会重复下载。
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$audioSrc = Join-Path $teach 'english-map\audio'
+$packFiles = @(Get-Item "$audioSrc\index.js", "$audioSrc\syl-index.js") + @(Get-ChildItem "$audioSrc\en", "$audioSrc\syl" -File | Sort-Object FullName)
+$sha = [Security.Cryptography.SHA256]::Create()
+$sb = New-Object Text.StringBuilder
+foreach ($f in $packFiles) {
+  $rel = $f.FullName.Substring($audioSrc.Length + 1).Replace('\', '/')
+  [void]$sb.Append($rel).Append(':').Append([BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($f.FullName))).Replace('-', '')).Append("`n")
+}
+$packVer = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($sb.ToString()))).Replace('-', '').Substring(0, 16).ToLower()
+New-Item -ItemType Directory -Force $out | Out-Null
+$packZip = "$out\audio-pack.zip"
+if (Test-Path $packZip) { Remove-Item $packZip }
+$pz = [IO.Compression.ZipFile]::Open($packZip, 'Create')
+try {
+  foreach ($f in $packFiles) {
+    $rel = $f.FullName.Substring($audioSrc.Length + 1).Replace('\', '/')
+    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($pz, $f.FullName, $rel, 'NoCompression')
+  }
+  $e = $pz.CreateEntry('pack.json')
+  $w = New-Object IO.StreamWriter($e.Open(), (New-Object Text.UTF8Encoding $false))
+  $w.Write("{`"ver`":`"$packVer`"}"); $w.Dispose()
+} finally { $pz.Dispose() }
+$packSha = (Get-FileHash $packZip -Algorithm SHA256).Hash.ToLower()
+$packSize = (Get-Item $packZip).Length
+$aDir = "$work\assets\www\english-map\audio"
+New-Item -ItemType Directory -Force $aDir | Out-Null
+[IO.File]::WriteAllText("$aDir\index.js", "// 录音在录音包里（见 build.ps1 1b），没下载时为空，全部走语音引擎`nwindow.KW_AUDIO = window.KW_AUDIO || {};`n", (New-Object Text.UTF8Encoding $false))
+[IO.File]::WriteAllText("$aDir\syl-index.js", "// 录音在录音包里（见 build.ps1 1b），没下载时为空`nwindow.KW_SYL_AUDIO = window.KW_SYL_AUDIO || {};`n", (New-Object Text.UTF8Encoding $false))
+[IO.File]::WriteAllText("$work\assets\audio-pack.json", "{`"ver`":`"$packVer`",`"size`":$packSize,`"sha256`":`"$packSha`",`"files`":$($packFiles.Count)}", (New-Object Text.UTF8Encoding $false))
+Write-Host "录音包：$packZip （$([math]::Round($packSize / 1MB, 1)) MB，$($packFiles.Count) 个文件，版本 $packVer）"
 $hub = [IO.File]::ReadAllText("$here\hub\index.html", [Text.Encoding]::UTF8).Replace('__VERSION__', $versionName)
 [IO.File]::WriteAllText("$work\assets\www\index.html", $hub, (New-Object Text.UTF8Encoding $false))
 Copy-Item "$here\hub\km-shim.js" "$work\assets\www\km-shim.js"

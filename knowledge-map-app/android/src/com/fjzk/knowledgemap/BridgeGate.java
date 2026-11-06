@@ -56,7 +56,7 @@ public class BridgeGate {
         free("hello", "appVersion", "widgetCount", "widgetInfo");
         // 本 App 页面才能调
         allow(APP, "speak", "stopSpeak", "ttsInfo", "saveFile", "updatePet", "savePetImage", "pinWidget",
-            "openAppSettings", "keepScreenOn", "goBack", "checkUpdate");
+            "openAppSettings", "keepScreenOn", "goBack", "checkUpdate", "audioPackState", "audioPackDownload");   // 录音包：听写页、单词页
         allow(APP, "deviceName", "sharedGet", "sharedPut");          // #2 我的数据
         // #1 第一期：设备同步。全部要令牌（syncState 含设备名也一样）；听写页（https 虚拟地址）不在 APP_FILE 里，调不到
         allow(APP_FILE, "syncState", "syncNow", "syncPublish");

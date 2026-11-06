@@ -57,6 +57,11 @@ $mirror = "$here\out\apk-branch"
 if (Test-Path $mirror) { Remove-Item $mirror -Recurse -Force }
 New-Item -ItemType Directory $mirror | Out-Null
 Copy-Item $apk.FullName "$mirror\knowledge-map.apk"
+# 英语录音包（build.ps1 1b）：App 从 @apk-v<版本>/audio-pack.zip 下载，和 APK 同一个 tag
+$pack = "$here\out\audio-pack.zip"
+if (-not (Test-Path $pack)) { throw "找不到 $pack，先运行 build.ps1" }
+if ((Get-Item $pack).LastWriteTime -lt $apk.LastWriteTime.AddMinutes(-30)) { throw '录音包和 APK 不是同一次构建，重新运行 build.ps1' }
+Copy-Item $pack "$mirror\audio-pack.zip"
 $info = @{ version = $ver; notes = $Notes; size = $apk.Length } | ConvertTo-Json
 [IO.File]::WriteAllText("$mirror\version.json", $info, (New-Object Text.UTF8Encoding $false))
 git -C $mirror init -q -b apk
@@ -78,6 +83,8 @@ $rel = Api POST "https://api.github.com/repos/$repo/releases" @{
 $upload = $rel.upload_url -replace '\{.*\}$', ''
 Invoke-RestMethod -Method POST -Uri "$upload`?name=knowledge-map.apk" -Headers $h -InFile $apk.FullName `
   -ContentType 'application/vnd.android.package-archive' -UseBasicParsing | Out-Null
+Invoke-RestMethod -Method POST -Uri "$upload`?name=audio-pack.zip" -Headers $h -InFile $pack `
+  -ContentType 'application/zip' -UseBasicParsing | Out-Null
 
 Write-Host ""
 Write-Host "发布完成：$($rel.html_url)"
