@@ -215,6 +215,87 @@ FIX = {
 
 SHORT = {'æ', 'e', 'ɪ', 'ɒ', 'ʌ', 'ʊ'}
 
+# 开源词表的音节划分（Moby Hyphenator 公共领域 + Wiktionary CC BY-SA）：{单词: [["com","put","er"], ...]}，由 fetch_hyphen.py 生成
+import os
+_hp = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hyphen.json')
+NO_DICT = {'progress', 'senior'}          # 词典划分不如算法的（prog·ress、sen·ior）
+HYPHEN = json.load(open(_hp, encoding='utf-8')) if os.path.exists(_hp) else {}
+
+
+def prep(chunks):
+    """nk 拆成 n /ŋ/ + k /k/（mon·key）；r 前面被 espeak 吞掉的元音字母补回 /ə/（dif·fer·ent、ev·er·y）"""
+    ch2 = []
+    for i, (g, p) in enumerate(chunks):
+        if g == 'nk' and p.replace(' ', '') == 'ŋk':
+            ch2 += [['n', 'ŋ'], ['k', 'k']]
+        elif g == 'ng' and p.replace(' ', '') == 'ŋg':
+            ch2 += [['n', 'ŋ'], ['g', 'g']]
+        elif not p and g in ('e', 'a', 'o') and 0 < i < len(chunks) - 1 and chunks[i + 1][0] in ('r', 'rr') \
+                and chunks[i - 1][1] and not any(c in 'aeiouy' for c in chunks[i - 1][0]):
+            ch2.append([g, 'ə'])
+        else:
+            ch2.append([g, p])
+    return ch2
+
+
+def nuclei(seq):
+    """seq = [(字母块序号, 音素)] → 元音核的位置；aɪ/aʊ + ə 在同一个字母块里（fire、our）算一个"""
+    nuc = [i for i, (ci, u) in enumerate(seq) if u in VOWELS]
+    return [i for n, i in enumerate(nuc) if not (n and seq[i][1] == 'ə' and seq[i - 1][0] == seq[i][0] and seq[i - 1][1] in ('aɪ', 'aʊ'))]
+
+
+def by_hyphen(chunks, k, parts):
+    """按维基词典的音节划分（com·put·er）切字母，再把每个字母块的音放进它所在的音节。
+    划分点落在一个字母块中间时：双写辅音两节共用一个音（rab·bit），字母数和音数一样的逐个分（n·k），
+    其它对不上的返回 None（退回自己的算法）。每节必须正好一个元音核。"""
+    chunks = prep(chunks)
+    edges, acc = [], 0
+    for s in parts[:-1]:
+        acc += len(s); edges.append(acc)
+    syl = [[] for _ in parts]
+    sidx = lambda pos: sum(1 for e in edges if e <= pos)
+    pos = 0
+    for g, p in chunks:
+        us = units(p.replace(' ', ''))
+        a, b = sidx(pos), sidx(pos + len(g) - 1)
+        if a == b:
+            syl[a] += us
+        elif b == a + 1 and len(g) == 2 and g[0] == g[1] and len(us) == 1:
+            if a == k:                                    # rab·bit：重读在前一节，两节都读这个音
+                syl[a] += us
+            syl[b] += us                                  # hel·lo、col·lect：前一节弱读，音只放后一节
+        elif len(us) == len(g):
+            for j, u in enumerate(us):
+                syl[sidx(pos + j)].append(u)
+        elif not us:
+            pass
+        else:
+            return None
+        pos += len(g)
+    vowel_no, out = 0, []
+    for n, us in enumerate(syl):
+        seq = [(0, u) for u in us]
+        nv = len(nuclei(seq))
+        if nv != 1:
+            return None
+        ph = ''.join(us)
+        out.append((parts[n], ('ˈ' if vowel_no == k else '') + ph))
+        vowel_no += 1
+    return out
+
+
+def badness(syls):
+    """拼读顺不顺：前一节以辅音结尾、后一节以元音开头（teach·er、ba·nan·a、want·ed）记 1 分；
+    重读短元音收尾的节（se·ven、fa·mi·ly，应是 sev·en、fam·i·ly）记 1.5 分"""
+    n = 0
+    for (g0, p0), (g1, p1) in zip(syls, syls[1:]):
+        a, b = units(p0), units(p1)
+        if a and b and a[-1] not in VOWELS and b[0] in VOWELS:
+            n += 1
+        if p0.startswith('ˈ') and a and a[-1] in SHORT:
+            n += 1.5
+    return n
+
 
 def syllabify(chunks, k, force=()):
     """按读音分音节，再对回字母：返回 [(音节字母, 音节音标)]
@@ -223,7 +304,6 @@ def syllabify(chunks, k, force=()):
     - 不发音的辅音字母跟后一节（lis·ten），不发音的元音字母跟前一节（love·ly）
     - 双写辅音从中间分开（hap·py、bal·loon）
     - force：必须从这些字母位置开始新音节（复合词 hard·work、后缀 work·ing）"""
-    # nk 拆成 n /ŋ/ + k /k/（mon·key）；r 前面被 espeak 吞掉的元音字母补回 /ə/（dif·fer·ent、ev·er·y）
     ch2 = []
     for i, (g, p) in enumerate(chunks):
         if g == 'nk' and p.replace(' ', '') == 'ŋk':
@@ -327,7 +407,7 @@ def main():
     ipas = {}
     for w in words:
         ipas[w] = norm_ipa(phonemizer.phonemize(w, 'en-gb-x-rp', preserve_punctuation=False, with_stress=True))
-    out, report = {}, []
+    out, report, stat = {}, [], {'词典': 0, '算法': 0}
     clean = {}                                                     # 先对齐一遍，干净的词给复合词用
     for w in words:
         if w not in FIX:
@@ -369,7 +449,17 @@ def main():
             for c in range(3, len(base) - 2):
                 if base[:c] in clean and base[c:] in clean:
                     force.add(c); break
+        # 词典划分（Moby / 维基）和自己的算法比：拼读要按读音分节，辅音尽量做下一节的开头（tea·cher 不要 teach·er、
+        # com·pu·ter 不要 com·put·er）；分数一样时用词典的（字母切得更对：ad·dress、bud·dha、sand·wich、un·der·stand）
         syls = syllabify(chunks, k, force)
+        best, src = (badness(syls), 1), '算法'
+        for parts in ([] if w in NO_DICT else HYPHEN.get(w, [])):
+            c = by_hyphen(chunks, k, parts)
+            if c and len(c) > 1 and (badness(c), 0) < best:
+                best, syls, src = (badness(c), 0), c, '词典'
+        stat[src] += 1
+        if len(syls) == 1:
+            syls = [(syls[0][0], syls[0][1].lstrip('ˈ'))]
         out[w] = f'{disp}|' + ' '.join(f'{g}={s}' for g, s in syls)
     js = ('// 音节拼读数据：由 docs/audio/build_phonics.py 生成，不要手改（要改就改脚本里的 FIX 或规则表再重跑）\n'
           '// 格式：小写单词 → "/音标/|音节字母=音节音标 ..."；带 ˈ 的是重读音节；单音节词只有一节\n'
@@ -378,6 +468,7 @@ def main():
     open('docs/audio/phonics-report.txt', 'w', encoding='utf-8', newline='\n').write('\n'.join(report) + '\n')
     sym = sorted({u for w in out for u in units(ipas[w])})
     print(f'{len(words)} 个词，生成 {len(out)} 个，需要检查 {len(report)} 个；音素 {len(sym)} 种：' + ' '.join(sym))
+    print(f'音节划分：用词典的 {stat["词典"]} 个，用算法的 {stat["算法"]} 个')
 
 if __name__ == '__main__':
     main()

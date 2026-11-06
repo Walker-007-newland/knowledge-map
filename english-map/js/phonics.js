@@ -1,6 +1,6 @@
 /* 音节拼读卡片：多音节词按音节分块（com · pu · ter），一节一节读再连读整个词；单音节词不拆，直接读。
  * 数据：data/phonics-words.js（window.KW_PHONICS，docs/audio/build_phonics.py 生成）
- * 录音：audio/syl-index.js + audio/syl/*.mp3（每个音节，英式）、audio/index.js + audio/en/*.mp3（课本单词整词）
+ * 录音：audio/syl-index.js + audio/syl/*.mp3（每个音节单独读，美式，和整词同一个声音）、audio/index.js + audio/en/*.mp3（课本单词整词）
  * 用法：KWPhonics.has(英文) 有没有拼读数据（短语要每个词都有）；KWPhonics.open(英文, 中文, { autoplay }) 弹出拼读卡片
  *       （autoplay：打开时先读一遍整个词），没有数据返回 false；
  *       KWPhonics.button(英文) 返回一个「拼读」小按钮的 HTML（没有数据时返回空串），点它会打开卡片。 */
@@ -94,7 +94,7 @@
     if (rec && await playFile(BASE + 'en/' + rec + '.mp3', token)) return;
     await speakTts(t, token);
   }
-  // 一个音节：放从整词里切出来的录音（audio/syl/<词>-<第几节>.mp3）；
+  // 一个音节：放这一节单独读的录音（audio/syl/<词>-<第几节>.mp3）；
   // 复数自动补的 -es /ɪz/ 没有录音，用语音引擎读 is（同音）；其它没录音的读这几个字母
   async function playSyl(p, s, token) {
     if (p.syls.length === 1) { await playWord(p.word, token); return; }
