@@ -169,3 +169,19 @@ select { width: auto; flex: 1; }
 #modal .sheet h3 { margin-top: 0; }
 #toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(20,20,20,.88); color: #fff; padding: 8px 16px; border-radius: 20px; z-index: 30; font-size: 14px; max-width: 90vw; }
 #toast[hidden] { display: none; }
+
+/* AI 学习路线 */
+#tabbar button { font-size: 11px; }
+.road { list-style: none; padding: 0; margin: 0; position: relative; }
+.road li { position: relative; padding-left: 22px; margin-bottom: 8px; }
+.road li::before { content: ""; position: absolute; left: 7px; top: 0; bottom: -8px; width: 2px; background: var(--line); }
+.road li:last-child::before { bottom: 50%; }
+.road li::after { content: ""; position: absolute; left: 1px; top: 22px; width: 14px; height: 14px; border-radius: 50%; background: var(--card); border: 3px solid var(--c); box-sizing: border-box; }
+.road li.done::after { background: var(--c); }
+.road .item { background: var(--card); border: 1px solid var(--line); border-radius: 12px; border-left: 4px solid var(--c); }
+.road .bar i { background: var(--c); }
+.intro summary { margin: 0; font-weight: 600; }
+.links { padding-left: 1.2em; }
+.links li { margin: 4px 0; }
+.rich pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+.rich code { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: .92em; }

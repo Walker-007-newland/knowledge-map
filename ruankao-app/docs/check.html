@@ -11,10 +11,10 @@
 // 按 index.html 的顺序加载内容文件
 (async function () {
   const base = '../www/';
-  const html = await (await fetch(base + 'index.html')).text();
+  const html = await (await fetch(base + 'index.html', { cache: 'no-store' })).text();
   const srcs = [...html.matchAll(/<script src="(data\/[^"]+)"/g)].map(m => m[1]);
   for (const s of srcs) {
-    await new Promise(r => { const e = document.createElement('script'); e.src = base + s; e.onload = r; e.onerror = () => { probs.push(['err', '加载失败：' + s]); r(); }; document.head.appendChild(e); });
+    await new Promise(r => { const e = document.createElement('script'); e.src = base + s + '?t=' + Date.now(); e.onload = r; e.onerror = () => { probs.push(['err', '加载失败：' + s]); r(); }; document.head.appendChild(e); });
   }
   check();
 })();
@@ -22,11 +22,21 @@ const probs = [];
 function check() {
   const RK = window.RK, mods = new Set(RK.modules.map(m => m.id)), ids = new Set();
   const P = (lv, m) => probs.push([lv, m]);
-  RK.nodes.forEach(n => {
-    const at = n.id || '(无 id)';
+  const AI = RK.ai || { stages: [], nodes: [], projects: [] };
+  const stages = new Set(AI.stages.map(s => s.id));
+  const LINKS = ['https://docs.python.org/zh-cn/3/tutorial/', 'https://git-scm.com/book/zh/v2', 'https://zh.d2l.ai/', 'https://scikit-learn.org/stable/',
+    'https://pytorch.org/tutorials/', 'https://huggingface.co/learn', 'https://modelcontextprotocol.io/', 'https://docs.anthropic.com/',
+    'https://platform.openai.com/docs', 'https://developers.google.com/machine-learning/crash-course',
+    'https://owasp.org/www-project-top-10-for-large-language-model-applications/', 'https://www.3blue1brown.com/topics/neural-networks'];
+  RK.nodes.concat(AI.nodes).forEach(n => {
+    const at = n.id || '(无 id)', isAI = AI.nodes.includes(n);
     if (ids.has(n.id)) P('err', at + '：id 重复'); ids.add(n.id);
-    for (const f of ['id', 'title', 'short', 'module', 'freq', 'tip', 'learn']) if (!n[f]) P('err', at + '：缺 ' + f);
-    if (!mods.has(n.module)) P('err', at + '：模块不存在 ' + n.module);
+    for (const f of isAI ? ['id', 'title', 'short', 'stage', 'tip', 'learn'] : ['id', 'title', 'short', 'module', 'freq', 'tip', 'learn']) if (!n[f]) P('err', at + '：缺 ' + f);
+    if (isAI) {
+      if (!stages.has(n.stage)) P('err', at + '：阶段不存在 ' + n.stage);
+      if (!(n.handson || []).length) P('warn', at + '：没有动手任务');
+      (n.links || []).forEach(l => { if (!LINKS.includes(l.url)) P('err', at + '：链接不在白名单 ' + l.url); });
+    } else if (!mods.has(n.module)) P('err', at + '：模块不存在 ' + n.module);
     if ((n.examples || []).length < 1) P('warn', at + '：没有例题');
     if ((n.tests || []).length < 4) P('warn', at + '：测试题少于 4 道');
     [...(n.examples || []).map(q => ['例', q]), ...(n.tests || []).map(q => ['测', q])].forEach(([k, q], i) => {
@@ -48,7 +58,11 @@ function check() {
       } else P('err', w + '：未知题型 ' + q.type);
     });
   });
-  RK.nodes.forEach(n => (n.prereqs || []).forEach(p => { if (!ids.has(p)) P('err', n.id + '：前置不存在 ' + p); }));
+  RK.nodes.concat(AI.nodes).forEach(n => (n.prereqs || []).forEach(p => { if (!ids.has(p)) P('err', n.id + '：前置不存在 ' + p); }));
+  AI.projects.forEach(p => { if (!stages.has(p.stage)) P('err', p.id + '：阶段不存在'); });
+  const want = ['ai-why', 'ai-python', 'ai-git', 'ai-http', 'ai-copilot', 'ai-workflow', 'ai-review', 'ai-ml', 'ai-metrics', 'ai-nn', 'ai-transformer', 'ai-llm',
+    'ai-api', 'ai-prompt', 'ai-tools', 'ai-rag', 'ai-agent', 'ai-mcp', 'ai-multimodal', 'ai-eval', 'ai-ops', 'ai-security', 'ai-finetune', 'ai-arch', 'ai-quality', 'ai-governance'];
+  want.forEach(id => { if (!ids.has(id)) P('warn', 'AI 路线缺节点 ' + id); });
   RK.cases.forEach(c => {
     const t = c.questions.reduce((a, q) => a + q.points.reduce((b, p) => b + p.s, 0), 0);
     if (t !== 25) P('warn', c.id + '：要点合计 ' + t + ' 分（应为 25）');
@@ -56,7 +70,7 @@ function check() {
   const byMod = {};
   RK.nodes.forEach(n => { const m = byMod[n.module] || (byMod[n.module] = { n: 0, t: 0 }); m.n++; m.t += (n.tests || []).length; });
   document.getElementById('out').innerHTML =
-    `<p>知识点 ${RK.nodes.length} 个，测试题 ${RK.nodes.reduce((a, n) => a + (n.tests || []).length, 0)} 道，案例 ${RK.cases.length}，论文 ${RK.essays.length}</p>` +
+    `<p>AI 路线：${AI.stages.length} 个阶段、${AI.nodes.length} 个节点（测试题 ${AI.nodes.reduce((a, n) => a + (n.tests || []).length, 0)} 道）、${AI.projects.length} 个实战项目</p><p>知识点 ${RK.nodes.length} 个，测试题 ${RK.nodes.reduce((a, n) => a + (n.tests || []).length, 0)} 道，案例 ${RK.cases.length}，论文 ${RK.essays.length}</p>` +
     `<table><tr><th>模块</th><th>点</th><th>测试题</th></tr>${RK.modules.map(m => `<tr><td>${m.name}</td><td>${byMod[m.id] ? byMod[m.id].n : 0}</td><td>${byMod[m.id] ? byMod[m.id].t : 0}</td></tr>`).join('')}</table>` +
     (probs.length ? `<h2>问题 ${probs.length}</h2><ul>${probs.map(([l, m]) => `<li class="${l}">${m}</li>`).join('')}</ul>` : '<h2>没有发现问题 ✓</h2>');
 }

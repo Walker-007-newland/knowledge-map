@@ -1,4 +1,4 @@
-// 软考·系统架构设计师：手机竖屏单页应用。五个标签：首页 / 知识 / 刷题 / 案例 / 论文。
+// 软考·系统架构设计师：手机竖屏单页应用。六个标签：首页 / 知识 / 刷题 / 案例 / 论文 / AI 路线。
 // 数据都在 D 里（一个 JSON），App 里存 files/store/rk-data-v1.json（RKNative），浏览器里存 localStorage。
 (function () {
   'use strict';
@@ -24,7 +24,21 @@
     if (!modById[n.module]) console.warn('模块不存在：', n.module, '←', n.id);
     byId[n.id] = n;
   });
-  nodes.forEach(n => { n.prereqs = (n.prereqs || []).filter(p => byId[p] || console.warn('前置知识点不存在：', p, '←', n.id)); });
+  // AI 学习路线：独立的阶段和节点，不计入备考统计、刷题、模拟卷和错题本
+  const AI = RK.ai || { stages: [], nodes: [], projects: [] };
+  const stageById = {}, projById = {};
+  AI.stages.forEach((s, i) => { s.order = i; stageById[s.id] = s; });
+  AI.projects.forEach(p => { projById[p.id] = p; });
+  const stageOrder = n => (stageById[n.stage] ? stageById[n.stage].order : 99);
+  const aiNodes = AI.nodes.slice().sort((a, b) => stageOrder(a) - stageOrder(b));
+  aiNodes.forEach(n => {
+    n.track = 'ai';
+    if (byId[n.id]) console.warn('节点 id 重复：', n.id);
+    if (!stageById[n.stage]) console.warn('阶段不存在：', n.stage, '←', n.id);
+    byId[n.id] = n;
+    (n.tests || []).forEach((q, i) => { q.qid = n.id + ':t' + i; q.node = n.id; q.ai = true; });
+  });
+  nodes.concat(aiNodes).forEach(n => { n.prereqs = (n.prereqs || []).filter(p => byId[p] || console.warn('前置知识点不存在：', p, '←', n.id)); });
   // 每道测试题一个固定 id：知识点id:t序号
   const QS = {};
   nodes.forEach(n => (n.tests || []).forEach((q, i) => { q.qid = n.id + ':t' + i; q.node = n.id; QS[q.qid] = q; }));
@@ -42,6 +56,8 @@
     for (const k of ['nodes', 'wrong', 'cases', 'essays', 'settings']) if (!D[k] || typeof D[k] !== 'object' || Array.isArray(D[k])) D[k] = {};
     for (const k of ['projects', 'mocks']) if (!Array.isArray(D[k])) D[k] = [];
     if (!D.stats) D.stats = { ans: 0, ok: 0 };
+    if (!D.ai || typeof D.ai !== 'object') D.ai = {};
+    for (const k of ['proj', 'hands']) if (!D.ai[k] || typeof D.ai[k] !== 'object') D.ai[k] = {};
   }
   fix();
   function save() {
@@ -86,7 +102,7 @@
   /* ---------------- 导航 ---------------- */
   // 每个标签一个视图栈；视图 = {v: 名字, ...参数}
   let tab = 'home';
-  const stacks = { home: [{ v: 'home' }], know: [{ v: 'mods' }], drill: [{ v: 'drill' }], case: [{ v: 'cases' }], essay: [{ v: 'essays' }] };
+  const stacks = { home: [{ v: 'home' }], know: [{ v: 'mods' }], drill: [{ v: 'drill' }], case: [{ v: 'cases' }], essay: [{ v: 'essays' }], ai: [{ v: 'ai' }] };
   const cur = () => stacks[tab][stacks[tab].length - 1];
   function go(view) { stacks[tab].push(view); render(true); }
   function replace(view) { stacks[tab][stacks[tab].length - 1] = view; render(true); }
@@ -142,7 +158,7 @@
     if (top) window.scrollTo(0, 0);
   }
   const header = (title, sub) => `<header class="hd">${stacks[tab].length > 1 ? '<button class="back" data-act="back" aria-label="返回">‹</button>' : ''}<div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div></header>`;
-  const stars = f => '<span class="stars" title="考频">' + '★'.repeat(f || 1) + '<s>' + '★'.repeat(3 - (f || 1)) + '</s></span>';
+  const stars = f => !f ? '' : '<span class="stars" title="考频">' + '★'.repeat(f || 1) + '<s>' + '★'.repeat(3 - (f || 1)) + '</s></span>';
   const dot = st => `<i class="dot st-${st}" title="${STATUS_NAME[st]}"></i>`;
   const bar = (a, b) => `<div class="bar"><i style="width:${b ? Math.round(a / b * 100) : 0}%"></i></div>`;
 
@@ -162,6 +178,7 @@
       ${due.length ? `<button class="item" data-act="review"><span class="ico">↻</span><span class="grow"><b>到期复习</b><small>${due.length} 个已掌握的知识点该复习了</small></span><span class="go">›</span></button>` : ''}
       ${next ? `<button class="item" data-act="openNode" data-arg="${next.id}"><span class="ico">▶</span><span class="grow"><b>${status(next.id) === 'new' ? '学新知识点' : '接着学'}：${esc(next.title)}</b><small>${esc(modById[next.module].name)} · ${STATUS_NAME[status(next.id)]}</small></span><span class="go">›</span></button>` : `<div class="item"><span class="grow">现有知识点都已掌握 👍</span></div>`}
       ${wrong.length ? `<button class="item" data-act="wrongDrill"><span class="ico">✗</span><span class="grow"><b>错题重做</b><small>错题本里有 ${wrong.length} 道题</small></span><span class="go">›</span></button>` : ''}
+      ${aiNodes.length ? `<button class="item" data-act="tab" data-arg="ai"><span class="ico">✦</span><span class="grow"><b>AI 学习路线</b><small>${aiNodes.filter(n => status(n.id) === 'mastered').length} / ${aiNodes.length} 节点 · 实战 ${AI.projects.filter(projDone).length} / ${AI.projects.length}</small></span><span class="go">›</span></button>` : ''}
       <button class="item" data-act="tab" data-arg="drill"><span class="ico">⏱</span><span class="grow"><b>综合知识模拟</b><small>${lastMock ? `上次 ${lastMock.score} / ${lastMock.total} 分` : '还没做过'}</small></span><span class="go">›</span></button>
     </section>
     <h2 class="sec">考试形式</h2>
@@ -212,7 +229,9 @@
     const tabs = [['learn', '讲解'], ['ex', `例题 ${(n.examples || []).length}`], ['test', `测试 ${(n.tests || []).length}`]];
     let body = '';
     if (t === 'learn') {
-      body = (n.tip ? `<p class="tip"><b>考点</b>${n.tip}</p>` : '') + n.learn.map(s => `<h3>${s.h}</h3><div class="rich">${s.html}</div>`).join('') +
+      body = (n.tip ? `<p class="tip"><b>${n.track ? '要点' : '考点'}</b>${n.tip}</p>` : '') + n.learn.map(s => `<h3>${s.h}</h3><div class="rich">${s.html}</div>`).join('') +
+        (n.handson && n.handson.length ? `<h3>动手练一练</h3><div class="card">${n.handson.map((h, i) => `<label class="pt"><input type="checkbox" data-hand="${i}" ${(D.ai.hands[n.id] || {})[i] ? 'checked' : ''}><span class="rich">${h}</span></label>`).join('')}</div>` : '') +
+        (n.links && n.links.length ? `<h3>延伸阅读</h3><ul class="links">${n.links.map(l => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.t)}</a></li>`).join('')}</ul>` : '') +
         (n.prereqs.length ? `<p class="muted small">先学：${n.prereqs.map(p => `<a data-act="openNode" data-arg="${p}">${esc(byId[p].title)}</a>`).join('、')}</p>` : '') +
         `<button class="btn primary wide" data-act="nodeTab" data-arg="ex">看例题 ›</button>`;
     } else if (t === 'ex') {
@@ -222,12 +241,73 @@
         `<button class="btn primary wide" data-act="nodeTab" data-arg="test">去测试 ›</button>`;
     } else {
       const p = D.nodes[n.id];
-      body = `<div class="card"><p>共 ${(n.tests || []).length} 题，答完交卷统一看对错，正确率 ≥ ${PASS}% 算掌握。做错的题会进错题本。</p>
+      body = `<div class="card"><p>共 ${(n.tests || []).length} 题，答完交卷统一看对错，正确率 ≥ ${PASS}% 算掌握。${n.track ? '' : '做错的题会进错题本。'}</p>
         ${p.last != null ? `<p class="muted">上次 ${p.last}%，最好 ${p.best}%，共测过 ${p.n} 次</p>` : ''}
         <button class="btn primary wide" data-act="nodeTest" data-arg="${n.id}">开始测试</button></div>`;
     }
-    return header(esc(n.title), `${esc(modById[n.module].name)} · ${STATUS_NAME[status(n.id)]} ${stars(n.freq)}`) +
+    return header(esc(n.title), `${esc(n.track ? (stageById[n.stage] || {}).name || '' : modById[n.module].name)} · ${STATUS_NAME[status(n.id)]} ${stars(n.freq)}`) +
       `<div class="seg">${tabs.map(([k, l]) => `<button data-act="nodeTab" data-arg="${k}" class="${k === t ? 'on' : ''}">${l}</button>`).join('')}</div><article class="body">${body}</article>`;
+  };
+
+  VIEWS.node.after = v => {
+    const n = byId[v.id];
+    main.querySelectorAll('[data-hand]').forEach(cb => {
+      cb.onchange = () => { (D.ai.hands[n.id] || (D.ai.hands[n.id] = {}))[cb.dataset.hand] = cb.checked; save(); };
+    });
+  };
+
+  /* ---------- AI 学习路线 ---------- */
+  const stageNodes = id => aiNodes.filter(n => n.stage === id);
+  const projDone = p => p.checklist.every((_, i) => ((D.ai.proj[p.id] || {}).done || {})[i]);
+  function aiNext() {
+    for (const st of ['weak', 'learning', 'new']) {
+      const n = aiNodes.find(x => status(x.id) === st);
+      if (n) return n;
+    }
+    return null;
+  }
+  VIEWS.ai = () => {
+    const total = aiNodes.length, ok = aiNodes.filter(n => status(n.id) === 'mastered').length;
+    const weeks = AI.stages.reduce((a, s) => a + s.weeks, 0), next = aiNext();
+    const pd = AI.projects.filter(projDone).length;
+    return header('AI 时代学习路线', `${AI.stages.length} 个阶段 · 约 ${weeks} 周 · 每周约 ${AI.hoursPerWeek} 小时`) +
+      `<section class="card hero"><div class="count"><b>${ok}</b><span>/ ${total}</span></div>
+        <div class="grow"><div>节点已掌握</div><div class="muted">实战项目完成 ${pd} / ${AI.projects.length}</div>${bar(ok, total)}</div></section>
+      ${next ? `<section class="list"><button class="item" data-act="openNode" data-arg="${next.id}"><span class="ico">▶</span><span class="grow"><b>${status(next.id) === 'new' ? '下一步' : '接着学'}：${esc(next.title)}</b><small>${esc(stageById[next.stage].name)}</small></span><span class="go">›</span></button></section>` : ''}
+      <details class="card intro"><summary>这条路线怎么走</summary><div class="rich">${AI.intro}</div></details>
+      <h2 class="sec">路线图</h2>
+      <ol class="road">${AI.stages.map((s, i) => {
+        const ns = stageNodes(s.id), m = ns.filter(n => status(n.id) === 'mastered').length;
+        const ps = AI.projects.filter(p => p.stage === s.id);
+        const done = ns.length && m === ns.length && ps.every(projDone);
+        return `<li class="${done ? 'done' : ''}" style="--c:${s.color}"><button class="item" data-act="openStage" data-arg="${s.id}">
+          <span class="grow"><b>${i}. ${esc(s.name)}</b><small>${s.weeks} 周 · ${ns.length ? `${m} / ${ns.length} 节点` : '内容准备中'}${ps.length ? ` · 实战 ${ps.filter(projDone).length}/${ps.length}` : ''}</small>${ns.length ? bar(m, ns.length) : ''}</span><span class="go">›</span></button></li>`;
+      }).join('')}</ol>`;
+  };
+  VIEWS.aistage = v => {
+    const s = stageById[v.id], ns = stageNodes(s.id), ps = AI.projects.filter(p => p.stage === s.id);
+    return header(esc(s.name), `第 ${s.order} 阶段 · 约 ${s.weeks} 周`) +
+      `<p class="tip"><b>目标</b>${esc(s.goal)}</p>
+      <section class="list">${ns.map(nodeRow).join('') || '<div class="item muted">内容准备中</div>'}</section>
+      ${ps.length ? `<h2 class="sec">实战项目</h2><section class="list">${ps.map(p => `<button class="item" data-act="openProj" data-arg="${p.id}"><span class="ico">${projDone(p) ? '✓' : '⚒'}</span><span class="grow"><b>${esc(p.title)}</b><small>${esc(p.goal)}</small></span><span class="go">›</span></button>`).join('')}</section>` : ''}`;
+  };
+  VIEWS.aiproj = v => {
+    const p = projById[v.id], st = D.ai.proj[p.id] || {}, done = st.done || {};
+    return header(esc(p.title), esc(stageById[p.stage].name)) + `<article class="body">
+      <p class="tip"><b>目标</b>${esc(p.goal)}</p>
+      <h3>步骤</h3><ol class="rich">${p.steps.map(x => `<li>${x}</li>`).join('')}</ol>
+      <h3>交付物</h3><p>${esc(p.deliverable)}</p>
+      <h3>完成检查</h3><div class="card">${p.checklist.map((c, i) => `<label class="pt"><input type="checkbox" data-pc="${i}" ${done[i] ? 'checked' : ''}><span>${esc(c)}</span></label>`).join('')}</div>
+      <h3>我的记录</h3><textarea id="projNote" rows="8" placeholder="做到哪了、遇到什么问题、AI 哪里帮了忙或出了错……（只存在本机）">${esc(st.note || '')}</textarea>
+      </article>`;
+  };
+  VIEWS.aiproj.after = v => {
+    const st = D.ai.proj[v.id] || (D.ai.proj[v.id] = {});
+    main.querySelectorAll('[data-pc]').forEach(cb => {
+      cb.onchange = () => { (st.done || (st.done = {}))[cb.dataset.pc] = cb.checked; save(); if (projDone(projById[v.id])) toast('这个实战项目完成了 🎉'); };
+    });
+    const t = $('#projNote');
+    t.oninput = () => { st.note = t.value; saveSoon(); };
   };
 
   /* ---------- 题目工具 ---------- */
@@ -303,7 +383,7 @@
     const ok = isRight(it.q, it.a);
     D.stats.ans++; if (ok) D.stats.ok++;
     if (ok) { if (quiz.mode === 'wrong') delete D.wrong[it.q.qid]; }
-    else if (it.q.qid) D.wrong[it.q.qid] = { n: ((D.wrong[it.q.qid] || {}).n || 0) + 1, t: Date.now() };
+    else if (it.q.qid && !it.q.ai) D.wrong[it.q.qid] = { n: ((D.wrong[it.q.qid] || {}).n || 0) + 1, t: Date.now() };
     save();
   }
   function finishQuiz() {
@@ -313,7 +393,7 @@
         it.locked = true;
         const ok = isRight(it.q, it.a);
         D.stats.ans++; if (ok) D.stats.ok++;
-        if (!ok && it.q.qid) D.wrong[it.q.qid] = { n: ((D.wrong[it.q.qid] || {}).n || 0) + 1, t: Date.now() };
+        if (!ok && it.q.qid && !it.q.ai) D.wrong[it.q.qid] = { n: ((D.wrong[it.q.qid] || {}).n || 0) + 1, t: Date.now() };
       });
     }
     const right = items.filter(it => isRight(it.q, it.a)).length;
@@ -339,7 +419,7 @@
     return `<header class="qhd"><button class="back" data-act="back" aria-label="关闭">✕</button><span class="grow">${esc(quiz.title)} · 结果</span></header>
       <article class="body"><section class="card hero"><div class="count"><b>${pct}</b><span>%</span></div>
       <div class="grow"><div>答对 ${quiz.right} / ${n}</div><div class="muted">用时 ${fmtTime(quiz.used)}</div>${verdict ? `<div>${verdict}</div>` : ''}</div></section>
-      ${wrongs.length ? `<h2 class="sec">做错的 ${wrongs.length} 题（已进错题本）</h2>` : '<p class="pad">全对！</p>'}
+      ${wrongs.length ? `<h2 class="sec">做错的 ${wrongs.length} 题${wrongs[0].q.ai ? '' : '（已进错题本）'}</h2>` : '<p class="pad">全对！</p>'}
       ${wrongs.map(it => `<div class="card q">${qStem(it.q)}<p class="ans no">你的答案：${it.a == null || it.a === '' ? '（没答）' : esc(it.q.type === 'choice' ? stripTags(it.q.options[it.a]) : it.a)}</p>
         <p class="ans">正确答案：${answerText(it.q)}</p><div class="rich">${it.q.explain || ''}</div></div>`).join('')}
       <button class="btn primary wide" data-act="back">完成</button></article>`;
@@ -507,8 +587,11 @@
     back,
     tab: t => switchTab(t),
     openMod: id => go({ v: 'mod', id }),
+    openStage: id => go({ v: 'aistage', id }),
+    openProj: id => go({ v: 'aiproj', id }),
     openNode: id => {
-      if (tab !== 'know') { tab = 'know'; stacks.know.length = 1; }
+      const want = byId[id].track ? 'ai' : 'know';
+      if (tab !== want) { tab = want; stacks[want].length = 1; }
       go({ v: 'node', id });
     },
     openNodeFromQuiz: id => modal(`<h3>${esc(byId[id].title)}</h3>${byId[id].learn.map(s => `<h4>${s.h}</h4><div class="rich">${s.html}</div>`).join('')}`, [{ label: '关闭' }]),
