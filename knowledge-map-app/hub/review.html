@@ -43,7 +43,7 @@
 </head>
 <body>
 <div class="wrap">
-  <header><a class="back" href="index.html">‹ 总入口</a><h1>📅 今天该复习</h1></header>
+  <header><a class="back km-back" href="index.html">← 返回</a><h1>📅 今天该复习</h1></header>
   <p class="sum" id="sum">正在统计…</p>
   <div id="mods"></div>
   <p class="empty" id="empty" hidden>现在没有在复习的错题、错词。做错的题会自动按遗忘曲线安排复习。</p>
@@ -93,5 +93,6 @@
     window.addEventListener('pageshow', function (e) { if (e.persisted) render(); });
   })();
 </script>
+<script src="km-nav.js"></script>
 </body>
 </html>

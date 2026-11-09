@@ -342,9 +342,27 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (fullView != null) exitFullscreen();
-        else if (web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        if (fullView != null) { exitFullscreen(); return; }
+        // 返回规则见 hub/km-nav.js：先让网页关掉最上面的弹层（测试、知识点面板等），关掉了就不再后退
+        web.evaluateJavascript("(function(){try{return !!(window.KMNav&&KMNav.closeLayer());}catch(e){return false;}})()",
+            new ValueCallback<String>() {
+                public void onReceiveValue(String v) { if (!"true".equals(v)) pageBack(); }
+            });
+    }
+
+    private long lastBackAtHome;
+
+    /** 没有弹层可关：总入口按两次退出；其它页面回上一页，没有上一页就回总入口（不直接退出 App） */
+    private void pageBack() {
+        String url = web.getUrl();
+        String bare = url == null ? "" : url.replaceAll("[?#].*$", "");
+        if (bare.isEmpty() || HOME.equals(bare)) {
+            long t = System.currentTimeMillis();
+            if (t - lastBackAtHome < 2000) { finish(); return; }
+            lastBackAtHome = t;
+            Toast.makeText(this, "再按一次返回键退出", Toast.LENGTH_SHORT).show();
+        } else if (web.canGoBack()) web.goBack();
+        else web.loadUrl(HOME);
     }
 
     @Override

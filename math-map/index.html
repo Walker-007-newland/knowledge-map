@@ -44,6 +44,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .app { height: 100%; display: flex; flex-direction: column; }
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.km-back { flex: none; min-height: 40px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
 .brand h1 { margin: 0; font-size: 20px; letter-spacing: .02em; text-wrap: balance; }
 .brand .sub { color: var(--muted); font-size: 13px; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1; min-width: 0; }
@@ -312,7 +313,8 @@ svg.fig line, svg.fig polyline, svg.fig polygon, svg.fig path, svg.fig rect, svg
   .tabs { margin: 0 -16px; padding: 6px 56px 0 16px; }
   .tabs button { padding: 8px 10px; }
   .top { gap: 8px; padding-block: 10px; }
-  .brand, .tools { flex: 1 1 100%; }
+  .brand { flex: 1 1 60%; }
+  .tools { flex: 1 1 100%; }
   .tools { flex-wrap: nowrap; flex-direction: column; align-items: stretch; }
   #search { flex: none; width: 100%; }
   #chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -332,6 +334,7 @@ svg.fig line, svg.fig polyline, svg.fig polygon, svg.fig path, svg.fig rect, svg
 
 <div class="app" id="app">
   <header class="top">
+    <button type="button" class="km-back">← 返回</button>
     <div class="brand">
       <h1>中考数学知识地图</h1>
       <span class="sub">福建中考 · 从三年级一路走到九年级</span>
@@ -420,6 +423,7 @@ svg.fig line, svg.fig polyline, svg.fig polygon, svg.fig path, svg.fig rect, svg
 <script src="js/lessons-olym12.js"></script>
 <script src="js/anims-olym12.js"></script>
 <script src="../knowledge-map-app/hub/km-review.js"></script>
+<script src="../knowledge-map-app/hub/km-nav.js"></script>
 <script src="js/app.js"></script>
 
 </body>

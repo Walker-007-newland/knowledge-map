@@ -80,6 +80,7 @@ Write-Host "录音包：$packZip （$([math]::Round($packSize / 1MB, 1)) MB，$(
 $hub = [IO.File]::ReadAllText("$here\hub\index.html", [Text.Encoding]::UTF8).Replace('__VERSION__', $versionName)
 [IO.File]::WriteAllText("$work\assets\www\index.html", $hub, (New-Object Text.UTF8Encoding $false))
 Copy-Item "$here\hub\km-shim.js" "$work\assets\www\km-shim.js"
+Copy-Item "$here\hub\km-nav.js" "$work\assets\www\km-nav.js"   # 返回规则：返回键和「← 返回」按钮
 Copy-Item "$here\hub\km-data.js" "$work\assets\www\km-data.js"
 Copy-Item "$here\hub\data.html" "$work\assets\www\data.html"
 Copy-Item "$here\hub\km-study.js" "$work\assets\www\km-study.js"
@@ -151,7 +152,8 @@ Get-ChildItem "$work\assets\www" -Recurse -Filter *.html | ForEach-Object {
   $petCore = ('../' * $depth) + 'pet/pet-core.js'
   $reward = ('../' * $depth) + 'km-reward.js'
   $syncJs = ('../' * $depth) + 'km-sync.js'
-  $tag = "<script src=`"$shim`"></script>`n<script src=`"$data`"></script>`n<script src=`"$study`"></script>`n<script src=`"$narrate`"></script>`n<script src=`"$petCore`"></script>`n<script src=`"$reward`"></script>`n<script src=`"$syncJs`"></script>"
+  $navJs = ('../' * $depth) + 'km-nav.js'
+  $tag = "<script src=`"$shim`"></script>`n<script src=`"$data`"></script>`n<script src=`"$study`"></script>`n<script src=`"$narrate`"></script>`n<script src=`"$petCore`"></script>`n<script src=`"$reward`"></script>`n<script src=`"$syncJs`"></script>`n<script src=`"$navJs`"></script>"
   $html = if ($html -match '<head>') { ([regex]'<head>').Replace($html, "<head>`n$tag", 1) } else { "$tag`n$html" }
   if ($html -notmatch [regex]::Escape($shim)) { throw "没能在 $($_.FullName) 注入 km-shim.js" }
   [IO.File]::WriteAllText($_.FullName, $html, $utf8)
@@ -215,7 +217,7 @@ try {
   $names = @($zip.Entries | ForEach-Object { $_.FullName })
   $bad = @($names | Where-Object { $_.Contains('\') })
   if ($bad.Count) { throw "APK 里有反斜杠路径：$($bad[0]) 等 $($bad.Count) 个" }
-  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-review.js', 'assets/www/review.html', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
+  foreach ($must in 'assets/www/index.html', 'assets/www/km-shim.js', 'assets/www/km-nav.js', 'assets/www/km-data.js', 'assets/www/data.html', 'assets/www/km-study.js', 'assets/www/km-narrate.js', 'assets/www/km-reward.js', 'assets/www/km-review.js', 'assets/www/review.html', 'assets/www/km-sync.js', 'assets/www/sync.html', 'assets/www/login.html', 'assets/km-config.json','assets/www/vendor/jsQR.js', 'assets/www/textbooks.html', 'assets/www/textbooks/catalog.js', 'assets/www/vendor/qrcode.js', 'assets/www/pet/study.html','assets/www/math-map/index.html', 'assets/www/pet/index.html', 'assets/www/pet/models/shiba.js', 'classes.dex', 'resources.arsc') {
     if ($names -notcontains $must) { throw "APK 里缺少 $must" }
   }
   # APK 里不能有 lib/：只有 64 位的库的话，32 位平板会因为没有匹配的 ABI 整个装不上（语音识别库是用时下载的）
